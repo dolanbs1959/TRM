@@ -1,0 +1,376 @@
+:host {
+  --trm-green: #03ab6d;
+}
+
+.main-header {
+  --min-height: 60px;
+}
+
+.header-logo-large {
+  width: clamp(100px, 28vw, 140px);
+  height: auto;
+  margin-left: 15px;
+}
+
+.header-title-large {
+  font-size: clamp(1.45rem, 6vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.sub-header {
+  --padding-bottom: 10px;
+  text-align: center;
+}
+
+.tech-greeting {
+  font-size: clamp(0.9rem, 3.5vw, 1.1rem);
+  font-weight: 500;
+  color: white;
+  text-transform: capitalize;
+}
+
+.dashboard-container {
+  display: flex;
+  flex-direction: column;
+  background: #f4f4f4;
+  border-bottom: 2px solid #ddd;
+  padding: 10px 8px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.weather-column {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.city-search-corner {
+  align-self: flex-start;
+  width: min(220px, 100%);
+  margin-bottom: 6px;
+}
+
+.city-search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  width: 100%;
+
+  .gps-btn {
+    --padding-start: 4px;
+    --padding-end: 4px;
+    color: #f21616;
+    flex-shrink: 0;
+    font-size: 1.1rem;
+  }
+
+  .city-search-wrap {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+
+    .city-input {
+      --background: #fff;
+      --border-radius: 8px;
+      --padding-start: 8px;
+      --padding-end: 8px;
+      border: 1px solid #ddd;
+      font-size: .8rem;
+      height: 32px;
+    }
+
+    .city-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #ddd;
+      z-index: 9999;
+      max-height: 180px;
+      overflow-y: auto;
+
+      .city-suggestion-item {
+        padding: 6px 8px;
+        font-size: 0.8rem;
+        color: #333;
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+      }
+
+      .city-suggestion-item:last-child { border-bottom: none; }
+      .city-suggestion-item:hover { background: #f5f5f5; }
+    }
+  }
+}
+
+.weather-widget {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+
+  .weather-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+
+    img {
+      width: 56px;
+      height: 56px;
+      flex-shrink: 0;
+    }
+
+    .weather-temps {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+
+      .temp {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #333;
+      }
+
+      .weather-desc {
+        font-size: .72rem;
+        color: #666;
+        text-transform: capitalize;
+      }
+    }
+  }
+
+  .weather-city {
+    font-size: .72rem;
+    font-weight: 700;
+    color: #555;
+  }
+
+  .weather-details {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+
+    .detail-item {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: .7rem;
+      color: #555;
+    }
+  }
+}
+
+.weather-loading {
+  color: #ccc;
+  padding: 10px;
+}
+.dashboard-divider {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 6px 0 2px;
+  width: 100%;
+}
+
+.button-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stats-row-inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.stat-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: .75rem;
+  flex: 1;
+}
+
+.stat-label {
+  font-weight: 700;
+  color: #333;
+}
+
+.stat-value {
+  font-weight: 700;
+  color: #f21616;
+}
+
+.clock-dashboard {
+  padding: 4px 2px 2px;
+  font-size: .74rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.time-on-clock {
+  color: #f21616;
+}
+
+.btn-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.btn-grid ion-button{margin:0;font-size:.8rem;height:36px}
+
+.secondary-btn-grid {
+  margin-top: 2px;
+}
+
+.home-exit-wrap {
+  padding: 8px 12px 16px;
+}
+
+.home-exit-button {
+  font-weight: 700;
+}
+
+.route-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  ion-label {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #f21616;
+    flex-shrink: 0;
+  }
+}
+.customer-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin: 0 0 4px 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.job-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.job-header ion-badge{font-size:.62rem;--padding-start:4px;--padding-end:4px}
+
+.schedule-date-badge {
+  --background: var(--trm-green) !important;
+  --color: #ffffff !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.schedule-date-badge--inspection {
+  --background: var(--trm-green) !important;
+}
+
+.schedule-date-badge--service-order {
+  --background: #07598f !important;
+}
+
+.clock-in-btn {
+  --background: var(--trm-green);
+  --color: #ffffff;
+}
+
+.job-location {
+  font-size: .95rem;
+  font-weight: 500;
+  color: #444;
+  margin-bottom: 8px;
+  
+  ion-icon {
+    color: #f21616;
+    margin-right: 4px;
+  }
+}
+
+.job-contact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.job-contact-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0d5ca6;
+  text-decoration: none;
+
+  ion-icon {
+    font-size: 0.95rem;
+  }
+}
+
+.inspection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inspection-field {
+  background: #f7f7f7;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inspection-label {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #5a5a5a;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.inspection-value {
+  font-size: 0.74rem;
+  line-height: 1.2;
+  font-weight: 600;
+  color: #1f1f1f;
+  overflow-wrap: anywhere;
+}
+
+
+@media (max-width: 430px) {
+  .dashboard-container {
+    padding: 8px;
+  }
+
+  .city-search-corner {
+    width: 100%;
+  }
+
+  .btn-grid ion-button { height: 38px; }
+}

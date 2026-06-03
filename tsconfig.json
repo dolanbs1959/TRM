@@ -27,5 +27,13 @@
     "strictInjectionParameters": true,
     "strictInputAccessModifiers": true,
     "strictTemplates": true
-  }
+  },
+  "references": [
+    {
+      "path": "./projects/trm-mobile-app/tsconfig.app.json"
+    },
+    {
+      "path": "./projects/trm-mobile-app/tsconfig.spec.json"
+    }
+  ]
 }

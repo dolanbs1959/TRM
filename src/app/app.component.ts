@@ -1,11 +1,16 @@
 import { Component } from '@angular/core';
 import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone';
+import { addIcons } from 'ionicons';
+import { camera, cameraOutline } from 'ionicons/icons';
 
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
-  imports: [IonApp, IonRouterOutlet],
+  styleUrls: ['app.component.scss'],
+  standalone: false, // Change this to false
 })
 export class AppComponent {
-  constructor() {}
+  constructor() {
+    addIcons({ camera, cameraOutline });
+  }
 }

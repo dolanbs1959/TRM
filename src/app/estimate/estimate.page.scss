@@ -1,0 +1,720 @@
+.estimate-page {
+  --background: linear-gradient(180deg, #f7f1e8 0%, #fffaf5 100%);
+}
+
+.main-header {
+  --min-height: 60px;
+}
+
+.header-logo-large {
+  width: clamp(100px, 28vw, 140px);
+  height: auto;
+  margin-left: 15px;
+}
+
+.header-title-large {
+  font-size: clamp(1.45rem, 6vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.sub-header {
+  --padding-bottom: 10px;
+  text-align: center;
+}
+
+.tech-greeting {
+  font-size: clamp(0.9rem, 3.5vw, 1.1rem);
+  font-weight: 600;
+  color: #fff;
+  text-transform: capitalize;
+  line-height: 1.2;
+}
+
+.job-address-line {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #ffecec;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.detail-state {
+  min-height: 42vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #6b6b6b;
+  gap: 6px;
+
+  ion-icon {
+    font-size: 1.5rem;
+  }
+}
+
+.payload {
+  padding: 12px;
+}
+
+.estimate-card {
+  border-radius: 10px;
+  margin: 0 0 12px;
+}
+
+.roof-tiles-card {
+  border: 1px solid #9ec0e9;
+
+  ion-card-header {
+    background: linear-gradient(180deg, #edf5ff 0%, #dcecff 100%);
+  }
+}
+
+.roof-tiles-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.roof-tiles-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.roof-tiles-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.roof-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #c7d9ef;
+  border-radius: 10px;
+  padding: 36px 10px 10px;
+}
+
+.roof-tile-add-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  --padding-start: 7px;
+  --padding-end: 7px;
+  min-height: 24px;
+  font-size: 0.68rem;
+  letter-spacing: 0.2px;
+}
+
+.roof-tile-added {
+  border-color: #6ea8d9;
+  background: linear-gradient(180deg, #f4f9ff 0%, #e9f3ff 100%);
+}
+
+.roof-tile-copy {
+  h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #1d3557;
+  }
+
+  p {
+    margin: 3px 0;
+    font-size: 0.76rem;
+    color: #32465c;
+    line-height: 1.3;
+  }
+}
+
+.payload-header {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #3a3a3a;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.payload-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.detail-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.detail-item {
+  background: #f7f7f7;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.detail-label {
+  display: block;
+  font-size: 0.62rem;
+  line-height: 1.1;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6a6a6a;
+  margin-bottom: 2px;
+}
+
+.detail-value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1f1f1f;
+  overflow-wrap: anywhere;
+}
+
+.notes-block {
+  margin-top: 10px;
+  background: #f7f7f7;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 8px;
+
+  p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #444;
+    line-height: 1.35;
+  }
+}
+
+.ground-inspection-section {
+  margin-top: 12px;
+}
+
+.ground-inspection-title {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #5a5a5a;
+}
+
+.ground-inspection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ground-inspection-item {
+  background: #f7f7f7;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 0;
+}
+
+.estimate-items-section {
+  margin-top: 4px;
+}
+
+.packages-section {
+  background: linear-gradient(180deg, #fff3df 0%, #ffe9cf 100%);
+  border: 1px solid #efc48f;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.tiptop-section {
+  background: linear-gradient(180deg, #e4f7ea 0%, #d7f1e1 100%);
+  border: 1px solid #95d2aa;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.repairs-section {
+  background: linear-gradient(180deg, #e8f3ff 0%, #dcebff 100%);
+  border: 1px solid #a9c8ee;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.search-section {
+  background: linear-gradient(180deg, #fff0f4 0%, #ffe3ea 100%);
+  border: 1px solid #e8b2c2;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.notes-card,
+.dates-card,
+.signature-card {
+  overflow: hidden;
+
+  ion-card-header {
+    padding-bottom: 10px;
+  }
+}
+
+.notes-card ion-card-header {
+  background: linear-gradient(180deg, #fff5d9 0%, #ffe9b8 100%);
+}
+
+.dates-card ion-card-header {
+  background: linear-gradient(180deg, #e6f3ff 0%, #cfe7ff 100%);
+}
+
+.signature-card ion-card-header {
+  background: linear-gradient(180deg, #f6ebff 0%, #ecd8ff 100%);
+}
+
+.secondary-discount-card,
+.submit-card {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7fbff 0%, #eef5ff 100%);
+  border: 1px solid #c8d9ef;
+}
+
+.secondary-discount-header,
+.signature-pad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.secondary-discount-grid,
+.submit-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+.signature-pad-shell {
+  margin-top: 14px;
+}
+
+.signature-canvas {
+  display: block;
+  width: 100%;
+  height: 220px;
+  border: 1px solid #d5d5d5;
+  border-radius: 12px;
+  background: #fff;
+  touch-action: none;
+}
+
+.signature-help {
+  margin: 8px 0 0;
+  font-size: 0.75rem;
+  color: #61536e;
+}
+
+.estimate-photo-gallery {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.estimate-photo-item {
+  background: #ffffff;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  overflow: hidden;
+
+  .estimate-photo-trigger {
+    width: 100%;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    display: block;
+    cursor: zoom-in;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    background: #f2f2f2;
+  }
+}
+
+.estimate-photo-meta {
+  padding: 6px 8px 8px;
+
+  p {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #444;
+    line-height: 1.3;
+  }
+}
+
+.photo-viewer-content {
+  --background: #121212;
+}
+
+.photo-viewer-wrap {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+
+  img {
+    width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    border-radius: 10px;
+    background: #000;
+  }
+}
+
+.photo-nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  ion-icon {
+    font-size: 1.2rem;
+  }
+}
+
+.photo-nav-prev {
+  left: 16px;
+}
+
+.photo-nav-next {
+  right: 16px;
+}
+
+.photo-viewer-notes {
+  margin: 0;
+  width: 100%;
+  color: #f1f1f1;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.estimate-items-title {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #5a5a5a;
+}
+
+.estimate-empty-state {
+  background: #ffffff;
+  border: 1px dashed #d7d7d7;
+  border-radius: 10px;
+  color: #6b6b6b;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  padding: 12px;
+}
+
+.catalog-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.package-section-wrap {
+  margin-bottom: 12px;
+}
+
+.package-section-title {
+  margin: 4px 0 8px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #92400e;
+}
+
+.catalog-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e4e1dc;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.catalog-copy {
+  min-width: 0;
+
+  h4 {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #2a2a2a;
+  }
+
+  p {
+    margin: 4px 0;
+    font-size: 0.78rem;
+    color: #4b4b4b;
+    line-height: 1.3;
+  }
+}
+
+.catalog-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalog-price {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #b42318;
+}
+
+.repair-group-content {
+  padding: 8px;
+  background: #faf8f4;
+  display: grid;
+  gap: 8px;
+}
+
+.active-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  background: #fffaf5;
+  border: 1px solid #ead7c7;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.active-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.active-item-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+}
+
+.active-item-subtotal {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #dedede;
+}
+
+.supporting-copy {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #4a4037;
+}
+
+.pricing-summary-card {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffdf7 0%, #f8f3e8 100%);
+  border: 1px solid #e4d8be;
+}
+
+.pricing-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-row {
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #eadfc8;
+}
+
+.summary-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #eadfc8;
+}
+
+.summary-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.supporting-inline {
+  font-size: 0.75rem;
+  color: #75675a;
+}
+
+.pricing-value {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #35281f;
+}
+
+.total-row {
+  background: linear-gradient(180deg, #fff4dd 0%, #ffe8c4 100%);
+  border-color: #efc98f;
+}
+
+.signature-line-input {
+  --padding-start: 0;
+  --padding-end: 0;
+  --background: transparent;
+  border-bottom: 2px solid #8e8e8e;
+}
+
+.estimate-page ion-input,
+.estimate-page ion-textarea {
+  --background: #ffffff;
+  border: 1px solid #cfd7e2;
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 6px rgba(26, 44, 67, 0.08);
+}
+
+.estimate-page ion-searchbar {
+  --box-shadow: 0 2px 6px rgba(26, 44, 67, 0.1);
+}
+
+.active-item-value {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.total-price {
+  color: #7c2d12;
+}
+
+.discount-toggle {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  padding-top: 16px;
+}
+
+.signature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+.bottom-action-wrap {
+  padding: 8px 12px 16px;
+}
+
+.bottom-back-btn {
+  font-weight: 700;
+}
+
+@media (max-width: 420px) {
+  .detail-grid,
+  .ground-inspection-grid,
+  .estimate-photo-gallery,
+  .roof-tiles-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .active-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .active-item-grid,
+  .signature-grid,
+  .pricing-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

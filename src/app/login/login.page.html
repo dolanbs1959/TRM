@@ -1,0 +1,45 @@
+<ion-content [fullscreen]="true">
+  <div class="brand-bar"></div>
+
+  <div class="login-container">
+    <div class="logo-wrapper">
+      <img src="assets/TRM_logo.png" alt="Roof Medic Logo" class="login-logo">
+    </div>
+
+    <div class="login-header">
+      <h1>Technician Portal</h1>
+      <p>Phone and PIN</p>
+    </div>
+
+    <div *ngIf="sessionStateWarning" class="session-warning-banner">
+      {{ sessionStateWarning }}
+    </div>
+
+    <ion-item lines="outline" class="ion-margin-bottom">
+      <ion-label position="stacked">Phone Number</ion-label>
+      <ion-input type="tel" placeholder="(555) 555-5555" [(ngModel)]="phoneNumber"></ion-input>
+    </ion-item>
+
+    <ion-item lines="outline" class="ion-margin-bottom">
+      <ion-label position="stacked">PIN Number</ion-label>
+      <ion-input type="password" placeholder="4-Digit PIN" [(ngModel)]="pin"></ion-input>
+    </ion-item>
+
+    <ion-button expand="block" (click)="onLogin()" [disabled]="isLoggingIn">
+      Check Schedule
+    </ion-button>
+
+    <div *ngIf="isLoggingIn" class="login-feedback">
+      <p class="success-text">
+        Login success! Welcome, {{ firstName }}.<br>
+        <small>Just one moment while we pull up your schedule.</small>
+      </p>
+      
+    <div class="loading-container">
+      <div class="truck-path">
+        <img src="assets/truck-icon.png" class="driving-truck" alt="TRM Truck">
+      </div>
+    </div>
+    </div>
+  </div>
+</ion-content>

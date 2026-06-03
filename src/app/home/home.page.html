@@ -1,0 +1,264 @@
+<ion-header [translucent]="false">
+  <ion-toolbar color="danger" class="main-header">
+    <ion-buttons slot="start">
+      <ion-img src="assets/TRM_logo.png" class="header-logo-large"></ion-img>
+    </ion-buttons>
+    <ion-title class="header-title-large">
+      TRM Mobile
+    </ion-title>
+  </ion-toolbar>
+
+  <ion-toolbar color="danger" class="sub-header">
+    <div class="tech-greeting">
+      {{ tech.firstName }}'s Schedule for {{ today | date:'EEEE, MM/dd/yyyy' }}
+    </div>
+  </ion-toolbar>
+
+<div class="dashboard-container">
+
+  <!-- Center: Weather Widget -->
+  <div class="weather-column">
+
+    <!-- Compact city search pinned to top-left -->
+    <div class="city-search-row city-search-corner">
+      <ion-button class="gps-btn" fill="clear" size="small" (click)="useGpsWeather()" title="Use my location">
+        <ion-icon name="locate-outline"></ion-icon>
+      </ion-button>
+      <div class="city-search-wrap">
+        <ion-input
+          class="city-input"
+          placeholder="City"
+          [value]="cityQuery"
+          (ionInput)="onCityQueryChange($event.detail.value)"
+          (ionBlur)="onCityInputBlur()"
+          clearInput="true">
+        </ion-input>
+        <div class="city-suggestions" *ngIf="showCitySuggestions">
+          <div
+            class="city-suggestion-item"
+            *ngFor="let s of citySuggestions"
+            (mousedown)="selectCitySuggestion(s)">
+            {{ s.name }}<span *ngIf="s.state">, {{ s.state }}</span>, {{ s.country }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main weather display -->
+    <div class="weather-widget" *ngIf="weather && !isLoadingWeather">
+      <div class="weather-main">
+        <img [src]="'https://openweathermap.org/img/wn/' + weather.icon + '@2x.png'" alt="Weather Icon">
+        <div class="weather-temps">
+          <span class="temp">{{ weather.temp }}°F</span>
+          <span class="weather-desc">{{ weather.description }}</span>
+        </div>
+      </div>
+      <div class="weather-city">{{ weather.city }}, {{ weather.country }}</div>
+      <div class="weather-details">
+        <span class="detail-item">
+          <ion-icon name="thermometer-outline"></ion-icon> Feels {{ weather.feelsLike }}°
+        </span>
+        <span class="detail-item">
+          <ion-icon name="water-outline"></ion-icon> {{ weather.humidity }}%
+        </span>
+        <span class="detail-item">
+          <ion-icon name="speedometer-outline"></ion-icon> {{ weather.wind }} mph
+        </span>
+      </div>
+    </div>
+    <div class="weather-loading" *ngIf="isLoadingWeather">
+      <ion-icon name="cloud-outline"></ion-icon>
+    </div>
+
+  </div>
+
+  <hr class="dashboard-divider">
+
+  <!-- Right: Stats and Buttons -->
+  <div class="button-stack">
+    <div class="stats-row-inline">
+      <div class="stat-item">
+        <span class="stat-label">Hours worked this pay period:</span>
+        <span class="stat-value">{{ hoursWorked }}</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">PTO Available:</span>
+        <span class="stat-value">{{ ptoAvailable }}</span>
+      </div>
+    </div>
+    <div class="clock-dashboard">
+      <div class="clocked-in-at">{{ clockedInAtText }}</div>
+      <div class="time-on-clock">{{ timeOnClockText }}</div>
+    </div>
+    <div class="btn-grid">
+      <ion-button
+        class="clock-in-btn"
+        [style.--background]="isClockedIn ? '#d11a2a' : 'var(--trm-green)'"
+        [style.--color]="'#ffffff'"
+        [disabled]="isClockActionLoading || isJobPaused()"
+        (click)="toggleClockState()">
+        {{ getClockButtonLabel() }}
+      </ion-button>
+      <ion-button
+        [color]="getSelectedJobActionColor()"
+        [disabled]="isWorkflowActionDisabled()"
+        (click)="advanceSelectedJobAction()">
+        {{ getSelectedJobActionLabel() }}
+      </ion-button>
+    </div>
+    <div class="btn-grid secondary-btn-grid" *ngIf="shouldShowJobSecondaryActions()">
+      <ion-button
+        color="warning"
+        [disabled]="isJobPauseActionLoading"
+        (click)="toggleJobPauseResume()">
+        {{ getPauseResumeButtonLabel() }}
+      </ion-button>
+      <ion-button
+        [style.--background]="'#07598f'"
+        [style.--color]="'#ffffff'"
+        [disabled]="isJobPauseActionLoading || isJobPaused()"
+        (click)="markReturnRequired()">
+        RETURN REQUIRED
+      </ion-button>
+    </div>
+  </div>
+
+</div>
+
+<ion-modal #dateModal [keepContentsMounted]="true">
+  <ng-template>
+    <ion-datetime id="datetime" presentation="date"
+      [value]="selectedDateIso"
+      (ionChange)="onDateChange($event.detail.value)">
+    </ion-datetime>
+  </ng-template>
+</ion-modal>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <ion-list lines="none" class="schedule-list">
+    <ion-list-header class="route-header">
+      <ion-label>View Schedule For:</ion-label>
+      <ion-datetime-button datetime="datetime"></ion-datetime-button>
+    </ion-list-header>
+
+    <div *ngIf="isLoadingSchedule" class="empty-schedule">
+      <ion-icon name="hourglass-outline"></ion-icon>
+      <p>Loading schedule...</p>
+    </div>
+
+    <ion-card class="job-card" *ngFor="let job of (serviceOrders || [])" [style.cursor]="isClockedIn && !isJobComplete(job) ? 'pointer' : 'default'" [style.background]="isSelectedJob(job) ? '#fff4c2' : (isJobComplete(job) ? '#f0f0f0' : '#ffffff')" [style.outline]="isSelectedJob(job) ? '2px solid #f2b705' : 'none'" [style.opacity]="!isClockedIn || isJobComplete(job) || (workflowLockedJobRecordId && !isSelectedJob(job)) ? '0.65' : '1'" (click)="selectJob(job)">
+      <ion-card-content>
+        <div class="job-header">
+          <ion-badge [color]="getJobStatusColor(job)">{{ getJobStatusLabel(job) }}</ion-badge>
+          <ion-badge color="medium" *ngIf="job['108']?.value">{{ job['108']?.value }}</ion-badge>
+          <ion-badge color="medium" *ngIf="!isClockedIn">CLOCK IN REQUIRED</ion-badge>
+          <ion-badge color="danger" *ngIf="workflowLockedJobRecordId && isSelectedJob(job)">ACTIVE</ion-badge>
+          <ion-badge class="schedule-date-badge schedule-date-badge--inspection" *ngIf="job['40']?.value?.toLowerCase() === 'inspection' && job['41']?.value">
+            Inspection Date: {{ job['41']?.value | date:'M/d/yy' }}
+          </ion-badge>
+          <ion-badge class="schedule-date-badge schedule-date-badge--service-order" *ngIf="job['40']?.value?.toLowerCase() === 'service order' && job['9']?.value">
+            Service Order Date: {{ job['9']?.value | date:'M/d/yy' }}
+          </ion-badge>
+        </div>
+
+        <div class="job-body">
+          <h2 class="customer-name">
+            {{ job['93']?.value }} {{ job['94']?.value }}
+          </h2> 
+          
+          <p class="job-location">
+            <ion-icon name="pin-outline"></ion-icon>
+            <span>
+              {{ job['106']?.value }}<span *ngIf="job['107']?.value"> {{ job['107']?.value }}</span><span *ngIf="job['92']?.value || job['105']?.value">, </span>{{ job['92']?.value }} {{ job['105']?.value }}
+            </span>
+          </p>
+
+          <div class="job-contact-row" *ngIf="getPhoneNumber(job) || getMobilePhone(job)">
+            <a
+              *ngIf="getPhoneNumber(job)"
+              class="job-contact-link"
+              [href]="getDialHref(getPhoneNumber(job))"
+              (click)="$event.stopPropagation()">
+              <ion-icon name="call-outline"></ion-icon>
+              <span>Phone: {{ getPhoneNumber(job) }}</span>
+            </a>
+
+            <a
+              *ngIf="hasDifferentPhoneNumbers(job)"
+              class="job-contact-link"
+              [href]="getDialHref(getMobilePhone(job))"
+              (click)="$event.stopPropagation()">
+              <ion-icon name="phone-portrait-outline"></ion-icon>
+              <span>Mobile: {{ getMobilePhone(job) }}</span>
+            </a>
+          </div>
+
+          <div class="job-contact-row" *ngIf="getEmailAddress(job)">
+            <a
+              class="job-contact-link"
+              [href]="getMailHref(getEmailAddress(job))"
+              (click)="$event.stopPropagation()">
+              <ion-icon name="mail-outline"></ion-icon>
+              <span>Email: {{ getEmailAddress(job) }}</span>
+            </a>
+          </div>
+
+          <p class="job-notes" *ngIf="job['10']?.value">
+            <ion-icon name="document-text-outline"></ion-icon>
+            <em>{{ job['10']?.value }}</em>
+          </p>
+
+          <div class="inspection-grid" *ngIf="job['40']?.value?.toLowerCase() === 'inspection'">
+            <div class="inspection-field" *ngIf="job['44']?.value">
+              <span class="inspection-label">Expected Between</span>
+              <span class="inspection-value">{{ job['44']?.value }}</span>
+            </div>
+            <div class="inspection-field" *ngIf="job['70']?.value">
+              <span class="inspection-label">Roof Type</span>
+              <span class="inspection-value">{{ job['70']?.value }}</span>
+            </div>
+            <div class="inspection-field" *ngIf="job['110']?.value">
+              <span class="inspection-label">Pitch</span>
+              <span class="inspection-value">{{ job['110']?.value }}</span>
+            </div>
+            <div class="inspection-field" *ngIf="job['46']?.value">
+              <span class="inspection-label">Height (Stories/Floors)</span>
+              <span class="inspection-value">{{ job['46']?.value }}</span>
+            </div>
+            <div class="inspection-field" *ngIf="job['71']?.value">
+              <span class="inspection-label">Roof Maintenance</span>
+              <span class="inspection-value">{{ job['71']?.value }}</span>
+            </div>
+            <div class="inspection-field" *ngIf="job['26']?.value">
+              <span class="inspection-label">Campaign Name</span>
+              <span class="inspection-value">{{ job['26']?.value }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="job-footer">
+          <ion-button fill="solid" color="warning" size="small" (click)="$event.stopPropagation(); openDirections(job)">
+            <ion-icon slot="start" name="map-outline"></ion-icon>
+            Directions
+          </ion-button>
+          <ion-button fill="solid" color="danger" size="small" [disabled]="isViewJobButtonDisabled(job)" (click)="$event.stopPropagation(); viewJob(job)">
+            {{ getViewJobButtonLabel(job) }}
+          </ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <div *ngIf="!isLoadingSchedule && (serviceOrders?.length || 0) === 0" class="empty-schedule">
+      <ion-icon name="calendar-clear-outline"></ion-icon>
+      <p>No jobs assigned for today.</p>
+    </div>
+  </ion-list>
+
+  <div class="home-exit-wrap">
+    <ion-button expand="block" color="medium" class="home-exit-button" (click)="exitToLogin()">
+      Exit
+    </ion-button>
+  </div>
+
+</ion-content>

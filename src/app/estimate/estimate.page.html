@@ -1,0 +1,571 @@
+<ion-header [translucent]="false">
+  <ion-toolbar color="danger" class="main-header">
+    <ion-buttons slot="start">
+      <ion-img src="assets/TRM_logo.png" class="header-logo-large"></ion-img>
+    </ion-buttons>
+    <ion-title class="header-title-large">Estimate</ion-title>
+  </ion-toolbar>
+
+  <ion-toolbar color="danger" class="sub-header">
+    <div class="tech-greeting">{{ getCustomerName() }}</div>
+    <div class="job-address-line">{{ getCustomerAddressLine() }}</div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="estimate-page">
+  <div *ngIf="!job" class="detail-state">
+    <ion-icon name="alert-circle-outline"></ion-icon>
+    <p>Unable to load estimate detail.</p>
+  </div>
+
+  <section class="payload" *ngIf="job">
+    <div class="payload-header-row">
+      <div class="payload-header">Section 2: Roof Cleaning, Repair & Future Maintenance Options</div>
+      <ion-badge color="medium">ESTIMATE</ion-badge>
+    </div>
+
+    <ion-card class="estimate-card">
+      <ion-card-header>
+        <ion-card-title>Service Order Summary</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div class="detail-grid">
+          <div class="detail-item" *ngFor="let field of summaryFields">
+            <span class="detail-label">{{ field.label }}</span>
+            <span class="detail-value">{{ field.value }}</span>
+          </div>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <ion-card class="estimate-card">
+      <ion-card-header>
+        <ion-card-title>Inspection Summary</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div class="detail-grid">
+          <div class="detail-item" *ngFor="let field of inspectionFields">
+            <span class="detail-label">{{ field.label }}</span>
+            <span class="detail-value">{{ field.value }}</span>
+          </div>
+        </div>
+
+        <div class="ground-inspection-section" *ngIf="groundInspectionFields.length > 0">
+          <h3 class="ground-inspection-title">Ground Inspection</h3>
+          <div class="ground-inspection-grid">
+            <div class="ground-inspection-item" *ngFor="let field of groundInspectionFields">
+              <span class="detail-label">{{ field.label }}</span>
+              <span class="detail-value">{{ field.value }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="notes-block" *ngIf="getFieldValue(10)">
+          <span class="detail-label">Inspection Notes</span>
+          <p>{{ getFieldValue(10) }}</p>
+        </div>
+
+        <div class="notes-block" *ngIf="getCachedPhotoCount() > 0">
+          <span class="detail-label">Inspection Photos</span>
+          <p>{{ getCachedPhotoCount() }} photo(s) cached from completed inspection.</p>
+        </div>
+
+        <div class="estimate-photo-gallery" *ngIf="getCachedInspectionPhotos().length > 0">
+          <div class="estimate-photo-item" *ngFor="let photo of getCachedInspectionPhotos(); let i = index">
+            <button
+              type="button"
+              class="estimate-photo-trigger"
+              (click)="openPhotoViewer(photo, i)"
+              aria-label="Open inspection photo"
+            >
+              <img [src]="photo.src" alt="Inspection photo" title="Inspection photo" loading="lazy" />
+            </button>
+            <div class="estimate-photo-meta">
+              <span class="detail-label">{{ photo.section }}</span>
+              <p *ngIf="photo.notes">{{ photo.notes }}</p>
+            </div>
+          </div>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <ion-card class="estimate-card roof-tiles-card">
+      <ion-card-header>
+        <ion-card-title>Inspection Hub Roofs</ion-card-title>
+      </ion-card-header>
+      <ion-card-content>
+        <div class="roof-tiles-header">
+          <div class="roof-tiles-meta">
+            <span class="detail-label">Selected Roof Square Footage</span>
+            <span class="detail-value">{{ selectedRoofSquareFootage }} sq ft</span>
+          </div>
+          <ion-button size="small" color="primary" [disabled]="!hasInspectionHubRoofTiles" (click)="addAllRoofsToEstimate()">
+            Add All Roofs
+          </ion-button>
+        </div>
+
+        <div class="estimate-empty-state" *ngIf="roofsLoading">Loading roofs from inspection hub...</div>
+        <div class="estimate-empty-state" *ngIf="!roofsLoading && !hasInspectionHubRoofTiles">
+          No roof records were found in the inspection hub for this service location.
+        </div>
+        <div class="roof-tiles-grid" *ngIf="!roofsLoading && hasInspectionHubRoofTiles">
+          <div class="roof-tile" *ngFor="let roof of inspectionHubRoofTiles" [class.roof-tile-added]="roof.isAdded">
+            <ion-button
+              class="roof-tile-add-btn"
+              size="small"
+              fill="outline"
+              color="primary"
+              [disabled]="roof.isAdded"
+              (click)="addRoofToEstimate(roof.id)"
+            >
+              {{ roof.isAdded ? 'Added' : 'Add' }}
+            </ion-button>
+            <div class="roof-tile-copy">
+              <h4>{{ roof.name }}</h4>
+              <p>Material: {{ roof.material }}</p>
+              <p>Pitch: {{ roof.pitch }}</p>
+              <p>Type: {{ roof.type }}</p>
+              <p>Status: {{ roof.status }}</p>
+              <span class="catalog-price">{{ roof.squareFootageLabel }}</span>
+            </div>
+          </div>
+        </div>
+      </ion-card-content>
+    </ion-card>
+
+    <section class="estimate-items-section packages-section">
+      <h3 class="estimate-items-title">Full Service Roof Clean Packages</h3>
+      <ion-card class="estimate-card" *ngIf="!isCatalogLoading; else packagesLoading">
+        <ion-card-content>
+          <div class="estimate-empty-state" *ngIf="packageSections.length === 0">
+            No package items are currently available for this estimate.
+          </div>
+          <div class="package-section-wrap" *ngFor="let section of packageSections">
+            <h4 class="package-section-title">{{ section.label }}</h4>
+            <div class="catalog-stack">
+              <div class="catalog-item" *ngFor="let item of section.items">
+                <div class="catalog-copy">
+                  <div class="catalog-name-row">
+                    <h4>{{ item.name }}</h4>
+                    <ion-badge color="warning" *ngIf="item.packageTier">{{ item.packageTier }}</ion-badge>
+                  </div>
+                  <p *ngIf="item.description">{{ item.description }}</p>
+                  <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+                </div>
+                <ion-button size="small" color="danger" (click)="addCatalogItemToEstimate(item)">
+                  Add
+                </ion-button>
+              </div>
+            </div>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </section>
+
+    <section class="estimate-items-section tiptop-section" *ngIf="tipTopRoofCareClubItems.length > 0">
+      <h3 class="estimate-items-title">Tip-Top Roof Care Club (Premium Future Roof Care Services)</h3>
+      <ion-card class="estimate-card">
+        <ion-card-content>
+          <div class="catalog-stack">
+            <div class="catalog-item" *ngFor="let item of tipTopRoofCareClubItems">
+              <div class="catalog-copy">
+                <h4>{{ item.name }}</h4>
+                <p *ngIf="item.description">{{ item.description }}</p>
+                <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+              </div>
+              <ion-button size="small" fill="outline" color="success" (click)="addCatalogItemToEstimate(item)">
+                Opt In
+              </ion-button>
+            </div>
+          </div>
+        </ion-card-content>
+      </ion-card>
+    </section>
+
+    <section class="estimate-items-section repairs-section">
+      <h3 class="estimate-items-title">Additional Services and Repairs</h3>
+      <ion-card class="estimate-card" *ngIf="!isCatalogLoading">
+        <ion-card-content>
+          <div class="estimate-empty-state" *ngIf="categorizedRepairGroups.length === 0">
+            No repair line items are currently available.
+          </div>
+          <ion-accordion-group *ngIf="categorizedRepairGroups.length > 0">
+            <ion-accordion *ngFor="let group of categorizedRepairGroups" [value]="group.label">
+              <ion-item slot="header" color="light">
+                <ion-label>{{ group.label }}</ion-label>
+              </ion-item>
+              <div slot="content" class="repair-group-content">
+                <div class="catalog-item" *ngFor="let item of group.items">
+                  <div class="catalog-copy">
+                    <h4>{{ item.name }}</h4>
+                    <p *ngIf="item.serviceType">Type: {{ item.serviceType }}</p>
+                    <p *ngIf="item.description">{{ item.description }}</p>
+                    <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+                  </div>
+                  <ion-button size="small" fill="outline" color="danger" (click)="addCatalogItemToEstimate(item)">
+                    Add
+                  </ion-button>
+                </div>
+              </div>
+            </ion-accordion>
+          </ion-accordion-group>
+        </ion-card-content>
+      </ion-card>
+    </section>
+
+    <section class="estimate-items-section search-section">
+      <h3 class="estimate-items-title">Search All Services</h3>
+      <ion-card class="estimate-card">
+        <ion-card-content>
+          <ion-searchbar
+            debounce="200"
+            placeholder="Search packages and repair services"
+            [ngModel]="serviceSearchTerm"
+            (ngModelChange)="onServiceSearchTermChange($event)"
+          ></ion-searchbar>
+
+          <div class="estimate-empty-state" *ngIf="serviceSearchTerm && filteredCatalogItems.length === 0">
+            No services matched "{{ serviceSearchTerm }}".
+          </div>
+
+          <div class="catalog-stack" *ngIf="serviceSearchTerm && filteredCatalogItems.length > 0">
+            <div class="catalog-item" *ngFor="let item of filteredCatalogItems">
+              <div class="catalog-copy">
+                <div class="catalog-name-row">
+                  <h4>{{ item.name }}</h4>
+                  <ion-badge color="tertiary" *ngIf="item.isPackage">Package</ion-badge>
+                </div>
+                <p *ngIf="item.serviceType">Type: {{ item.serviceType }}</p>
+                <p *ngIf="item.description">{{ item.description }}</p>
+                <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+              </div>
+              <ion-button size="small" fill="outline" color="danger" (click)="addCatalogItemToEstimate(item)">
+                Add
+              </ion-button>
+            </div>
+          </div>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card class="estimate-card" *ngIf="activeEstimateItems.length > 0">
+        <ion-card-header>
+          <ion-card-title>Active Estimate Items</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <div class="active-item" *ngFor="let item of activeEstimateItems">
+            <div class="active-item-header">
+              <span class="detail-label">{{ item.name }}</span>
+              <span class="detail-value">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+            </div>
+
+            <div class="active-item-grid">
+              <label>
+                <span class="detail-label">Qty Needed</span>
+                <ion-input
+                  type="number"
+                  min="1"
+                  placeholder="Qty"
+                  [ngModel]="item.qtyNeeded || null"
+                  (ngModelChange)="item.qtyNeeded = $event; onActiveItemChanged(item)"
+                ></ion-input>
+              </label>
+
+              <label>
+                <span class="detail-label">Price</span>
+                <ion-input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [ngModel]="item.price || null"
+                  (ngModelChange)="item.price = $event; onActiveItemChanged(item)"
+                ></ion-input>
+              </label>
+
+              <label>
+                <span class="detail-label">Sq Footage</span>
+                <ion-input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                  [ngModel]="item.sqFootage || null"
+                  (ngModelChange)="item.sqFootage = $event; onActiveItemChanged(item)"
+                ></ion-input>
+              </label>
+
+              <div class="active-item-subtotal">
+                <span class="detail-label">Line Subtotal</span>
+                <span class="pricing-value">{{ formatCurrency(item.lineSubtotal) }}</span>
+              </div>
+            </div>
+
+            <ion-button size="small" color="medium" fill="clear" (click)="removeCatalogItemFromEstimate(item)">
+              Remove
+            </ion-button>
+          </div>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card class="estimate-card notes-card">
+        <ion-card-header>
+          <ion-card-title>Section 3: Service Notes</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="supporting-copy">{{ servicePledgeText }}</p>
+          <ion-textarea
+            autoGrow="true"
+            rows="5"
+            placeholder="Add service notes, exclusions, and customer-facing remarks"
+            [(ngModel)]="serviceNotes"
+          ></ion-textarea>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card class="estimate-card dates-card">
+        <ion-card-header>
+          <ion-card-title>Section 4: Dates of Services</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="supporting-copy">{{ datesOfServiceText }}</p>
+          <div class="signature-grid">
+            <label>
+              <span class="detail-label">Clean/Maintenance Services Scheduled For</span>
+              <ion-input type="date" [(ngModel)]="cleanMaintenanceScheduledFor"></ion-input>
+            </label>
+            <label>
+              <span class="detail-label">Repair Services Scheduled For</span>
+              <ion-input type="date" [(ngModel)]="repairServicesScheduledFor"></ion-input>
+            </label>
+          </div>
+
+          <div class="pricing-summary-card" *ngIf="activeEstimateItems.length > 0">
+            <div class="pricing-summary-grid">
+              <div class="summary-row">
+                <span class="detail-label">Subtotal</span>
+                <span class="pricing-value">{{ formatCurrency(getCartSubtotal()) }}</span>
+              </div>
+
+              <div class="summary-row">
+                <span class="detail-label">Selected Roof Sq Ft</span>
+                <span class="pricing-value">{{ selectedRoofSquareFootage || 0 }} sq ft</span>
+              </div>
+
+              <label class="summary-toggle-row">
+                <div class="summary-toggle-copy">
+                  <span class="detail-label">Military / Senior Discount</span>
+                  <span class="supporting-inline">Defaults to 5%</span>
+                </div>
+                <ion-checkbox [ngModel]="discountMS" (ngModelChange)="onMSDiscountToggle($event)"></ion-checkbox>
+              </label>
+
+              <label>
+                <span class="detail-label">Military / Senior Discount Amount</span>
+                <ion-input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [disabled]="!discountMS"
+                  [ngModel]="msDiscountAmount || null"
+                  (ngModelChange)="onMSDiscountAmountChange($event)"
+                ></ion-input>
+              </label>
+
+              <label class="summary-toggle-row">
+                <div class="summary-toggle-copy">
+                  <span class="detail-label">Discount Other</span>
+                  <span class="supporting-inline">Manual amount</span>
+                </div>
+                <ion-checkbox [ngModel]="discountOther" (ngModelChange)="onOtherDiscountToggle($event)"></ion-checkbox>
+              </label>
+
+              <label>
+                <span class="detail-label">Discount Other Amount</span>
+                <ion-input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [disabled]="!discountOther"
+                  [ngModel]="otherDiscountAmount || null"
+                  (ngModelChange)="onOtherDiscountAmountChange($event)"
+                ></ion-input>
+              </label>
+
+              <div class="summary-row">
+                <span class="detail-label">Total Discounts</span>
+                <span class="pricing-value">{{ formatCurrency(getCartDiscountTotal()) }}</span>
+              </div>
+
+              <div class="summary-row">
+                <span class="detail-label">Taxable Subtotal</span>
+                <span class="pricing-value">{{ formatCurrency(getCartTaxableSubtotal()) }}</span>
+              </div>
+
+              <div class="summary-row">
+                <span class="detail-label">{{ getEstimatedTaxRateLabel() }}</span>
+                <span class="pricing-value">{{ (getEstimatedTaxRate() * 100).toFixed(2) }}%</span>
+              </div>
+
+              <div class="summary-row">
+                <span class="detail-label">Estimated Tax</span>
+                <span class="pricing-value">{{ formatCurrency(getCartTaxTotal()) }}</span>
+              </div>
+
+              <div class="summary-row total-row">
+                <span class="detail-label">Total Price</span>
+                <span class="pricing-value">{{ formatCurrency(getCartGrandTotal()) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="secondary-discount-card" *ngIf="discountsAvailable">
+            <div class="secondary-discount-header">
+              <span class="detail-label">Master Discount State</span>
+              <ion-badge color="tertiary">Editable</ion-badge>
+            </div>
+            <div class="secondary-discount-grid">
+              <label>
+                <span class="detail-label">FID 138</span>
+                <ion-input [(ngModel)]="discountControlValue" placeholder="Control value"></ion-input>
+              </label>
+              <label>
+                <span class="detail-label">Secondary Discount Amount</span>
+                <ion-input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [ngModel]="secondaryDiscountAmount || null"
+                  (ngModelChange)="secondaryDiscountAmount = $event"
+                ></ion-input>
+              </label>
+              <label>
+                <span class="detail-label">Secondary Discount Percentage</span>
+                <ion-input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  [ngModel]="secondaryDiscountPercentage || null"
+                  (ngModelChange)="secondaryDiscountPercentage = $event"
+                ></ion-input>
+              </label>
+            </div>
+          </div>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card class="estimate-card signature-card" *ngIf="activeEstimateItems.length > 0">
+        <ion-card-header>
+          <ion-card-title>Work Ordered By</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <p class="supporting-copy">{{ authorizationText }}</p>
+          <div class="signature-grid">
+            <label>
+              <span class="detail-label">Work Ordered By</span>
+              <ion-input class="signature-line-input" [(ngModel)]="workOrderedBy" placeholder="Type customer name/signature"></ion-input>
+            </label>
+            <label>
+              <span class="detail-label">Date</span>
+              <ion-input type="date" [(ngModel)]="signatureDate"></ion-input>
+            </label>
+          </div>
+          <div class="signature-pad-shell">
+            <div class="signature-pad-header">
+              <span class="detail-label">Digital Signature</span>
+              <ion-button fill="clear" size="small" (click)="clearSignaturePad()">Clear</ion-button>
+            </div>
+            <canvas
+              #signatureCanvas
+              class="signature-canvas"
+              width="720"
+              height="220"
+              (pointerdown)="beginSignatureStroke($event)"
+              (pointermove)="continueSignatureStroke($event)"
+              (pointerup)="endSignatureStroke()"
+              (pointerleave)="endSignatureStroke()"
+              (pointercancel)="endSignatureStroke()"
+            ></canvas>
+            <p class="signature-help">Draw the customer signature here for ready-to-begin submissions.</p>
+          </div>
+        </ion-card-content>
+      </ion-card>
+
+      <ion-card class="estimate-card submit-card" *ngIf="activeEstimateItems.length > 0">
+        <ion-card-header>
+          <ion-card-title>Submit Estimate</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <div class="submit-summary-grid">
+            <div class="summary-row">
+              <span class="detail-label">Location Email</span>
+              <span class="pricing-value">{{ locationEmail || 'Will prompt on submit' }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="detail-label">Location ID</span>
+              <span class="pricing-value">{{ locationRecordId || 'Unresolved' }}</span>
+            </div>
+          </div>
+          <ion-button
+            expand="block"
+            color="success"
+            [disabled]="isSubmittingEstimate || activeEstimateItems.length === 0"
+            (click)="submitEstimate()"
+          >
+            {{ isSubmittingEstimate ? 'Submitting...' : 'Submit Estimate' }}
+          </ion-button>
+        </ion-card-content>
+      </ion-card>
+    </section>
+
+    <ng-template #packagesLoading>
+      <ion-card class="estimate-card">
+        <ion-card-content>
+          <div class="estimate-empty-state">Loading offered service items...</div>
+        </ion-card-content>
+      </ion-card>
+    </ng-template>
+  </section>
+</ion-content>
+
+<ion-modal [isOpen]="isPhotoViewerOpen" (didDismiss)="closePhotoViewer()">
+  <ng-template>
+    <ion-header>
+      <ion-toolbar color="dark">
+        <ion-title>{{ selectedPhoto?.section || 'Inspection Photo' }}</ion-title>
+        <ion-buttons slot="end">
+          <ion-button (click)="closePhotoViewer()">Close</ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+
+    <ion-content class="photo-viewer-content">
+      <div
+        class="photo-viewer-wrap"
+        *ngIf="selectedPhoto as photo"
+        (touchstart)="onViewerTouchStart($event)"
+        (touchend)="onViewerTouchEnd($event)"
+      >
+        <button type="button" class="photo-nav-btn photo-nav-prev" (click)="showPreviousPhoto()" aria-label="Previous photo">
+          <ion-icon name="chevron-back"></ion-icon>
+        </button>
+        <img [src]="photo.src" alt="Inspection photo enlarged" title="Inspection photo enlarged" />
+        <button type="button" class="photo-nav-btn photo-nav-next" (click)="showNextPhoto()" aria-label="Next photo">
+          <ion-icon name="chevron-forward"></ion-icon>
+        </button>
+        <p class="photo-viewer-notes" *ngIf="photo.notes">{{ photo.notes }}</p>
+      </div>
+    </ion-content>
+  </ng-template>
+</ion-modal>
+
+<ion-footer>
+  <div class="bottom-action-wrap">
+    <ion-button expand="block" color="medium" class="bottom-back-btn" (click)="goBack()">
+      Back to Dashboard
+    </ion-button>
+  </div>
+</ion-footer>

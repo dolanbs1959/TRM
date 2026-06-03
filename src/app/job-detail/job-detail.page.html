@@ -1,0 +1,688 @@
+<ion-header [translucent]="false">
+  <ion-toolbar color="danger" class="main-header">
+    <ion-buttons slot="start">
+      <ion-img src="assets/TRM_logo.png" class="header-logo-large"></ion-img>
+    </ion-buttons>
+    <ion-title class="header-title-large">
+      TRM Mobile
+    </ion-title>
+  </ion-toolbar>
+
+  <ion-toolbar color="danger" class="sub-header">
+    <div class="tech-greeting">{{ getCustomerName() }}</div>
+    <div class="job-address-line">{{ getCustomerAddressLine() }}</div>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true">
+  <div *ngIf="isLoading" class="detail-state">
+    <ion-icon name="hourglass-outline"></ion-icon>
+    <p>Loading job details...</p>
+  </div>
+
+  <div *ngIf="!isLoading && !job" class="detail-state">
+    <ion-icon name="alert-circle-outline"></ion-icon>
+    <p>Unable to load job detail.</p>
+  </div>
+
+  <section class="payload" *ngIf="!isLoading && job">
+    <div class="payload-header-row">
+      <div class="payload-header">Stage: {{ job['40']?.value || 'Unknown' }}</div>
+      <ion-badge color="medium">{{ getModeLabel() }}</ion-badge>
+    </div>
+
+    <!-- Read-only detail grid: non-inspection jobs in view mode, OR view mode fallback -->
+    <div class="payload-body" *ngIf="isReadOnlyMode() && !isInspection()">
+      <h3>Job Detail (Read Only)</h3>
+      <p>Look, don't touch mode. Use Dispatch/Arrive/Complete on the dashboard to run workflow (Inspected or Invoiced at completion).</p>
+
+      <div class="detail-grid">
+        <div class="detail-item" *ngIf="getFieldValue(108)">
+          <span class="detail-label">Stop</span>
+          <span class="detail-value">{{ getFieldValue(108) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="job['40']?.value?.toLowerCase() === 'inspection' && getFieldValue(41)">
+          <span class="detail-label">Inspection Date</span>
+          <span class="detail-value">{{ getFieldValue(41) | date:'M/d/yy' }}</span>
+        </div>
+        <div class="detail-item" *ngIf="job['40']?.value?.toLowerCase() === 'service order' && getFieldValue(9)">
+          <span class="detail-label">Service Date</span>
+          <span class="detail-value">{{ getFieldValue(9) | date:'M/d/yy' }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(15)">
+          <span class="detail-label">Service Type</span>
+          <span class="detail-value">{{ getFieldValue(15) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(16)">
+          <span class="detail-label">Service Subtype</span>
+          <span class="detail-value">{{ getFieldValue(16) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(44)">
+          <span class="detail-label">Expected Between</span>
+          <span class="detail-value">{{ getFieldValue(44) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(70)">
+          <span class="detail-label">Roof Type</span>
+          <span class="detail-value">{{ getFieldValue(70) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(110)">
+          <span class="detail-label">Pitch</span>
+          <span class="detail-value">{{ getFieldValue(110) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(46)">
+          <span class="detail-label">Height (Stories/Floors)</span>
+          <span class="detail-value">{{ getFieldValue(46) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(71)">
+          <span class="detail-label">Roof Maintenance</span>
+          <span class="detail-value">{{ getFieldValue(71) }}</span>
+        </div>
+        <div class="detail-item" *ngIf="getFieldValue(26)">
+          <span class="detail-label">Campaign Name</span>
+          <span class="detail-value">{{ getFieldValue(26) }}</span>
+        </div>
+      </div>
+
+      <div class="notes-block" *ngIf="getFieldValue(10)">
+        <span class="detail-label">Notes</span>
+        <p>{{ getFieldValue(10) }}</p>
+      </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- INSPECTION HUB — visible for inspection jobs in all modes  -->
+    <!-- ========================================================== -->
+    <div *ngIf="isInspection()" class="payload-body">
+      <h3>Inspection Hub</h3>
+
+      <ion-note color="warning" *ngIf="isPausedWorkflow" class="inspection-lock-note">
+        Job is paused. Inputs are locked until you resume from the dashboard controls.
+      </ion-note>
+
+      <section class="inspection-schedule-section">
+        <h4 class="inspection-schedule-title">Scheduling Snapshot</h4>
+        <div class="detail-grid">
+          <div class="detail-item" *ngIf="getFieldValue(44)">
+            <span class="detail-label">Expected Between</span>
+            <span class="detail-value">{{ getFieldValue(44) }}</span>
+          </div>
+          <div class="detail-item" *ngIf="getFieldValue(70)">
+            <span class="detail-label">Roof Type</span>
+            <span class="detail-value">{{ getFieldValue(70) }}</span>
+          </div>
+          <div class="detail-item" *ngIf="getFieldValue(110)">
+            <span class="detail-label">Pitch</span>
+            <span class="detail-value">{{ getFieldValue(110) }}</span>
+          </div>
+          <div class="detail-item" *ngIf="getFieldValue(46)">
+            <span class="detail-label">Height (Stories/Floors)</span>
+            <span class="detail-value">{{ getFieldValue(46) }}</span>
+          </div>
+          <div class="detail-item" *ngIf="getFieldValue(71)">
+            <span class="detail-label">Roof Maintenance</span>
+            <span class="detail-value">{{ getFieldValue(71) }}</span>
+          </div>
+          <div class="detail-item" *ngIf="getFieldValue(26)">
+            <span class="detail-label">Campaign Name</span>
+            <span class="detail-value">{{ getFieldValue(26) }}</span>
+          </div>
+        </div>
+
+        <div class="notes-block" *ngIf="getFieldValue(10)">
+          <span class="detail-label">Notes</span>
+          <p>{{ getFieldValue(10) }}</p>
+        </div>
+      </section>
+
+      <!-- ROOF SELECTOR SECTION -->
+      <section class="roof-selector-section">
+        <div class="roof-selector-header">
+          <div class="roof-selector-header-left">
+            <span class="roof-selector-title">Roof Structures</span>
+            <span class="roof-selector-count" *ngIf="roofs.length > 0">{{ roofs.length }}</span>
+          </div>
+          <button
+            type="button"
+            class="roof-refresh-btn"
+            *ngIf="!isReadOnlyMode()"
+            [disabled]="isRefreshingRoofData"
+            (click)="refreshRoofData($event)">
+            Refresh Roof Data
+          </button>
+        </div>
+
+        <div class="roof-refresh-message" *ngIf="!isReadOnlyMode() && roofDataRefreshMessage">{{ roofDataRefreshMessage }}</div>
+
+        <div *ngIf="roofsLoading" class="roof-loading">
+          <ion-spinner name="crescent" color="danger"></ion-spinner>
+          <span>Loading roofs…</span>
+        </div>
+
+        <div *ngIf="!roofsLoading && roofs.length === 0" class="roof-empty">
+          No roof structures on file.
+        </div>
+
+        <div *ngIf="!roofsLoading && roofs.length > 0" class="roof-cards-list">
+          <div
+            *ngFor="let roof of roofs"
+            class="roof-card"
+            [class.roof-card--selected]="isSelectedRoof(roof)"
+            (click)="selectRoof(roof)">
+            <div class="roof-card-main">
+              <div class="roof-card-header">
+                <div class="roof-card-name">{{ getRoofName(roof) }}</div>
+                <button
+                  *ngIf="!isHubInputLocked()"
+                  class="roof-edit-btn"
+                  type="button"
+                  (click)="openEditRoof(roof, $event)"
+                  aria-label="Edit roof">EDIT</button>
+              </div>
+              <div class="roof-card-details-grid">
+                <div class="roof-detail-cell">
+                  <span class="roof-detail-label">Pitch</span>
+                  <span class="roof-chip">{{ getRoofPitch(roof) }}</span>
+                </div>
+                <div class="roof-detail-cell">
+                  <span class="roof-detail-label">Material</span>
+                  <span class="roof-chip">{{ getRoofMaterial(roof) }}</span>
+                </div>
+                <div class="roof-detail-cell">
+                  <span class="roof-detail-label">Sq Ft</span>
+                  <span class="roof-chip">{{ getRoofSquareFootage(roof) }}</span>
+                </div>
+                <div class="roof-detail-cell">
+                  <span class="roof-detail-label">Type</span>
+                  <span class="roof-chip">{{ getRoofType(roof) }}</span>
+                </div>
+                <div class="roof-detail-cell">
+                  <span class="roof-detail-label">Brand</span>
+                  <span class="roof-chip">{{ getRoofBrand(roof) }}</span>
+                </div>
+                <div class="roof-detail-cell">
+                  <span class="roof-detail-label">Color</span>
+                  <span class="roof-chip">{{ getRoofColor(roof) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button
+          *ngIf="!isHubInputLocked()"
+          class="roof-add-btn"
+          type="button"
+          (click)="openAddRoof()">
+          <ion-icon name="add-outline"></ion-icon>
+          Add Roof Structure
+        </button>
+      </section>
+
+      <section class="inspection-form-section">
+        <h4 class="inspection-form-title">Inspection Form</h4>
+
+        <div class="inspection-choice-grid">
+          <div class="inspection-choice-card">
+            <ion-item lines="none" class="ion-no-padding">
+              <ion-label class="ion-text-wrap"><strong>Penetrations/Leaks</strong></ion-label>
+              <ion-icon
+                slot="end"
+                class="inspection-photo-icon-trigger"
+                [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+                name="camera-outline"
+                role="button"
+                tabindex="0"
+                [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+                aria-label="Add photo"
+                title="Add photo"
+                (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('penetrations', $event)"
+                (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('penetrations', $event)"
+                (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('penetrations', $event)">
+              </ion-icon>
+            </ion-item>
+            <label *ngFor="let option of penetrationsOptions" class="inspection-choice-option">
+              <input
+                type="radio"
+                name="penetrationsLeaks"
+                [value]="option"
+                [(ngModel)]="inspectionForm.penetrationsLeaks"
+                [disabled]="isHubInputLocked()" />
+              <span>{{ option }}</span>
+            </label>
+
+            <div class="inspection-photo-files-inline" *ngIf="getInspectionSectionFileNames('penetrations').length > 0">
+              <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getInspectionSectionFileNames('penetrations')">
+                {{ fileName }}
+              </div>
+            </div>
+          </div>
+
+          <div class="inspection-choice-card">
+            <ion-item lines="none" class="ion-no-padding">
+              <ion-label class="ion-text-wrap"><strong>Field Condition</strong></ion-label>
+              <ion-icon
+                slot="end"
+                class="inspection-photo-icon-trigger"
+                [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+                name="camera-outline"
+                role="button"
+                tabindex="0"
+                [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+                aria-label="Add photo"
+                title="Add photo"
+                (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('fieldCondition', $event)"
+                (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('fieldCondition', $event)"
+                (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('fieldCondition', $event)">
+              </ion-icon>
+            </ion-item>
+            <label *ngFor="let option of fieldConditionOptions" class="inspection-choice-option">
+              <input
+                type="radio"
+                name="fieldCondition"
+                [value]="option"
+                [(ngModel)]="inspectionForm.fieldCondition"
+                [disabled]="isHubInputLocked()" />
+              <span>{{ option }}</span>
+            </label>
+
+            <div class="inspection-photo-files-inline" *ngIf="getInspectionSectionFileNames('fieldCondition').length > 0">
+              <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getInspectionSectionFileNames('fieldCondition')">
+                {{ fileName }}
+              </div>
+            </div>
+          </div>
+
+          <div class="inspection-choice-card">
+            <ion-item lines="none" class="ion-no-padding">
+              <ion-label class="ion-text-wrap"><strong>Ridge Condition</strong></ion-label>
+              <ion-icon
+                slot="end"
+                class="inspection-photo-icon-trigger"
+                [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+                name="camera-outline"
+                role="button"
+                tabindex="0"
+                [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+                aria-label="Add photo"
+                title="Add photo"
+                (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('ridgeCondition', $event)"
+                (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('ridgeCondition', $event)"
+                (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('ridgeCondition', $event)">
+              </ion-icon>
+            </ion-item>
+            <label *ngFor="let option of ridgeConditionOptions" class="inspection-choice-option">
+              <input
+                type="radio"
+                name="ridgeCondition"
+                [value]="option"
+                [(ngModel)]="inspectionForm.ridgeCondition"
+                [disabled]="isHubInputLocked()" />
+              <span>{{ option }}</span>
+            </label>
+
+            <div class="inspection-photo-files-inline" *ngIf="getInspectionSectionFileNames('ridgeCondition').length > 0">
+              <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getInspectionSectionFileNames('ridgeCondition')">
+                {{ fileName }}
+              </div>
+            </div>
+          </div>
+
+          <div class="inspection-choice-card">
+            <ion-item lines="none" class="ion-no-padding">
+              <ion-label class="ion-text-wrap"><strong>Flashings Needing Service</strong></ion-label>
+              <ion-icon
+                slot="end"
+                class="inspection-photo-icon-trigger"
+                [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+                name="camera-outline"
+                role="button"
+                tabindex="0"
+                [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+                aria-label="Add photo"
+                title="Add photo"
+                (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('flashing', $event)"
+                (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('flashing', $event)"
+                (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('flashing', $event)">
+              </ion-icon>
+            </ion-item>
+            <label *ngFor="let option of flashingsOptions" class="inspection-choice-option">
+              <input
+                type="radio"
+                name="flashingsNeedingService"
+                [value]="option"
+                [(ngModel)]="inspectionForm.flashingsNeedingService"
+                [disabled]="isHubInputLocked()" />
+              <span>{{ option }}</span>
+            </label>
+
+            <div class="inspection-photo-files-inline" *ngIf="getInspectionSectionFileNames('flashing').length > 0">
+              <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getInspectionSectionFileNames('flashing')">
+                {{ fileName }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="inspection-qty-wrap">
+          <div class="inspection-qty-row">
+            <label class="inspection-flag">
+              <input
+                type="checkbox"
+                [(ngModel)]="inspectionForm.bootsNeeded"
+                (ngModelChange)="onBootsNeededChange($event)"
+                [disabled]="isHubInputLocked()" />
+              <span>Boots Needed</span>
+            </label>
+            <ion-icon
+              [hidden]="!inspectionForm.bootsNeeded"
+              class="inspection-photo-icon-trigger inspection-photo-icon-trigger--inline"
+              [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+              name="camera-outline"
+              role="button"
+              tabindex="0"
+              [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+              aria-label="Add boot photo"
+              title="Add boot photo"
+              (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('boot', $event)"
+              (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('boot', $event)"
+              (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('boot', $event)">
+            </ion-icon>
+
+            <label class="inspection-qty-item" [hidden]="!inspectionForm.bootsNeeded">
+              <span>1.5&quot; Boot Qty</span>
+              <input type="number" min="0" placeholder="Enter qty" [(ngModel)]="inspectionForm.bootQty15" (ngModelChange)="onQuantityFieldChanged('bootQty15', $event)" [disabled]="isHubInputLocked()" />
+            </label>
+
+            <label class="inspection-qty-item" [hidden]="!inspectionForm.bootsNeeded">
+              <span>2&quot; Boot Qty</span>
+              <input type="number" min="0" placeholder="Enter qty" [(ngModel)]="inspectionForm.bootQty2" (ngModelChange)="onQuantityFieldChanged('bootQty2', $event)" [disabled]="isHubInputLocked()" />
+            </label>
+
+            <label class="inspection-qty-item" [hidden]="!inspectionForm.bootsNeeded">
+              <span>3&quot; Boot Qty</span>
+              <input type="number" min="0" placeholder="Enter qty" [(ngModel)]="inspectionForm.bootQty3" (ngModelChange)="onQuantityFieldChanged('bootQty3', $event)" [disabled]="isHubInputLocked()" />
+            </label>
+          </div>
+
+          <div class="inspection-qty-row">
+            <label class="inspection-flag">
+              <input
+                type="checkbox"
+                [(ngModel)]="inspectionForm.ventsNeeded"
+                (ngModelChange)="onVentsNeededChange($event)"
+                [disabled]="isHubInputLocked()" />
+              <span>Vents Needed</span>
+            </label>
+            <ion-icon
+              [hidden]="!inspectionForm.ventsNeeded"
+              class="inspection-photo-icon-trigger inspection-photo-icon-trigger--inline"
+              [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+              name="camera-outline"
+              role="button"
+              tabindex="0"
+              [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+              aria-label="Add vent photo"
+              title="Add vent photo"
+              (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('vents', $event)"
+              (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('vents', $event)"
+              (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('vents', $event)">
+            </ion-icon>
+
+            <label class="inspection-qty-item" [hidden]="!inspectionForm.ventsNeeded">
+              <span>AF50 Vent Qty</span>
+              <input type="number" min="0" placeholder="Enter qty" [(ngModel)]="inspectionForm.af50VentQty" (ngModelChange)="onQuantityFieldChanged('af50VentQty', $event)" [disabled]="isHubInputLocked()" />
+            </label>
+
+            <label class="inspection-qty-item" [hidden]="!inspectionForm.ventsNeeded">
+              <span>BF4&quot; Vent Qty</span>
+              <input type="number" min="0" placeholder="Enter qty" [(ngModel)]="inspectionForm.bf4VentQty" (ngModelChange)="onQuantityFieldChanged('bf4VentQty', $event)" [disabled]="isHubInputLocked()" />
+            </label>
+
+            <label class="inspection-qty-item" [hidden]="!inspectionForm.ventsNeeded">
+              <span>BF6&quot; Vent Qty</span>
+              <input type="number" min="0" placeholder="Enter qty" [(ngModel)]="inspectionForm.bf6VentQty" (ngModelChange)="onQuantityFieldChanged('bf6VentQty', $event)" [disabled]="isHubInputLocked()" />
+            </label>
+          </div>
+
+          <div class="inspection-photo-files-inline" *ngIf="getBootVentPhotoFileNames().length > 0">
+            <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getBootVentPhotoFileNames()">
+              {{ fileName }}
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <section class="ground-inspection-section">
+        <ion-item lines="none" class="ion-no-padding">
+          <ion-label class="ion-text-wrap"><strong>Ground Inspection</strong></ion-label>
+          <ion-icon
+            slot="end"
+            class="inspection-photo-icon-trigger"
+            [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+            name="camera-outline"
+            role="button"
+            tabindex="0"
+            [attr.aria-disabled]="isHubInputLocked() || isCapturingPhoto"
+            aria-label="Add ground photo"
+            title="Add ground photo"
+            (click)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('ground', $event)"
+            (keydown.enter)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('ground', $event)"
+            (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('ground', $event)">
+          </ion-icon>
+        </ion-item>
+        <div class="ground-inspection-grid">
+          <button
+            type="button"
+            *ngFor="let item of groundInspectionItems"
+            [ngClass]="getGroundInspectionTileClass(item)"
+            [disabled]="isHubInputLocked()"
+            (click)="cycleGroundInspectionItemState(item)">
+            <div class="ground-inspection-tile-top">
+              <span class="ground-inspection-name">{{ item.name }}</span>
+              <ion-icon *ngIf="item.state === 1" name="checkmark-circle"></ion-icon>
+              <ion-icon *ngIf="item.state === 2" name="alert-circle"></ion-icon>
+            </div>
+
+            <span class="ground-inspection-helper" *ngIf="item.state === 0">Tap to mark</span>
+            <span class="ground-inspection-helper" *ngIf="item.state === 1">Pass</span>
+            <span class="ground-inspection-helper" *ngIf="item.state === 2">Fail</span>
+          </button>
+        </div>
+        <div class="inspection-photo-files-inline" *ngIf="getInspectionSectionFileNames('ground').length > 0">
+          <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getInspectionSectionFileNames('ground')">
+            {{ fileName }}
+          </div>
+        </div>
+      </section>
+
+      <div class="inspection-notes-card">
+        <label>Inspection Notes / Comments</label>
+        <textarea
+          rows="4"
+          [(ngModel)]="inspectionForm.inspectionNotes"
+          [disabled]="isHubInputLocked()"
+          placeholder="Add inspection notes and comments"></textarea>
+      </div>
+    </div>
+
+    <!-- Non-inspection work-mode hubs -->
+    <ng-container *ngIf="!isReadOnlyMode() && !isInspection()">
+      <div *ngIf="isWorkOrder()" class="payload-body">
+        <h3>Work Order Hub</h3>
+        <p>Work order payload component will render here.</p>
+      </div>
+
+      <div *ngIf="!isWorkOrder()" class="payload-body">
+        <h3>Unsupported Stage</h3>
+        <p>This job stage does not have a payload view yet.</p>
+      </div>
+    </ng-container>
+  </section>
+
+  <!-- ========================= -->
+  <!-- EDIT ROOF MODAL OVERLAY   -->
+  <!-- ========================= -->
+  <div
+    class="roof-modal-overlay"
+    *ngIf="editingRoof && !isHubInputLocked()"
+    (click)="closeEditModal()">
+    <div class="roof-modal-panel" (click)="$event.stopPropagation()">
+      <div class="roof-modal-header">
+        <div class="roof-modal-title-wrap">
+          <span>Edit Roof</span>
+          <span class="roof-modal-subtitle">Area: {{ getRoofName(editingRoof) }} | Status: {{ getRoofStatus(editingRoof) }}</span>
+        </div>
+        <button type="button" class="roof-modal-close" aria-label="Close" (click)="closeEditModal()">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+      <div class="roof-modal-body">
+        <ion-item>
+          <ion-label position="stacked">Material</ion-label>
+          <ion-select [(ngModel)]="editForm.material" placeholder="Select material">
+            <ion-select-option *ngFor="let opt of materialOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Pitch</ion-label>
+          <ion-select [(ngModel)]="editForm.pitch" placeholder="Select pitch">
+            <ion-select-option *ngFor="let opt of pitchOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Roof Type</ion-label>
+          <ion-select [(ngModel)]="editForm.roofType" placeholder="Select roof type">
+            <ion-select-option *ngFor="let opt of roofTypeOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Brand</ion-label>
+          <ion-select [(ngModel)]="editForm.brand" placeholder="Select brand">
+            <ion-select-option *ngFor="let opt of roofBrandOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Color</ion-label>
+          <ion-select [(ngModel)]="editForm.color" placeholder="Select color">
+            <ion-select-option *ngFor="let opt of roofColorOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Square Footage</ion-label>
+          <ion-input type="number" [(ngModel)]="editForm.sqft" placeholder="e.g. 1800"></ion-input>
+        </ion-item>
+      </div>
+      <div class="roof-modal-footer">
+        <ion-button fill="outline" color="medium" (click)="closeEditModal()">Cancel</ion-button>
+        <ion-button color="danger" (click)="saveEditRoof()">Save Changes</ion-button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================= -->
+  <!-- ADD ROOF MODAL OVERLAY    -->
+  <!-- ========================= -->
+  <div
+    class="roof-modal-overlay"
+    *ngIf="showAddModal && !isHubInputLocked()"
+    (click)="closeAddModal()">
+    <div class="roof-modal-panel" (click)="$event.stopPropagation()">
+      <div class="roof-modal-header">
+        <span>Add Roof Structure</span>
+        <button type="button" class="roof-modal-close" aria-label="Close" (click)="closeAddModal()">
+          <ion-icon name="close-outline"></ion-icon>
+        </button>
+      </div>
+      <div class="roof-modal-body">
+        <ion-item>
+          <ion-label position="stacked">Roof Areas</ion-label>
+          <ion-select [(ngModel)]="addForm.label" placeholder="Select roof area">
+            <ion-select-option *ngFor="let opt of roofAreaOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Material</ion-label>
+          <ion-select [(ngModel)]="addForm.material" placeholder="Select material">
+            <ion-select-option *ngFor="let opt of materialOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Pitch</ion-label>
+          <ion-select [(ngModel)]="addForm.pitch" placeholder="Select pitch">
+            <ion-select-option *ngFor="let opt of pitchOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Roof Type</ion-label>
+          <ion-select [(ngModel)]="addForm.roofType" placeholder="Select roof type">
+            <ion-select-option *ngFor="let opt of roofTypeOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Brand</ion-label>
+          <ion-select [(ngModel)]="addForm.brand" placeholder="Select brand">
+            <ion-select-option *ngFor="let opt of roofBrandOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Color</ion-label>
+          <ion-select [(ngModel)]="addForm.color" placeholder="Select color">
+            <ion-select-option *ngFor="let opt of roofColorOptions" [value]="opt">{{ opt }}</ion-select-option>
+          </ion-select>
+        </ion-item>
+        <ion-item>
+          <ion-label position="stacked">Square Footage</ion-label>
+          <ion-input type="number" [(ngModel)]="addForm.sqft" placeholder="e.g. 1800"></ion-input>
+        </ion-item>
+      </div>
+      <div class="roof-modal-footer">
+        <ion-button fill="outline" color="medium" (click)="closeAddModal()">Cancel</ion-button>
+        <ion-button color="danger" (click)="saveAddRoof()">Add Roof</ion-button>
+      </div>
+    </div>
+  </div>
+
+  <ion-modal
+    [isOpen]="isPhotoPreviewOpen && !!pendingPhotoPreview"
+    [keepContentsMounted]="true"
+    [backdropDismiss]="true"
+    (didDismiss)="closePhotoPreview()">
+    <ng-template>
+      <ion-content>
+        <div class="photo-preview-shell">
+          <div class="photo-preview-stage">
+            <img
+              *ngIf="pendingPhotoPreview"
+              class="photo-preview-image"
+              [src]="pendingPhotoPreview.dataUrl"
+              alt="Captured inspection preview" />
+          </div>
+
+          <div class="photo-preview-panel-bottom">
+            <ion-item lines="none">
+              <ion-label position="stacked">Photo Notes / Description</ion-label>
+              <ion-textarea
+                *ngIf="pendingPhotoPreview"
+                [(ngModel)]="pendingPhotoPreview.notes"
+                autoGrow="true"
+                rows="3"
+                placeholder="Optional note for this photo"></ion-textarea>
+            </ion-item>
+
+            <div class="photo-preview-actions">
+              <ion-button type="button" expand="block" color="dark" (click)="retakePendingPhoto()">RETAKE PHOTO</ion-button>
+              <ion-button type="button" expand="block" color="success" (click)="acceptPendingPhoto()">ACCEPT PHOTO</ion-button>
+            </div>
+          </div>
+        </div>
+      </ion-content>
+    </ng-template>
+  </ion-modal>
+
+  <div class="bottom-action-wrap">
+    <ion-button expand="block" color="medium" class="bottom-back-btn" (click)="goBack()">
+      Back to Dashboard
+    </ion-button>
+  </div>
+</ion-content>
