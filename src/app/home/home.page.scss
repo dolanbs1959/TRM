@@ -392,6 +392,19 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  .job-card {
+    background: #1e1e1e;
+
+    &.job-selected {
+      background: #4a4a00;
+      outline: 2px solid #f2b705;
+    }
+
+    &.job-complete {
+      background: #2a2a2a;
+    }
+  }
+
   .dashboard-container {
     background: #1e1e1e;
     border-bottom: 2px solid #444;
@@ -448,26 +461,16 @@
     color: #e0e0e0;
   }
 
-  .job-card {
-    background: var(--ion-color-step-100, #1e1e1e) !important;
-    border: 1px solid var(--ion-color-step-200, #333) !important;
-
-    &.job-selected {
-      background: #3a3212 !important;
-      outline: 2px solid #f2b705;
-    }
-
-    &.job-complete {
-      background: #2a2a2a !important;
-    }
-  }
-
   .customer-name {
     color: #ffffff !important;
   }
 
   .job-location {
-    color: #f5f5f5 !important;
+    color: #ffffff !important;
+  }
+
+  .job-contact-link {
+    color: #00e5ff !important;
   }
 
   .inspection-field {
