@@ -374,3 +374,82 @@
 
   .btn-grid ion-button { height: 38px; }
 }
+
+@media (prefers-color-scheme: dark) {
+  .dashboard-container {
+    background: #1e1e1e;
+    border-bottom: 2px solid #444;
+  }
+
+  .city-search-row .city-search-wrap .city-input {
+    --background: #2a2a2a;
+    border: 1px solid #444;
+    color: #fff;
+  }
+
+  .city-search-row .city-search-wrap .city-suggestions {
+    background: #2a2a2a;
+    border: 1px solid #444;
+
+    .city-suggestion-item {
+      color: #fff;
+      border-bottom: 1px solid #444;
+
+      &:hover {
+        background: #3a3a3a;
+      }
+    }
+  }
+
+  .weather-widget {
+    .weather-main .weather-temps {
+      .temp {
+        color: #fff;
+      }
+      .weather-desc {
+        color: #b3b3b3;
+      }
+    }
+
+    .weather-city {
+      color: #e0e0e0;
+    }
+
+    .weather-details .detail-item {
+      color: #b3b3b3;
+    }
+  }
+
+  .dashboard-divider {
+    border-top: 1px solid #444;
+  }
+
+  .stat-label {
+    color: #e0e0e0;
+  }
+
+  .clock-dashboard {
+    color: #e0e0e0;
+  }
+
+  .customer-name {
+    color: #fff;
+  }
+
+  .job-location {
+    color: #b3b3b3;
+  }
+
+  .inspection-field {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .inspection-label {
+    color: #b3b3b3;
+  }
+
+  .inspection-value {
+    color: #fff;
+  }
+}

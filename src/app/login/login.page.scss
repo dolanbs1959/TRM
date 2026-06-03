@@ -155,3 +155,33 @@ ion-button {
   50% { opacity: 0.5; }
   100% { opacity: 1; }
 }
+
+@media (prefers-color-scheme: dark) {
+  .login-header {
+    h1 {
+      color: #fff;
+    }
+    p {
+      color: #b3b3b3;
+    }
+  }
+
+  .session-warning-banner {
+    background: #3b1a1a;
+    border: 1px solid #5c2b2b;
+    color: #ffb3b3;
+  }
+
+  .login-feedback {
+    .success-text {
+      color: #fff;
+      small {
+        color: #b3b3b3;
+      }
+    }
+  }
+
+  .truck-path {
+    border-bottom: 2px solid #444;
+  }
+}

@@ -80,3 +80,15 @@ ion-content {
     grid-template-columns: 1fr;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  ion-content {
+    background:
+      linear-gradient(rgba(18, 18, 18, 0.92), rgba(18, 18, 18, 0.75)),
+      url('/assets/shingle-pattern.png') no-repeat center center / cover !important;
+  }
+
+  .photo-preview-panel-bottom {
+    background: #1e1e1e;
+  }
+}
