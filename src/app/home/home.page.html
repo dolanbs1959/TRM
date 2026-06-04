@@ -147,7 +147,7 @@
       <p>Loading schedule...</p>
     </div>
 
-    <ion-card class="job-card" *ngFor="let job of (serviceOrders || [])" [style.cursor]="isClockedIn && !isJobComplete(job) ? 'pointer' : 'default'" [style.background]="isSelectedJob(job) ? '#fff4c2' : (isJobComplete(job) ? '#f0f0f0' : '#ffffff')" [style.outline]="isSelectedJob(job) ? '2px solid #f2b705' : 'none'" [style.opacity]="!isClockedIn || isJobComplete(job) || (workflowLockedJobRecordId && !isSelectedJob(job)) ? '0.65' : '1'" (click)="selectJob(job)">
+    <ion-card class="job-card" *ngFor="let job of (serviceOrders || [])" [class.job-selected]="isSelectedJob(job)" [class.job-complete]="isJobComplete(job)" [style.cursor]="isClockedIn && !isJobComplete(job) ? 'pointer' : 'default'" [style.opacity]="!isClockedIn || isJobComplete(job) || (workflowLockedJobRecordId && !isSelectedJob(job)) ? '0.65' : '1'" (click)="selectJob(job)">
       <ion-card-content>
         <div class="job-header">
           <ion-badge [color]="getJobStatusColor(job)">{{ getJobStatusLabel(job) }}</ion-badge>

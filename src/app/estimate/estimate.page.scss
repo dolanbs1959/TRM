@@ -718,3 +718,213 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  .estimate-page {
+    --background: linear-gradient(180deg, #2a2a2a 0%, #1e1e1e 100%);
+  }
+
+  .payload-header {
+    color: #e0e0e0;
+  }
+
+  .detail-item {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .detail-label {
+    color: #b3b3b3;
+  }
+
+  .detail-value {
+    color: #fff;
+  }
+
+  .notes-block {
+    background: #2a2a2a;
+    border: 1px solid #444;
+
+    p {
+      color: #e0e0e0;
+    }
+  }
+
+  .ground-inspection-title,
+  .estimate-items-title {
+    color: #e0e0e0;
+  }
+
+  .ground-inspection-item {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .estimate-empty-state {
+    background: #1e1e1e;
+    border: 1px dashed #444;
+    color: #b3b3b3;
+  }
+
+  .roof-tiles-card {
+    border: 1px solid #444;
+
+    ion-card-header {
+      background: linear-gradient(180deg, #2a2a2a 0%, #1e1e1e 100%);
+    }
+  }
+
+  .roof-tile {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .roof-tile-added {
+    border-color: #555;
+    background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
+  }
+
+  .roof-tile-copy {
+    h4 {
+      color: #fff;
+    }
+
+    p {
+      color: #b3b3b3;
+    }
+  }
+
+  .packages-section {
+    background: linear-gradient(180deg, #3d2b1f 0%, #2a1e15 100%);
+    border: 1px solid #5c402e;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .tiptop-section {
+    background: linear-gradient(180deg, #1e3b2b 0%, #152a1e 100%);
+    border: 1px solid #2c5c40;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .repairs-section {
+    background: linear-gradient(180deg, #1e2a3b 0%, #151e2a 100%);
+    border: 1px solid #2c405c;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .search-section {
+    background: linear-gradient(180deg, #3b1e25 0%, #2a151a 100%);
+    border: 1px solid #5c2c38;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .notes-card ion-card-header {
+    background: linear-gradient(180deg, #3b351e 0%, #2a2515 100%);
+  }
+
+  .dates-card ion-card-header {
+    background: linear-gradient(180deg, #1e2c3b 0%, #151f2a 100%);
+  }
+
+  .signature-card ion-card-header {
+    background: linear-gradient(180deg, #2c1e3b 0%, #1f152a 100%);
+  }
+
+  .secondary-discount-card,
+  .submit-card {
+    background: linear-gradient(180deg, #1a2233 0%, #121824 100%);
+    border: 1px solid #2c3e5e;
+  }
+
+  .catalog-item {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .catalog-copy {
+    h4 {
+      color: #fff;
+    }
+
+    p {
+      color: #b3b3b3;
+    }
+  }
+
+  .catalog-price {
+    color: #ff6b6b;
+  }
+
+  .repair-group-content {
+    background: #1e1e1e;
+  }
+
+  .active-item {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .active-item-subtotal {
+    background: #1e1e1e;
+    border: 1px solid #444;
+  }
+
+  .summary-row {
+    background: #1e1e1e;
+    border: 1px solid #444;
+  }
+
+  .summary-toggle-row {
+    background: #1e1e1e;
+    border: 1px solid #444;
+  }
+
+  .active-item-value {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    color: #fff;
+  }
+
+  .supporting-copy {
+    color: #b3b3b3;
+  }
+
+  .pricing-summary-card {
+    background: linear-gradient(180deg, #2a2a2a 0%, #1e1e1e 100%);
+    border: 1px solid #444;
+  }
+
+  .supporting-inline {
+    color: #b3b3b3;
+  }
+
+  .pricing-value {
+    color: #fff;
+  }
+
+  .total-row {
+    background: linear-gradient(180deg, #3b2e1e 0%, #2a2015 100%);
+    border-color: #5c452e;
+  }
+
+  .total-price {
+    color: #ffb366;
+  }
+
+  .estimate-page ion-input,
+  .estimate-page ion-textarea {
+    --background: #1e1e1e;
+    --color: #fff;
+    border: 1px solid #444;
+    box-shadow: none;
+  }
+
+  .estimate-photo-item {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .estimate-photo-meta p {
+    color: #e0e0e0;
+  }
+}
