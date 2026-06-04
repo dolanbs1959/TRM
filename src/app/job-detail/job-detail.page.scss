@@ -576,6 +576,175 @@
   }
 }
 
+@media (prefers-color-scheme: dark) {
+  .payload-header {
+    color: #e0e0e0;
+  }
+
+  .payload-body {
+    background: #1e1e1e;
+    border: 1px solid #444;
+
+    h3 {
+      color: #fff;
+    }
+
+    p {
+      color: #b3b3b3;
+    }
+  }
+
+  .detail-item {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .detail-label {
+    color: #b3b3b3;
+  }
+
+  .detail-value {
+    color: #fff;
+  }
+
+  .notes-block {
+    background: #2a2a2a;
+    border: 1px solid #444;
+
+    p {
+      color: #e0e0e0;
+    }
+  }
+
+  .inspection-schedule-title,
+  .inspection-form-title {
+    color: #e0e0e0;
+  }
+
+  .inspection-choice-card {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .inspection-choice-option {
+    color: #fff;
+  }
+
+  .inspection-qty-row {
+    background: #2a2a2a;
+    border: 1px solid #444;
+  }
+
+  .inspection-flag {
+    color: #fff;
+  }
+
+  .inspection-qty-item {
+    color: #e0e0e0;
+  }
+
+  .inspection-notes-card {
+    background: #2a2a2a;
+    border: 1px solid #444;
+
+    label {
+      color: #fff;
+    }
+
+    textarea {
+      background: #1e1e1e;
+      color: #fff;
+      border: 1px solid #444;
+    }
+  }
+
+  .ground-inspection-title {
+    color: #e0e0e0;
+  }
+
+  .ground-inspection-tile--idle {
+    background: #2a2a2a;
+    border-color: #444;
+    color: #fff;
+
+    .ground-inspection-helper {
+      color: #b3b3b3;
+    }
+  }
+
+  .roof-selector-title {
+    color: #e0e0e0;
+  }
+
+  .roof-loading {
+    color: #b3b3b3;
+  }
+
+  .roof-refresh-btn {
+    background: #1e1e1e;
+  }
+
+  .roof-refresh-message {
+    color: #b3b3b3;
+  }
+
+  .roof-empty {
+    color: #b3b3b3;
+  }
+
+  .roof-card {
+    background: #2a2a2a;
+    border: 2px solid #444;
+
+    &.roof-card--selected {
+      background: #3a2a2a;
+      border-color: #c0392b;
+    }
+  }
+
+  .roof-card-name {
+    color: #fff;
+  }
+
+  .roof-detail-label {
+    color: #b3b3b3;
+  }
+
+  .roof-chip {
+    background: #3a3a3a;
+    border: 1px solid #555;
+    color: #fff;
+
+    .roof-card--selected & {
+      background: #4a2a2a;
+      border-color: #c0392b;
+      color: #ffcccc;
+    }
+  }
+
+  .roof-modal-panel {
+    background: #1e1e1e;
+  }
+
+  .roof-modal-header {
+    border-bottom: 1px solid #444;
+    color: #fff;
+  }
+
+  .roof-modal-subtitle {
+    color: #b3b3b3;
+  }
+
+  .roof-modal-close {
+    background: #2a2a2a;
+    color: #e0e0e0;
+  }
+
+  .roof-modal-footer {
+    border-top: 1px solid #444;
+  }
+}
+
 .roof-edit-btn {
   flex-shrink: 0;
   padding: 4px 10px;
