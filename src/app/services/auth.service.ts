@@ -560,5 +560,28 @@ async getJobDetail(recordId: string) {
 
   getUser() {
     return this.loggedInUser;
+  } 
+// ... your existing login() or getUser() methods are up here ...
+
+  // DROP IT RIGHT HERE:
+async checkActiveTimecardSession(employeeId: any, dateStr: string) {
+    try {
+      // Force it to use the exact backend function URL structure that processed your working logs
+      const response = await fetch('http://localhost:5001/trm-mobile-7aa17/us-central1/api/timecard/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId, date: dateStr })
+      });
+      
+      if (!response.ok) {
+        console.error('> [Service Network Error] Status code returned:', response.status);
+        return { shiftContext: { isClockedIn: false } };
+      }
+      
+      return await response.json();
+    } catch (err) {
+      console.error('Failed to communicate with timecard active proxy endpoint:', err);
+      return { shiftContext: { isClockedIn: false } };
+    }
   }
 }

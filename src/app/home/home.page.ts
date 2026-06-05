@@ -1507,15 +1507,15 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
     });
   }
 
-  async ngOnInit() {
-    console.log('Home Page Initializing...'); // Add this
+async ngOnInit() {
+    console.log('Home Page Initializing...'); 
     const userData = this.authService.getUser();
     if (!userData) {
       this.router.navigate(['/login'], { replaceUrl: true });
       return;
     }
 
-        console.log('Verified Employee ID (FID 3):', userData[3]?.value);
+    console.log('Verified Employee ID (FID 3):', userData[3]?.value);
     this.getLocalWeather(); // Fetch weather on page load
 
     if (userData) {
@@ -1526,17 +1526,55 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
         phone: userData[9]?.value,
         role: (userData?.role || userData?.['role']?.value || '').toString().trim()
       };
-      // Employee table fields
-      // Format hoursWorked as a number with 2 decimals if possible
+
+// --- Live Backend Timecard Restoration Guard ---
+      try {
+        console.log('> [Timecard Check] Querying backend proxy for active session...');
+        const activeShiftCheck: any = await this.authService.checkActiveTimecardSession(this.tech.id, this.today.toISOString().split('T')[0]);
+
+        // --- LITERAL PAYLOAD DIAGNOSTIC LOGS ---
+        console.log('> [Timecard Check] RAW RESPONSE OBJECT RECEIVED:', activeShiftCheck);
+        console.log('> [Timecard Check] shiftContext nested check:', activeShiftCheck?.shiftContext);
+        console.log('> [Timecard Check] isClockedIn value:', activeShiftCheck?.shiftContext?.isClockedIn);
+        // ----------------------------------------
+        
+        // FIX: Drill directly into the backend's shiftContext payload wrapper!
+        if (activeShiftCheck && activeShiftCheck.shiftContext && activeShiftCheck.shiftContext.isClockedIn) {
+          const shift = activeShiftCheck.shiftContext;
+          console.log('> [Timecard Check] Open row found in Quickbase! Restoring Clock-Out view. RecID:', shift.recordId);
+          
+          this.isClockedIn = true;
+          this.activeTimecardRecordId = shift.recordId;
+          
+          if (shift.clockInTime) {
+            const dateStr = this.today.toISOString().split('T')[0];
+            this.clockInStartedAtMs = new Date(`${dateStr}T${shift.clockInTime}`).getTime();
+          }
+
+          // Force the visual display templates to rebuild right now
+          this.updateClockDashboardDisplay();
+          this.startClockTimer();
+          
+        } else {
+          console.log('> [Timecard Check] No active row found in database for today.');
+          this.isClockedIn = false;
+          this.activeTimecardRecordId = null;
+          this.clockInStartedAtMs = null;
+          this.updateClockDashboardDisplay();
+        }
+      } catch (err) {
+        console.error('> [Timecard Check] Active query failed to resolve:', err);
+        this.updateClockDashboardDisplay();
+      }
+
       const rawHours = userData[42]?.value;
       if (rawHours && !isNaN(Number(rawHours))) {
-        this.hoursWorked = (Number(rawHours) / (rawHours > 10000 ? 3600000 : 1)).toFixed(2); // If value is huge, assume ms and convert to hours
+        this.hoursWorked = (Number(rawHours) / (rawHours > 10000 ? 3600000 : 1)).toFixed(2); 
       } else {
         this.hoursWorked = '0.00';
       }
-      this.ptoAvailable = userData[39]?.value || '0'; // Available PTO
+      this.ptoAvailable = userData[39]?.value || '0'; 
       
-      // Fetch real SO data using Employee ID (FID 3) as the filter for FID 12
       console.log('Fetching schedule for Tech ID:', this.tech.id);
       await this.fetchScheduleForDate(this.today);
 
@@ -1545,7 +1583,7 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
       } else {
         this.updateClockDashboardDisplay();
       }
-      }
+    }
   }
 
   async ionViewWillEnter() {

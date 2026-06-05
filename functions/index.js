@@ -966,8 +966,46 @@ app.post('/login', async (req, res) => {
             }
         });
 
-        if (response.data.data.length > 0) {
-            res.json({ success: true, user: response.data.data[0] });
+if (response.data.data.length > 0) {
+            const userData = response.data.data[0];
+            const employeeRecordId = userData['3'].value; 
+            const todayStr = new Date().toISOString().split('T')[0];
+            
+            console.log(`> [Timecard][Login] Checking active status for Employee RecID: ${employeeRecordId} on Date: ${todayStr}`);
+            let activeShift = null;
+
+            try {
+                const timecardCheck = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                    from: TABLES.EMPLOYEE_TIMECARDS,
+                    select: [3, TIMECARD_FIELDS.CLOCK_IN_TIME],
+                    where: `{'${TIMECARD_FIELDS.RELATED_EMPLOYEE_NUMERIC}'.EX.${employeeRecordId}}AND{'${TIMECARD_FIELDS.DATE}'.EX.'${todayStr}'}AND{'${TIMECARD_FIELDS.CLOCK_OUT_TIME}'.EX.''}`
+                }, {
+                    headers: { 
+                        'QB-Realm-Hostname': QB_REALM_HOST, 
+                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` 
+                    }
+                });
+
+                console.log(`> [Timecard][Query] Quickbase rows found: ${timecardCheck.data.data.length}`);
+
+                if (timecardCheck.data.data.length > 0) {
+                    activeShift = {
+                        recordId: String(timecardCheck.data.data[0]['3'].value),
+                        isClockedIn: true
+                    };
+                    console.log(`> [Timecard][Status] Tech is currently clocked in! Shift RecID: ${activeShift.recordId}`);
+                } else {
+                    console.log(`> [Timecard][Status] No open timecard record found for today.`);
+                }
+            } catch (tcErr) {
+                console.error("> [Timecard][Error] Failed checking active shift context row:", tcErr.message);
+            }
+
+            res.json({ 
+                success: true, 
+                user: userData,
+                shiftContext: activeShift 
+            });
         } else {
             res.status(401).json({ success: false, message: "Invalid Phone or PIN" });
         }
@@ -1412,6 +1450,56 @@ app.post('/timecard/job-event', async (req, res) => {
     } catch (error) {
         console.error('Timecard Job Event Update Error:', error.response ? error.response.data : error.message);
         return res.status(500).json({ success: false, message: 'Error updating timecard job event' });
+    }
+});
+
+// --- FETCH ACTIVE TIMECARD CHECK ---
+app.post('/timecard/active', async (req, res) => {
+    const { employeeId, date } = req.body;
+
+    if (!employeeId || !date) {
+        return res.status(400).json({ success: false, message: 'employeeId and date are required' });
+    }
+
+    const normalizedEmployeeId = Number.parseInt(employeeId, 10);
+
+    try {
+        console.log(`> [Timecard Proxy Route] Querying active shift for Tech ID: ${normalizedEmployeeId} on Date: ${date}`);
+        
+        // Query Quickbase Timecards table for an open record
+        const queryPayload = {
+            from: TABLES.EMPLOYEE_TIMECARDS,
+            select: [3, TIMECARD_FIELDS.CLOCK_IN_TIME],
+            where: `{'${TIMECARD_FIELDS.RELATED_EMPLOYEE_NUMERIC}'.EX.${normalizedEmployeeId}}AND{'${TIMECARD_FIELDS.DATE}'.EX.'${date}'}AND{'${TIMECARD_FIELDS.CLOCK_OUT_TIME}'.EX.''}`
+        };
+
+        const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, queryPayload, {
+            headers: {
+                'QB-Realm-Hostname': QB_REALM_HOST,
+                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+            }
+        });
+
+        if (response?.data?.data?.length > 0) {
+            const row = response.data.data[0];
+            console.log(`> [Timecard Proxy Route] Found open record row ID: ${row['3'].value}`);
+            
+            // Build the nested shiftContext layout object the front-end page is looking for!
+            return res.json({
+                success: true,
+                shiftContext: {
+                    isClockedIn: true,
+                    recordId: String(row['3'].value),
+                    clockInTime: row[TIMECARD_FIELDS.CLOCK_IN_TIME]?.value || ''
+                }
+            });
+        }
+
+        console.log(`> [Timecard Proxy Route] No open timecard records exist for today.`);
+        return res.json({ success: true, shiftContext: { isClockedIn: false, recordId: null } });
+    } catch (error) {
+        console.error('Active Timecard Route Error:', error.response ? error.response.data : error.message);
+        return res.status(500).json({ success: false, message: 'Error checking active timecard status' });
     }
 });
 
