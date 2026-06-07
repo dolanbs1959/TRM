@@ -197,7 +197,7 @@ export class EstimatePage implements OnInit {
   ];
 
   readonly inspectionFieldDefs: EstimateFieldDefinition[] = [
-    { label: 'Flashings Needing Service', fid: 47 },
+    { label: 'Flashings Needing Service', fid: 153 },
     { label: 'Penetrations / Leaks', fid: 48 },
     { label: 'Field Condition', fid: 49 },
     { label: 'Ridge Condition', fid: 50 },

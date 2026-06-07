@@ -119,7 +119,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   private lastPhotoDraftSnapshot = '';
 
   inspectionForm = {
-    flashingsNeedingService: '',
+    flashingsNeedingService: [] as string[],
     penetrationsLeaks: '',
     fieldCondition: '',
     ridgeCondition: '',
@@ -226,9 +226,19 @@ export class JobDetailPage implements OnInit, DoCheck {
     }
   }
 
+  private migrateFlashingData(data: string | string[]): string[] {
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (typeof data === 'string' && data.trim() !== '') {
+      return data.split(';').map(item => item.trim()).filter(item => item !== '');
+    }
+    return [];
+  }
+
   private initializeInspectionForm() {
     this.inspectionForm = {
-      flashingsNeedingService: this.getFieldValue(47),
+      flashingsNeedingService: this.migrateFlashingData(this.getFieldValue(153) || this.getFieldValue(47)),
       penetrationsLeaks: this.getFieldValue(48),
       fieldCondition: this.getFieldValue(49),
       ridgeCondition: this.getFieldValue(50),
@@ -1278,7 +1288,7 @@ export class JobDetailPage implements OnInit, DoCheck {
       '48': this.inspectionForm.penetrationsLeaks || '',
       '49': this.inspectionForm.fieldCondition || '',
       '50': this.inspectionForm.ridgeCondition || '',
-      '47': this.inspectionForm.flashingsNeedingService || '',
+      '153': Array.isArray(this.inspectionForm.flashingsNeedingService) ? this.inspectionForm.flashingsNeedingService.join(';') : this.inspectionForm.flashingsNeedingService || '',
       '51': !!this.inspectionForm.bootsNeeded,
       '52': this.toOptionalNumber(this.inspectionForm.bootQty15),
       '56': this.toOptionalNumber(this.inspectionForm.bootQty2),
