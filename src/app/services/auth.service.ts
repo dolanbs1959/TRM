@@ -302,7 +302,7 @@ try {
       this.loggedInUser = response.user;
   this.setLoginTimestamp(Date.now());
       console.log('Handshake successful through Firebase Emulator.');
-      console.log('Employee Data Received:', JSON.stringify(this.loggedInUser, null, 2));
+      // console.log('Employee Data Received:', JSON.stringify(this.loggedInUser, null, 2));
       return true;
     } else {
       return false;

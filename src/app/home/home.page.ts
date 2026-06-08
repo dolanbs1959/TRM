@@ -199,7 +199,7 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
       topLevelKeys: res && typeof res === 'object' && !Array.isArray(res) ? Object.keys(res) : []
     });
     if (Array.isArray(res) && res.length > 0) {
-      console.log('--- FRONTEND FIRST RAW SCHEDULE RECORD ---', JSON.stringify(res[0], null, 2));
+      // console.log('--- FRONTEND FIRST RAW SCHEDULE RECORD ---', JSON.stringify(res[0], null, 2));
       console.log('--- FRONTEND SCHEDULE CONTACT SNAPSHOT ---', {
         selectedDate: dateStr,
         totalRecords: res.length,
@@ -215,11 +215,11 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
 
     this.serviceOrders = Array.isArray(res)
       ? res.map((record) => {
-          console.log('Evaluating Card Display:', {
-            id: record?.id ?? record?.['3']?.value ?? null,
-            stage: record?.stage ?? record?.['40']?.value ?? null,
-            status: record?.status ?? record?.['11']?.value ?? null
-          });
+          // console.log('Evaluating Card Display:', {
+          //   id: record?.id ?? record?.['3']?.value ?? null,
+          //   stage: record?.stage ?? record?.['40']?.value ?? null,
+          //   status: record?.status ?? record?.['11']?.value ?? null
+          // });
           return { ...record, _jobActionIndex: this.computeJobActionIndexFromStatus(record) };
         })
       : [];
@@ -417,13 +417,13 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
     }
 
     const isVisible = (selectedJob._jobActionIndex || 0) === 2;
-    console.log('[UI][SecondaryActions][VisibilityCheck]', {
-      selectedJobId: this.selectedJobRecordId,
-      workflowLockedJobRecordId: this.workflowLockedJobRecordId,
-      actionIndex: selectedJob._jobActionIndex,
-      isPaused: !!selectedJob._isPaused,
-      visible: isVisible
-    });
+    // console.log('[UI][SecondaryActions][VisibilityCheck]', {
+    //   selectedJobId: this.selectedJobRecordId,
+    //   workflowLockedJobRecordId: this.workflowLockedJobRecordId,
+    //   actionIndex: selectedJob._jobActionIndex,
+    //   isPaused: !!selectedJob._isPaused,
+    //   visible: isVisible
+    // });
 
     return isVisible;
   }
@@ -623,7 +623,7 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
         console.warn('Failed to attach workflow metadata to inspection submission:', e);
       }
 
-// STEP B: Explicitly write workflow record and advance status to Inspected FIRST
+      // STEP B: Explicitly write workflow record and advance status to Inspected FIRST
       const didAdvanceStatus = await this.updateSelectedJobStatus('Inspected');
       if (!didAdvanceStatus) {
         console.error('Inspection completion blocked: status update to Inspected failed.');

@@ -1753,994 +1753,1005 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
 app.post('/service-order/update-workflow', handleServiceOrderWorkflowUpdate);
 app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
 
-const handleSubmitInspectionData = async (req, res) => {
-    console.log('BACKEND RAW INSPECTION INGESTION PACKET:', JSON.stringify(req.body));
+    const handleSubmitInspectionData = async (req, res) => {
+        console.log('BACKEND RAW INSPECTION INGESTION PACKET:', JSON.stringify(req.body));
 
-const inboundBody = req.body && typeof req.body === 'object' ? req.body : {};
-    console.log('[Inspection][InboundBodyShape]', {
-        hasMasterJobRecordValues: !!inboundBody.masterJobRecordValues,
-        hasPhotoState: !!inboundBody.inspectionPhotoState,
-        hasWorkflowFields: !!inboundBody.workflowEventType
-    });
+        const inboundBody = req.body && typeof req.body === 'object' ? req.body : {};
+            console.log('[Inspection][InboundBodyShape]', {
+                hasMasterJobRecordValues: !!inboundBody.masterJobRecordValues,
+                hasPhotoState: !!inboundBody.inspectionPhotoState,
+                hasWorkflowFields: !!inboundBody.workflowEventType
+            });
 
-    // Removed ad-hoc workflow record writer to ensure all workflow logs are created
-    // via createWorkflowLogRecord which enforces field mappings and logs responses.
+            // Removed ad-hoc workflow record writer to ensure all workflow logs are created
+            // via createWorkflowLogRecord which enforces field mappings and logs responses.
 
-    const {
-        serviceOrderId,
-        masterJobRecordValues,
-        photoBatchData
-    } = req.body || {};
+            const {
+                serviceOrderId,
+                masterJobRecordValues,
+                photoBatchData
+            } = req.body || {};
 
-    if (!serviceOrderId) {
-        return res.status(400).json({ success: false, message: 'serviceOrderId is required' });
-    }
-
-    const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
-    if (!Number.isFinite(normalizedServiceOrderId)) {
-        return res.status(400).json({ success: false, message: 'serviceOrderId must be numeric' });
-    }
-
-    const masterFieldIds = [48, 49, 50, 153, 51, 52, 56, 57, 55, 53, 59, 58, 118, 120, 121, 122, 123, 124, 125, 126, 10];
-    const normalizedMasterValues = masterJobRecordValues && typeof masterJobRecordValues === 'object'
-        ? masterJobRecordValues
-        : {};
-
-    const normalizeIncomingBase64String = (value) => {
-        const normalized = String(value || '').trim().replace(/^['"]|['"]$/g, '');
-        if (!normalized || normalized === '[object Object]') {
-            return '';
-        }
-
-        if (normalized.startsWith('blob:')) {
-            return '';
-        }
-
-        const dataUrlMatch = normalized.match(/^data:[^;]+;base64,(.*)$/i);
-        if (dataUrlMatch && typeof dataUrlMatch[1] === 'string') {
-            return dataUrlMatch[1].replace(/\s+/g, '');
-        }
-
-        const commaIndex = normalized.indexOf(',');
-        if (commaIndex !== -1 && normalized.slice(0, commaIndex).toLowerCase().includes('base64')) {
-            return normalized.slice(commaIndex + 1).replace(/\s+/g, '');
-        }
-
-        return normalized.replace(/\s+/g, '');
-    };
-
-    const toBase64FromByteArray = (bytes) => {
-        if (!Array.isArray(bytes) || bytes.length === 0) {
-            return '';
-        }
-
-        try {
-            return Buffer.from(bytes.map((item) => Number(item) & 0xff)).toString('base64');
-        } catch {
-            return '';
-        }
-    };
-
-    const extractIncomingPhotoBase64 = (photoRow) => {
-        const queue = [photoRow?.fid_8, photoRow];
-        const seen = new Set();
-
-        while (queue.length > 0) {
-            const candidate = queue.shift();
-            if (candidate === null || candidate === undefined) {
-                continue;
+            if (!serviceOrderId) {
+                return res.status(400).json({ success: false, message: 'serviceOrderId is required' });
             }
 
-            if (typeof candidate === 'string') {
-                const fromString = normalizeIncomingBase64String(candidate);
-                if (fromString) {
-                    return fromString;
-                }
-                continue;
+            const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+            if (!Number.isFinite(normalizedServiceOrderId)) {
+                return res.status(400).json({ success: false, message: 'serviceOrderId must be numeric' });
             }
 
-            if (Array.isArray(candidate)) {
-                const isNumericArray = candidate.every((item) => Number.isFinite(Number(item)));
-                if (isNumericArray) {
-                    const fromNumericArray = toBase64FromByteArray(candidate);
-                    if (fromNumericArray) {
-                        return fromNumericArray;
-                    }
+            const masterFieldIds = [48, 49, 50, 153, 51, 52, 56, 57, 55, 53, 59, 58, 118, 120, 121, 122, 123, 124, 125, 126, 10];
+            const normalizedMasterValues = masterJobRecordValues && typeof masterJobRecordValues === 'object'
+                ? masterJobRecordValues
+                : {};
+            console.log('--- DEBUG: Checking incoming masterJobRecordValues keys ---');
+            console.log(Object.keys(normalizedMasterValues));
+
+            const normalizeIncomingBase64String = (value) => {
+                const normalized = String(value || '').trim().replace(/^['"]|['"]$/g, '');
+                if (!normalized || normalized === '[object Object]') {
+                    return '';
                 }
 
-                for (const nested of candidate) {
-                    queue.push(nested);
+                if (normalized.startsWith('blob:')) {
+                    return '';
                 }
-                continue;
-            }
 
-            if (typeof candidate !== 'object') {
-                continue;
-            }
-
-            if (seen.has(candidate)) {
-                continue;
-            }
-            seen.add(candidate);
-
-            if (candidate.type === 'Buffer' && Array.isArray(candidate.data)) {
-                const fromBuffer = toBase64FromByteArray(candidate.data);
-                if (fromBuffer) {
-                    return fromBuffer;
+                const dataUrlMatch = normalized.match(/^data:[^;]+;base64,(.*)$/i);
+                if (dataUrlMatch && typeof dataUrlMatch[1] === 'string') {
+                    return dataUrlMatch[1].replace(/\s+/g, '');
                 }
-            }
 
-            if (Array.isArray(candidate.data)) {
-                const fromDataArray = toBase64FromByteArray(candidate.data);
-                if (fromDataArray) {
-                    return fromDataArray;
+                const commaIndex = normalized.indexOf(',');
+                if (commaIndex !== -1 && normalized.slice(0, commaIndex).toLowerCase().includes('base64')) {
+                    return normalized.slice(commaIndex + 1).replace(/\s+/g, '');
                 }
-            }
 
-            queue.push(
-                candidate.value,
-                candidate.dataUrl,
-                candidate.base64,
-                candidate.base64Data,
-                candidate.imageBase64,
-                candidate.photoBase64,
-                candidate.fid_8,
-                candidate.data,
-                candidate.buffer,
-                candidate.file,
-                candidate.blob
-            );
-        }
+                return normalized.replace(/\s+/g, '');
+            };
 
-        return '';
-    };
-
-    const resolvedFieldMap = {
-        SECTION: 6,
-        NOTES: 7,
-        FILE_ATTACHMENT: 8,
-        RELATED_SERVICE_ORDER: 9
-    };
-
-    try {
-        const serviceOrderRecordWrite = {
-            3: { value: normalizedServiceOrderId }
-        };
-
-        for (const fid of masterFieldIds) {
-            const key = String(fid);
-            if (!Object.prototype.hasOwnProperty.call(normalizedMasterValues, key)) {
-                continue;
-            }
-
-            serviceOrderRecordWrite[fid] = { value: normalizedMasterValues[key] };
-        }
-
-        console.log('FINAL QUICKBASE PAYLOAD:', JSON.stringify({ to: TABLES.SERVICE_ORDERS, data: [serviceOrderRecordWrite] }));
-
-        await axios.post(`${QB_API_ENDPOINT}/records`, {
-            to: TABLES.SERVICE_ORDERS,
-            data: [serviceOrderRecordWrite],
-            fieldsToReturn: [3, ...masterFieldIds]
-        }, {
-            headers: {
-                'QB-Realm-Hostname': QB_REALM_HOST,
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
-            }
-        });
-
-        const incomingPhotoRows = Array.isArray(photoBatchData?.rows) ? photoBatchData.rows : [];
-        const targetPhotoTableId = (photoBatchData?.tableId || TABLES.JOB_PHOTOS || '').toString().trim() || TABLES.JOB_PHOTOS;
-        console.log('[Inspection][PhotoFieldMap][Resolved]', JSON.stringify({
-            tableId: targetPhotoTableId,
-            resolvedMap: resolvedFieldMap,
-            source: 'STATIC_BV3MP7TRA_FIELD_MAP'
-        }));
-        let insertedPhotoCount = 0;
-
-        if (incomingPhotoRows.length > 0) {
-            const photoWriteRows = [];
-
-            for (let index = 0; index < incomingPhotoRows.length; index += 1) {
-                const photoRow = incomingPhotoRows[index];
-                const row = photoRow && typeof photoRow === 'object' ? photoRow : {};
+            const toBase64FromByteArray = (bytes) => {
+                if (!Array.isArray(bytes) || bytes.length === 0) {
+                    return '';
+                }
 
                 try {
-                    console.log('[Inspection][RawRowKeys]', Object.keys(row));
-
-                    console.log('[Inspection][PhotoRow][PreFormat]', {
-                        index,
-                        rowType: Array.isArray(photoRow) ? 'array' : typeof photoRow,
-                        rowKeys: Object.keys(photoRow || {}),
-                        fid8Type: Array.isArray(photoRow?.fid_8) ? 'array' : typeof photoRow?.fid_8,
-                        fid8Keys: photoRow?.fid_8 && typeof photoRow.fid_8 === 'object' ? Object.keys(photoRow.fid_8) : []
-                    });
-
-                    const relatedServiceOrderValue = normalizedServiceOrderId;
-
-                    // row.fid_8 is the canonical mobile payload source for Quickbase file field content.
-                    const normalizedPhotoBase64 = normalizeIncomingBase64String(row?.fid_8 || '');
-
-                    const sectionValue = (row?.fid_6 || '').toString();
-                    const notesValue = (row?.fid_7 || '').toString();
-                    const quickbaseAttachmentValue = {
-                        fileName: `inspection-${normalizedServiceOrderId}-${index + 1}.png`,
-                        data: normalizedPhotoBase64
-                    };
-
-                    console.log('[Inspection][PhotoRow][AttachmentValueShape]', {
-                        index,
-                        attachmentKeys: Object.keys(quickbaseAttachmentValue),
-                        fileName: quickbaseAttachmentValue.fileName,
-                        dataLength: quickbaseAttachmentValue.data.length,
-                        dataPreview: quickbaseAttachmentValue.data.slice(0, 48)
-                    });
-
-                    const payloadRow = {
-                        [resolvedFieldMap.SECTION]: { value: sectionValue },
-                        [resolvedFieldMap.NOTES]: { value: notesValue },
-                        [resolvedFieldMap.FILE_ATTACHMENT]: {
-                            value: quickbaseAttachmentValue
-                        },
-                        [resolvedFieldMap.RELATED_SERVICE_ORDER]: { value: relatedServiceOrderValue }
-                    };
-
-                    console.log('[Inspection][PhotoRow][QuickbasePayloadStructure]', {
-                        index,
-                        payloadRow,
-                        resolvedFieldMap,
-                        base64Source: 'row.fid_8',
-                        relatedServiceOrderValue,
-                        base64Length: normalizedPhotoBase64.length,
-                        base64Preview: normalizedPhotoBase64.slice(0, 48)
-                    });
-
-                    photoWriteRows.push(payloadRow);
-                } catch (photoRowError) {
-                    console.error('[Inspection][PhotoRow][FormatError]', {
-                        index,
-                        rowKeys: Object.keys(photoRow || {}),
-                        message: photoRowError?.message,
-                        stack: photoRowError?.stack
-                    });
+                    return Buffer.from(bytes.map((item) => Number(item) & 0xff)).toString('base64');
+                } catch {
+                    return '';
                 }
-            }
-
-            // if (photoWriteRows.length === 0) {
-            //     console.warn('[Inspection][PhotoRow] No valid rows were generated after formatting attempt.', {
-            //         incomingPhotoCount: incomingPhotoRows.length
-            //     });
-            // }
-
-            const quickbasePhotoPayload = {
-                to: targetPhotoTableId,
-                data: photoWriteRows,
-                fieldsToReturn: [3]
             };
 
-            // console.log('[Inspection][QuickbaseAttachmentBatch][PreSend]', {
-            //     tableId: targetPhotoTableId,
-            //     rowCount: photoWriteRows.length,
-            //     payload: quickbasePhotoPayload,
-            //     payloadStringified: JSON.stringify(quickbasePhotoPayload)
-            // });
+            const extractIncomingPhotoBase64 = (photoRow) => {
+                const queue = [photoRow?.fid_8, photoRow];
+                const seen = new Set();
 
-            let photoInsertResponse;
-            const quickbaseAttachmentRequestHeaders = {
-                'QB-Realm-Hostname': QB_REALM_HOST,
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                while (queue.length > 0) {
+                    const candidate = queue.shift();
+                    if (candidate === null || candidate === undefined) {
+                        continue;
+                    }
+
+                    if (typeof candidate === 'string') {
+                        const fromString = normalizeIncomingBase64String(candidate);
+                        if (fromString) {
+                            return fromString;
+                        }
+                        continue;
+                    }
+
+                    if (Array.isArray(candidate)) {
+                        const isNumericArray = candidate.every((item) => Number.isFinite(Number(item)));
+                        if (isNumericArray) {
+                            const fromNumericArray = toBase64FromByteArray(candidate);
+                            if (fromNumericArray) {
+                                return fromNumericArray;
+                            }
+                        }
+
+                        for (const nested of candidate) {
+                            queue.push(nested);
+                        }
+                        continue;
+                    }
+
+                    if (typeof candidate !== 'object') {
+                        continue;
+                    }
+
+                    if (seen.has(candidate)) {
+                        continue;
+                    }
+                    seen.add(candidate);
+
+                    if (candidate.type === 'Buffer' && Array.isArray(candidate.data)) {
+                        const fromBuffer = toBase64FromByteArray(candidate.data);
+                        if (fromBuffer) {
+                            return fromBuffer;
+                        }
+                    }
+
+                    if (Array.isArray(candidate.data)) {
+                        const fromDataArray = toBase64FromByteArray(candidate.data);
+                        if (fromDataArray) {
+                            return fromDataArray;
+                        }
+                    }
+
+                    queue.push(
+                        candidate.value,
+                        candidate.dataUrl,
+                        candidate.base64,
+                        candidate.base64Data,
+                        candidate.imageBase64,
+                        candidate.photoBase64,
+                        candidate.fid_8,
+                        candidate.data,
+                        candidate.buffer,
+                        candidate.file,
+                        candidate.blob
+                    );
+                }
+
+                return '';
             };
 
-            // console.log('[Inspection][QuickbaseAttachmentBatch][RequestConfig]', JSON.stringify({
-            //     endpoint: `${QB_API_ENDPOINT}/records`,
-            //     headers: quickbaseAttachmentRequestHeaders
-            // }, null, 2));
+            const resolvedFieldMap = {
+                SECTION: 6,
+                NOTES: 7,
+                FILE_ATTACHMENT: 8,
+                RELATED_SERVICE_ORDER: 9
+            };
 
             try {
-                photoInsertResponse = await axios.post(`${QB_API_ENDPOINT}/records`, quickbasePhotoPayload, {
-                    headers: quickbaseAttachmentRequestHeaders
-                });
-            } catch (photoInsertError) {
-                // console.error('[Inspection][QuickbaseAttachmentBatch][AxiosError]', {
-                //     status: photoInsertError?.response?.status,
-                //     responseData: photoInsertError?.response?.data,
-                //     message: photoInsertError?.message,
-                //     stack: photoInsertError?.stack
-                // });
-                // console.error('[Inspection][QuickbaseAttachmentBatch][AxiosError][JSON]', JSON.stringify({
-                //     status: photoInsertError?.response?.status,
-                //     responseData: photoInsertError?.response?.data,
-                //     message: photoInsertError?.message,
-                //     stack: photoInsertError?.stack
-                // }));
-
-                const rawResponsePayloadPretty = JSON.stringify(photoInsertError?.response?.data, null, 2);
-                // console.error('[Inspection][QuickbaseAttachmentBatch][AxiosError][ResponseDataPretty]', rawResponsePayloadPretty);
-
-                const normalizedErrorText = String(rawResponsePayloadPretty || '').toLowerCase();
-                const quickbaseSignalFlags = {
-                    hasNotAllowed: normalizedErrorText.includes('not allowed'),
-                    hasInvalidUserToken: normalizedErrorText.includes('invalid user token'),
-                    hasPermissionOrRoleException:
-                        normalizedErrorText.includes('permission')
-                        || normalizedErrorText.includes('role')
-                        || normalizedErrorText.includes('schema')
+                const serviceOrderRecordWrite = {
+                    3: { value: normalizedServiceOrderId }
                 };
 
-                if (quickbaseSignalFlags.hasNotAllowed || quickbaseSignalFlags.hasInvalidUserToken || quickbaseSignalFlags.hasPermissionOrRoleException) {
-                    // console.error('[Inspection][QuickbaseAttachmentBatch][DetectedQuickbasePermissionSignals]', JSON.stringify({
-                    //     flags: quickbaseSignalFlags,
-                    //     responseData: photoInsertError?.response?.data
+                // DYNAMIC MAPPING: Take every key from the frontend and map it
+                Object.keys(normalizedMasterValues).forEach(fid => {
+                    const val = normalizedMasterValues[fid];
+                    // Only map if it's a valid number (Field ID) and the value isn't null/undefined
+                    if (!isNaN(Number(fid)) && val !== null && val !== undefined) {
+                        serviceOrderRecordWrite[fid] = { value: val };
+                    }
+                });
+
+                console.log('FINAL DYNAMIC QUICKBASE PAYLOAD:', JSON.stringify({ 
+                    to: TABLES.SERVICE_ORDERS, 
+                    data: [serviceOrderRecordWrite] 
+                }));
+                
+                // Add this right before the axios.post call
+                console.log('--- FINAL PAYLOAD SENT TO QUICKBASE ---', JSON.stringify({
+                    to: TABLES.SERVICE_ORDERS,
+                    data: [serviceOrderRecordWrite]
+                }, null, 2));
+
+                await axios.post(`${QB_API_ENDPOINT}/records`, {
+                    to: TABLES.SERVICE_ORDERS,
+                    data: [serviceOrderRecordWrite],
+                    fieldsToReturn: [3, ...masterFieldIds]
+                }, {
+                    headers: {
+                        'QB-Realm-Hostname': QB_REALM_HOST,
+                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                    }
+                });
+
+                const incomingPhotoRows = Array.isArray(photoBatchData?.rows) ? photoBatchData.rows : [];
+                const targetPhotoTableId = (photoBatchData?.tableId || TABLES.JOB_PHOTOS || '').toString().trim() || TABLES.JOB_PHOTOS;
+                console.log('[Inspection][PhotoFieldMap][Resolved]', JSON.stringify({
+                    tableId: targetPhotoTableId,
+                    resolvedMap: resolvedFieldMap,
+                    source: 'STATIC_BV3MP7TRA_FIELD_MAP'
+                }));
+                let insertedPhotoCount = 0;
+
+                if (incomingPhotoRows.length > 0) {
+                    const photoWriteRows = [];
+
+                    for (let index = 0; index < incomingPhotoRows.length; index += 1) {
+                        const photoRow = incomingPhotoRows[index];
+                        const row = photoRow && typeof photoRow === 'object' ? photoRow : {};
+
+                        try {
+                            console.log('[Inspection][RawRowKeys]', Object.keys(row));
+
+                            console.log('[Inspection][PhotoRow][PreFormat]', {
+                                index,
+                                rowType: Array.isArray(photoRow) ? 'array' : typeof photoRow,
+                                rowKeys: Object.keys(photoRow || {}),
+                                fid8Type: Array.isArray(photoRow?.fid_8) ? 'array' : typeof photoRow?.fid_8,
+                                fid8Keys: photoRow?.fid_8 && typeof photoRow.fid_8 === 'object' ? Object.keys(photoRow.fid_8) : []
+                            });
+
+                            const relatedServiceOrderValue = normalizedServiceOrderId;
+
+                            // row.fid_8 is the canonical mobile payload source for Quickbase file field content.
+                            const normalizedPhotoBase64 = normalizeIncomingBase64String(row?.fid_8 || '');
+
+                            const sectionValue = (row?.fid_6 || '').toString();
+                            const notesValue = (row?.fid_7 || '').toString();
+                            const quickbaseAttachmentValue = {
+                                fileName: `inspection-${normalizedServiceOrderId}-${index + 1}.png`,
+                                data: normalizedPhotoBase64
+                            };
+
+                            console.log('[Inspection][PhotoRow][AttachmentValueShape]', {
+                                index,
+                                attachmentKeys: Object.keys(quickbaseAttachmentValue),
+                                fileName: quickbaseAttachmentValue.fileName,
+                                dataLength: quickbaseAttachmentValue.data.length,
+                                dataPreview: quickbaseAttachmentValue.data.slice(0, 48)
+                            });
+
+                            const payloadRow = {
+                                [resolvedFieldMap.SECTION]: { value: sectionValue },
+                                [resolvedFieldMap.NOTES]: { value: notesValue },
+                                [resolvedFieldMap.FILE_ATTACHMENT]: {
+                                    value: quickbaseAttachmentValue
+                                },
+                                [resolvedFieldMap.RELATED_SERVICE_ORDER]: { value: relatedServiceOrderValue }
+                            };
+
+                            console.log('[Inspection][PhotoRow][QuickbasePayloadStructure]', {
+                                index,
+                                payloadRow,
+                                resolvedFieldMap,
+                                base64Source: 'row.fid_8',
+                                relatedServiceOrderValue,
+                                base64Length: normalizedPhotoBase64.length,
+                                base64Preview: normalizedPhotoBase64.slice(0, 48)
+                            });
+
+                            photoWriteRows.push(payloadRow);
+                        } catch (photoRowError) {
+                            console.error('[Inspection][PhotoRow][FormatError]', {
+                                index,
+                                rowKeys: Object.keys(photoRow || {}),
+                                message: photoRowError?.message,
+                                stack: photoRowError?.stack
+                            });
+                        }
+                    }
+
+                    // if (photoWriteRows.length === 0) {
+                    //     console.warn('[Inspection][PhotoRow] No valid rows were generated after formatting attempt.', {
+                    //         incomingPhotoCount: incomingPhotoRows.length
+                    //     });
+                    // }
+
+                    const quickbasePhotoPayload = {
+                        to: targetPhotoTableId,
+                        data: photoWriteRows,
+                        fieldsToReturn: [3]
+                    };
+
+                    // console.log('[Inspection][QuickbaseAttachmentBatch][PreSend]', {
+                    //     tableId: targetPhotoTableId,
+                    //     rowCount: photoWriteRows.length,
+                    //     payload: quickbasePhotoPayload,
+                    //     payloadStringified: JSON.stringify(quickbasePhotoPayload)
+                    // });
+
+                    let photoInsertResponse;
+                    const quickbaseAttachmentRequestHeaders = {
+                        'QB-Realm-Hostname': QB_REALM_HOST,
+                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                    };
+
+                    // console.log('[Inspection][QuickbaseAttachmentBatch][RequestConfig]', JSON.stringify({
+                    //     endpoint: `${QB_API_ENDPOINT}/records`,
+                    //     headers: quickbaseAttachmentRequestHeaders
                     // }, null, 2));
+
+                    try {
+                        photoInsertResponse = await axios.post(`${QB_API_ENDPOINT}/records`, quickbasePhotoPayload, {
+                            headers: quickbaseAttachmentRequestHeaders
+                        });
+                    } catch (photoInsertError) {
+                        // console.error('[Inspection][QuickbaseAttachmentBatch][AxiosError]', {
+                        //     status: photoInsertError?.response?.status,
+                        //     responseData: photoInsertError?.response?.data,
+                        //     message: photoInsertError?.message,
+                        //     stack: photoInsertError?.stack
+                        // });
+                        // console.error('[Inspection][QuickbaseAttachmentBatch][AxiosError][JSON]', JSON.stringify({
+                        //     status: photoInsertError?.response?.status,
+                        //     responseData: photoInsertError?.response?.data,
+                        //     message: photoInsertError?.message,
+                        //     stack: photoInsertError?.stack
+                        // }));
+
+                        const rawResponsePayloadPretty = JSON.stringify(photoInsertError?.response?.data, null, 2);
+                        // console.error('[Inspection][QuickbaseAttachmentBatch][AxiosError][ResponseDataPretty]', rawResponsePayloadPretty);
+
+                        const normalizedErrorText = String(rawResponsePayloadPretty || '').toLowerCase();
+                        const quickbaseSignalFlags = {
+                            hasNotAllowed: normalizedErrorText.includes('not allowed'),
+                            hasInvalidUserToken: normalizedErrorText.includes('invalid user token'),
+                            hasPermissionOrRoleException:
+                                normalizedErrorText.includes('permission')
+                                || normalizedErrorText.includes('role')
+                                || normalizedErrorText.includes('schema')
+                        };
+
+                        if (quickbaseSignalFlags.hasNotAllowed || quickbaseSignalFlags.hasInvalidUserToken || quickbaseSignalFlags.hasPermissionOrRoleException) {
+                            // console.error('[Inspection][QuickbaseAttachmentBatch][DetectedQuickbasePermissionSignals]', JSON.stringify({
+                            //     flags: quickbaseSignalFlags,
+                            //     responseData: photoInsertError?.response?.data
+                            // }, null, 2));
+                        }
+
+                        if (!photoInsertError?.response) {
+                            // console.error('[Inspection][QuickbaseAttachmentBatch][NoServerResponse][RequestHeaders]', JSON.stringify(quickbaseAttachmentRequestHeaders, null, 2));
+                            // console.error('[Inspection][QuickbaseAttachmentBatch][NoServerResponse][AxiosConfigHeaders]', JSON.stringify(photoInsertError?.config?.headers || null, null, 2));
+                        }
+
+                        throw photoInsertError;
+                    }
+
+                    const responseStatus = Number(photoInsertResponse?.status);
+                    const lineErrors = Array.isArray(photoInsertResponse?.data?.metadata?.lineErrors)
+                        ? photoInsertResponse.data.metadata.lineErrors
+                        : [];
+
+                    if (responseStatus === 207 || lineErrors.length > 0) {
+                        // console.error('[Inspection][QuickbaseAttachmentBatch][MultiStatusOrLineErrors]', {
+                        //     status: responseStatus,
+                        //     lineErrors,
+                        //     responseData: photoInsertResponse?.data
+                        // });
+                        // console.error('[Inspection][QuickbaseAttachmentBatch][MultiStatusOrLineErrors][JSON]', JSON.stringify({
+                        //     status: responseStatus,
+                        //     lineErrors,
+                        //     responseData: photoInsertResponse?.data
+                        // }));
+                        throw new Error('Quickbase returned multi-status or line errors for photo attachments.');
+                    }
+
+                    insertedPhotoCount = Array.isArray(photoInsertResponse?.data?.data)
+                        ? photoInsertResponse.data.data.length
+                        : photoWriteRows.length;
                 }
 
-                if (!photoInsertError?.response) {
-                    // console.error('[Inspection][QuickbaseAttachmentBatch][NoServerResponse][RequestHeaders]', JSON.stringify(quickbaseAttachmentRequestHeaders, null, 2));
-                    // console.error('[Inspection][QuickbaseAttachmentBatch][NoServerResponse][AxiosConfigHeaders]', JSON.stringify(photoInsertError?.config?.headers || null, null, 2));
-                }
-
-                throw photoInsertError;
-            }
-
-            const responseStatus = Number(photoInsertResponse?.status);
-            const lineErrors = Array.isArray(photoInsertResponse?.data?.metadata?.lineErrors)
-                ? photoInsertResponse.data.metadata.lineErrors
-                : [];
-
-            if (responseStatus === 207 || lineErrors.length > 0) {
-                // console.error('[Inspection][QuickbaseAttachmentBatch][MultiStatusOrLineErrors]', {
-                //     status: responseStatus,
-                //     lineErrors,
-                //     responseData: photoInsertResponse?.data
-                // });
-                // console.error('[Inspection][QuickbaseAttachmentBatch][MultiStatusOrLineErrors][JSON]', JSON.stringify({
-                //     status: responseStatus,
-                //     lineErrors,
-                //     responseData: photoInsertResponse?.data
-                // }));
-                throw new Error('Quickbase returned multi-status or line errors for photo attachments.');
-            }
-
-            insertedPhotoCount = Array.isArray(photoInsertResponse?.data?.data)
-                ? photoInsertResponse.data.data.length
-                : photoWriteRows.length;
-        }
-
-        // Attempt to create a workflow log record if the caller supplied workflow fields.
-        try {
-            const wfType = String(req.body?.workflowEventType || req.body?.eventType || '').trim();
-            const wfTimestamp = req.body?.workflowEventTimestamp || req.body?.eventTimestamp || new Date().toISOString();
-            const wfGps = req.body?.workflowGpsCoordinates || req.body?.gpsCoordinates || '';
-            const wfNotes = String(req.body?.workflowNotes || req.body?.notes || '');
-            const wfEmployee = req.body?.relatedEmployeeId || req.body?.techId || null;
-
-            if (wfType) {
+                // Attempt to create a workflow log record if the caller supplied workflow fields.
                 try {
-                    await createWorkflowLogRecord({
-                        eventType: wfType,
-                        eventTimestamp: wfTimestamp,
-                        gpsCoordinates: wfGps,
-                        notes: wfNotes,
-                        relatedServiceOrder: normalizedServiceOrderId,
-                        relatedEmployee: wfEmployee
-                    });
+                    const wfType = String(req.body?.workflowEventType || req.body?.eventType || '').trim();
+                    const wfTimestamp = req.body?.workflowEventTimestamp || req.body?.eventTimestamp || new Date().toISOString();
+                    const wfGps = req.body?.workflowGpsCoordinates || req.body?.gpsCoordinates || '';
+                    const wfNotes = String(req.body?.workflowNotes || req.body?.notes || '');
+                    const wfEmployee = req.body?.relatedEmployeeId || req.body?.techId || null;
 
-                    console.log('[Inspection][WorkflowLog][Created]', {
-                        serviceOrderId: normalizedServiceOrderId,
-                        eventType: wfType,
-                        relatedEmployee: wfEmployee
-                    });
-                } catch (innerErr) {
-                    console.warn('[Inspection][WorkflowLog][CreateFailed]', {
-                        message: innerErr?.message || String(innerErr),
-                        stack: innerErr?.stack || null
-                    });
+                    if (wfType) {
+                        try {
+                            await createWorkflowLogRecord({
+                                eventType: wfType,
+                                eventTimestamp: wfTimestamp,
+                                gpsCoordinates: wfGps,
+                                notes: wfNotes,
+                                relatedServiceOrder: normalizedServiceOrderId,
+                                relatedEmployee: wfEmployee
+                            });
+
+                            console.log('[Inspection][WorkflowLog][Created]', {
+                                serviceOrderId: normalizedServiceOrderId,
+                                eventType: wfType,
+                                relatedEmployee: wfEmployee
+                            });
+                        } catch (innerErr) {
+                            console.warn('[Inspection][WorkflowLog][CreateFailed]', {
+                                message: innerErr?.message || String(innerErr),
+                                stack: innerErr?.stack || null
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error('[Inspection][WorkflowLog][PrepareFailed]', err?.message || String(err));
                 }
+
+                return res.json({
+                    success: true,
+                    recordId: String(normalizedServiceOrderId),
+                    updatedFieldCount: Object.keys(serviceOrderRecordWrite).length - 1,
+                    insertedPhotoCount
+                });
+            } catch (error) {
+                console.error('[Inspection][Submit][UnhandledError]', {
+                    status: error?.response?.status,
+                    responseData: error?.response?.data,
+                    message: error?.message,
+                    stack: error?.stack
+                });
+                console.error('[Inspection][Submit][UnhandledError][JSON]', JSON.stringify({
+                    status: error?.response?.status,
+                    responseData: error?.response?.data,
+                    message: error?.message,
+                    stack: error?.stack
+                }));
+                return res.status(500).json({ success: false, message: 'Error submitting inspection data' });
             }
-        } catch (err) {
-            console.error('[Inspection][WorkflowLog][PrepareFailed]', err?.message || String(err));
+        };
+
+    app.post('/submit-inspection-data', handleSubmitInspectionData);
+    app.post('/api/submit-inspection-data', handleSubmitInspectionData);
+    app.post('/inspections/submit', handleSubmitInspectionData);
+    app.post('/estimate/submit', handleSubmitEstimateData);
+    app.post('/api/estimate/submit', handleSubmitEstimateData);
+
+    // --- QUERY ROOFS BY LOCATION ---
+    app.post('/roofs/query', async (req, res) => {
+        const { locationId } = req.body || {};
+
+        console.log('[Roofs][Query] Incoming request payload:', req.body || {});
+
+        const normalizedLocationId = String(locationId || '').trim();
+        if (!normalizedLocationId) {
+            console.warn('[Roofs][Query] Rejected request: missing locationId.');
+            return res.status(400).json({ success: false, message: 'locationId is required' });
         }
 
-        return res.json({
-            success: true,
-            recordId: String(normalizedServiceOrderId),
-            updatedFieldCount: Object.keys(serviceOrderRecordWrite).length - 1,
-            insertedPhotoCount
+        const escapedLocationId = normalizedLocationId.replace(/'/g, "\\'");
+        const whereClause = `{'7'.EX.'${escapedLocationId}'}`;
+        console.log('[Roofs][Query] Executing Quickbase query.', {
+            tableId: TABLES.ROOFS,
+            where: whereClause,
+            // Include both reference IDs (64/66/68/70) and display lookups (65/67/69/71).
+            select: [3, 7, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71]
         });
-    } catch (error) {
-        console.error('[Inspection][Submit][UnhandledError]', {
-            status: error?.response?.status,
-            responseData: error?.response?.data,
-            message: error?.message,
-            stack: error?.stack
-        });
-        console.error('[Inspection][Submit][UnhandledError][JSON]', JSON.stringify({
-            status: error?.response?.status,
-            responseData: error?.response?.data,
-            message: error?.message,
-            stack: error?.stack
-        }));
-        return res.status(500).json({ success: false, message: 'Error submitting inspection data' });
-    }
-};
 
-app.post('/submit-inspection-data', handleSubmitInspectionData);
-app.post('/api/submit-inspection-data', handleSubmitInspectionData);
-app.post('/inspections/submit', handleSubmitInspectionData);
-app.post('/estimate/submit', handleSubmitEstimateData);
-app.post('/api/estimate/submit', handleSubmitEstimateData);
+        try {
+            const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.ROOFS,
+                select: [3, 7, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71],
+                where: whereClause
+            }, {
+                headers: {
+                    'QB-Realm-Hostname': QB_REALM_HOST,
+                    'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                }
+            });
 
-// --- QUERY ROOFS BY LOCATION ---
-app.post('/roofs/query', async (req, res) => {
-    const { locationId } = req.body || {};
-
-    console.log('[Roofs][Query] Incoming request payload:', req.body || {});
-
-    const normalizedLocationId = String(locationId || '').trim();
-    if (!normalizedLocationId) {
-        console.warn('[Roofs][Query] Rejected request: missing locationId.');
-        return res.status(400).json({ success: false, message: 'locationId is required' });
-    }
-
-    const escapedLocationId = normalizedLocationId.replace(/'/g, "\\'");
-    const whereClause = `{'7'.EX.'${escapedLocationId}'}`;
-    console.log('[Roofs][Query] Executing Quickbase query.', {
-        tableId: TABLES.ROOFS,
-        where: whereClause,
-        // Include both reference IDs (64/66/68/70) and display lookups (65/67/69/71).
-        select: [3, 7, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71]
+            const data = Array.isArray(response.data.data) ? response.data.data : [];
+            console.log('[Roofs][Query] Quickbase response received.', {
+                locationId: normalizedLocationId,
+                returnedCount: data.length,
+                firstRecordRelatedLocationFid7: data[0]?.['7']?.value ?? null,
+                firstRecord: data[0] || null
+            });
+            return res.json({ success: true, data });
+        } catch (error) {
+            console.error('Roofs Query Error:', error.response ? error.response.data : error.message);
+            return res.status(500).json({ success: false, message: 'Error retrieving roofs' });
+        }
     });
 
-    try {
-        const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
-            from: TABLES.ROOFS,
-            select: [3, 7, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71],
-            where: whereClause
-        }, {
-            headers: {
-                'QB-Realm-Hostname': QB_REALM_HOST,
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
-            }
-        });
-
-        const data = Array.isArray(response.data.data) ? response.data.data : [];
-        console.log('[Roofs][Query] Quickbase response received.', {
-            locationId: normalizedLocationId,
-            returnedCount: data.length,
-            firstRecordRelatedLocationFid7: data[0]?.['7']?.value ?? null,
-            firstRecord: data[0] || null
-        });
-        return res.json({ success: true, data });
-    } catch (error) {
-        console.error('Roofs Query Error:', error.response ? error.response.data : error.message);
-        return res.status(500).json({ success: false, message: 'Error retrieving roofs' });
-    }
-});
-
-// --- GET ROOF LOOKUP OPTIONS (PITCH/MATERIAL/TYPE/BRAND/COLOR) ---
-app.post('/roofs/options', async (req, res) => {
-    try {
-        const [
-            pitchOptions,
-            roofAreaOptions,
-            materialOptionRecords,
-            typeOptionRecords,
-            brandOptionRecords,
-            colorOptionRecords
-        ] = await Promise.all([
-            queryRoofPitchChoices(),
-            queryRoofAreaChoices(),
-            queryActiveLookupOptionRecords(TABLES.ROOF_MATERIALS, 10, 11),
-            queryActiveLookupOptionRecords(TABLES.ROOF_TYPES, 6, 7),
-            queryActiveLookupOptionRecords(TABLES.ROOF_BRANDS, 8, 9),
-            queryActiveLookupOptionRecords(TABLES.ROOF_COLORS, 8, 9)
-        ]);
-
-        const materialOptions = uniqueNonEmptyStrings(materialOptionRecords.map((option) => option.label));
-        const typeOptions = uniqueNonEmptyStrings(typeOptionRecords.map((option) => option.label));
-        const brandOptions = uniqueNonEmptyStrings(brandOptionRecords.map((option) => option.label));
-        const colorOptions = uniqueNonEmptyStrings(colorOptionRecords.map((option) => option.label));
-
-        return res.json({
-            success: true,
-            data: {
+    // --- GET ROOF LOOKUP OPTIONS (PITCH/MATERIAL/TYPE/BRAND/COLOR) ---
+    app.post('/roofs/options', async (req, res) => {
+        try {
+            const [
                 pitchOptions,
                 roofAreaOptions,
-                materialOptions,
-                typeOptions,
-                brandOptions,
-                colorOptions,
                 materialOptionRecords,
                 typeOptionRecords,
                 brandOptionRecords,
                 colorOptionRecords
-            }
-        });
-    } catch (error) {
-        console.error('Roof Options Query Error:', error.response ? error.response.data : error.message);
-        return res.status(500).json({ success: false, message: 'Error retrieving roof options' });
-    }
-});
+            ] = await Promise.all([
+                queryRoofPitchChoices(),
+                queryRoofAreaChoices(),
+                queryActiveLookupOptionRecords(TABLES.ROOF_MATERIALS, 10, 11),
+                queryActiveLookupOptionRecords(TABLES.ROOF_TYPES, 6, 7),
+                queryActiveLookupOptionRecords(TABLES.ROOF_BRANDS, 8, 9),
+                queryActiveLookupOptionRecords(TABLES.ROOF_COLORS, 8, 9)
+            ]);
 
-// --- ADD NEW ROOF RECORD ---
-app.post('/roofs/add', async (req, res) => {
-    const { locationId, label, material, pitch, roofType, brand, color, sqft } = req.body || {};
+            const materialOptions = uniqueNonEmptyStrings(materialOptionRecords.map((option) => option.label));
+            const typeOptions = uniqueNonEmptyStrings(typeOptionRecords.map((option) => option.label));
+            const brandOptions = uniqueNonEmptyStrings(brandOptionRecords.map((option) => option.label));
+            const colorOptions = uniqueNonEmptyStrings(colorOptionRecords.map((option) => option.label));
 
-    if (!locationId) {
-        return res.status(400).json({ success: false, message: 'locationId is required' });
-    }
-
-    const normalizedLocationId = String(locationId || '').trim();
-    const parsedLocationId = Number.parseInt(normalizedLocationId, 10);
-    const relatedLocationValue = Number.isFinite(parsedLocationId)
-        ? parsedLocationId
-        : normalizedLocationId;
-
-    const record = {
-        7: { value: relatedLocationValue },
-        60: { value: String(label || '') },
-        63: { value: String(pitch || '') },
-        59: { value: 'Active' }
-    };
-
-    if (sqft !== undefined && sqft !== '') {
-        record[61] = { value: Number(sqft) || 0 };
-    }
-
-    if (material !== undefined && String(material).trim() !== '') {
-        const parsedMaterialId = parseStrictNumericId(material);
-        const materialId = Number.isFinite(parsedMaterialId)
-            ? parsedMaterialId
-            : await tryResolveLookupRecordId(TABLES.ROOF_MATERIALS, 10, material);
-
-        if (materialId === null) {
-            return res.status(400).json({
-                success: false,
-                message: `No material lookup record found for label: ${material}`
+            return res.json({
+                success: true,
+                data: {
+                    pitchOptions,
+                    roofAreaOptions,
+                    materialOptions,
+                    typeOptions,
+                    brandOptions,
+                    colorOptions,
+                    materialOptionRecords,
+                    typeOptionRecords,
+                    brandOptionRecords,
+                    colorOptionRecords
+                }
             });
+        } catch (error) {
+            console.error('Roof Options Query Error:', error.response ? error.response.data : error.message);
+            return res.status(500).json({ success: false, message: 'Error retrieving roof options' });
         }
-
-        record[68] = { value: materialId };
-    }
-
-    if (roofType !== undefined && String(roofType).trim() !== '') {
-        const parsedRoofTypeId = parseStrictNumericId(roofType);
-        const roofTypeId = Number.isFinite(parsedRoofTypeId)
-            ? parsedRoofTypeId
-            : await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, roofType);
-
-        if (roofTypeId === null) {
-            return res.status(400).json({
-                success: false,
-                message: `No roof type lookup record found for label: ${roofType}`
-            });
-        }
-
-        record[66] = { value: roofTypeId };
-    }
-
-    if (brand !== undefined && String(brand).trim() !== '') {
-        const parsedBrandId = parseStrictNumericId(brand);
-        const brandId = Number.isFinite(parsedBrandId)
-            ? parsedBrandId
-            : await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, brand);
-
-        if (brandId === null) {
-            return res.status(400).json({
-                success: false,
-                message: `No brand lookup record found for label: ${brand}`
-            });
-        }
-
-        record[70] = { value: brandId };
-    }
-
-    if (color !== undefined && String(color).trim() !== '') {
-        const parsedColorId = parseStrictNumericId(color);
-        const colorId = Number.isFinite(parsedColorId)
-            ? parsedColorId
-            : await tryResolveLookupRecordId(TABLES.ROOF_COLORS, 8, color);
-
-        if (colorId === null) {
-            return res.status(400).json({
-                success: false,
-                message: `No color lookup record found for label: ${color}`
-            });
-        }
-
-        record[64] = { value: colorId };
-    }
-
-    try {
-        const response = await axios.post(`${QB_API_ENDPOINT}/records`, {
-            to: TABLES.ROOFS,
-            data: [record],
-            fieldsToReturn: [3]
-        }, {
-            headers: {
-                'QB-Realm-Hostname': QB_REALM_HOST,
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
-            }
-        });
-
-        const newId = response?.data?.metadata?.createdRecordIds?.[0];
-        return res.json({ success: true, recordId: newId ? String(newId) : null });
-    } catch (error) {
-        console.error('Add Roof Error:', error.response ? error.response.data : error.message);
-        return res.status(500).json({ success: false, message: 'Error adding roof record' });
-    }
-});
-
-// --- UPDATE EXISTING ROOF RECORD ---
-const handleRoofUpdate = async (req, res) => {
-    console.log('============ BACKEND ROOF UPDATE MUTATION INTERCEPT ============');
-    console.log('[Roofs][Update] Request URL Trace:', {
-        method: req.method,
-        originalUrl: req.originalUrl || null,
-        url: req.url || null,
-        path: req.path || null
     });
-    console.log('Inbound Payload Body Object:', req.body);
 
-    const {
-        recordId,
-        roofId,
-        fields,
-        label,
-        materialId,
-        material,
-        pitch,
-        roofTypeId,
-        roofType,
-        brandId,
-        brand,
-        colorId,
-        color,
-        sqft,
-        status
-    } = req.body || {};
+    // --- ADD NEW ROOF RECORD ---
+    app.post('/roofs/add', async (req, res) => {
+        const { locationId, label, material, pitch, roofType, brand, color, sqft } = req.body || {};
 
-    const resolvedRecordId = recordId ?? roofId;
-    const inboundFields = fields && typeof fields === 'object' ? fields : {};
-
-    if (!resolvedRecordId) {
-        return res.status(400).json({ success: false, message: 'recordId is required' });
-    }
-
-    const normalizedRecordId = Number.parseInt(resolvedRecordId, 10);
-    if (!Number.isFinite(normalizedRecordId)) {
-        return res.status(400).json({ success: false, message: 'recordId must be numeric' });
-    }
-
-    const referenceFieldIds = new Set(['64', '66', '68', '70']);
-    const writableFieldSet = new Set(WRITABLE_FIELDS);
-    const normalizedIncomingFields = {};
-
-    for (const [rawFid, rawVal] of Object.entries(inboundFields)) {
-        const fid = String(rawFid);
-
-        if (fid === '67' || fid === '69' || fid === '71') {
-            console.log('[Roofs][Update] Ignoring read-only lookup text field:', fid);
-            continue;
+        if (!locationId) {
+            return res.status(400).json({ success: false, message: 'locationId is required' });
         }
 
-        if (!writableFieldSet.has(fid)) {
-            continue;
+        const normalizedLocationId = String(locationId || '').trim();
+        const parsedLocationId = Number.parseInt(normalizedLocationId, 10);
+        const relatedLocationValue = Number.isFinite(parsedLocationId)
+            ? parsedLocationId
+            : normalizedLocationId;
+
+        const record = {
+            7: { value: relatedLocationValue },
+            60: { value: String(label || '') },
+            63: { value: String(pitch || '') },
+            59: { value: 'Active' }
+        };
+
+        if (sqft !== undefined && sqft !== '') {
+            record[61] = { value: Number(sqft) || 0 };
         }
 
-        if (referenceFieldIds.has(fid)) {
-            const parsedRefId = Number.parseInt(rawVal, 10);
-            if (!Number.isFinite(parsedRefId)) {
+        if (material !== undefined && String(material).trim() !== '') {
+            const parsedMaterialId = parseStrictNumericId(material);
+            const materialId = Number.isFinite(parsedMaterialId)
+                ? parsedMaterialId
+                : await tryResolveLookupRecordId(TABLES.ROOF_MATERIALS, 10, material);
+
+            if (materialId === null) {
                 return res.status(400).json({
                     success: false,
-                    message: `Field ${fid} requires a numeric Quickbase Record ID`
+                    message: `No material lookup record found for label: ${material}`
                 });
             }
 
-            normalizedIncomingFields[fid] = parsedRefId;
-            continue;
+            record[68] = { value: materialId };
         }
 
-        if (fid === '61') {
-            normalizedIncomingFields[fid] = Number(rawVal) || 0;
-            continue;
-        }
+        if (roofType !== undefined && String(roofType).trim() !== '') {
+            const parsedRoofTypeId = parseStrictNumericId(roofType);
+            const roofTypeId = Number.isFinite(parsedRoofTypeId)
+                ? parsedRoofTypeId
+                : await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, roofType);
 
-        if (fid === '3') {
-            const parsedRecordId = Number.parseInt(rawVal, 10);
-            if (!Number.isFinite(parsedRecordId)) {
+            if (roofTypeId === null) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Field 3 requires a numeric Quickbase Record ID'
+                    message: `No roof type lookup record found for label: ${roofType}`
                 });
             }
 
-            normalizedIncomingFields[fid] = parsedRecordId;
-            continue;
+            record[66] = { value: roofTypeId };
         }
 
-        normalizedIncomingFields[fid] = rawVal;
-    }
+        if (brand !== undefined && String(brand).trim() !== '') {
+            const parsedBrandId = parseStrictNumericId(brand);
+            const brandId = Number.isFinite(parsedBrandId)
+                ? parsedBrandId
+                : await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, brand);
 
-    if (sqft !== undefined && writableFieldSet.has('61')) normalizedIncomingFields['61'] = Number(sqft) || 0;
-    if (pitch !== undefined && writableFieldSet.has('63')) normalizedIncomingFields['63'] = pitch;
-
-    if (label !== undefined) {
-        console.log('[Roofs][Update] Ignoring non-writable field alias: label -> 60');
-    }
-    if (status !== undefined) {
-        console.log('[Roofs][Update] Ignoring non-writable field alias: status -> 59');
-    }
-
-    const resolvedMaterialId = materialId ?? material;
-    if (resolvedMaterialId !== undefined && writableFieldSet.has('68')) {
-        const parsedMaterialId = parseStrictNumericId(resolvedMaterialId);
-        if (Number.isFinite(parsedMaterialId)) {
-            normalizedIncomingFields['68'] = parsedMaterialId;
-        } else {
-            const materialLookupId = await tryResolveLookupRecordId(TABLES.ROOF_MATERIALS, 10, resolvedMaterialId);
-            if (materialLookupId !== null) {
-                normalizedIncomingFields['68'] = materialLookupId;
-                console.log('[Roofs][Update] Resolved material text to ID:', {
-                    label: resolvedMaterialId,
-                    id: materialLookupId
-                });
-            } else {
-                console.warn('[Roofs][Update] Could not resolve material text; skipping:', {
-                    label: resolvedMaterialId
+            if (brandId === null) {
+                return res.status(400).json({
+                    success: false,
+                    message: `No brand lookup record found for label: ${brand}`
                 });
             }
-        }
-    }
 
-    const resolvedRoofTypeId = roofTypeId ?? roofType;
-    if (resolvedRoofTypeId !== undefined && writableFieldSet.has('66')) {
-        const parsedRoofTypeId = parseStrictNumericId(resolvedRoofTypeId);
-        if (Number.isFinite(parsedRoofTypeId)) {
-            normalizedIncomingFields['66'] = parsedRoofTypeId;
-        } else {
-            const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, resolvedRoofTypeId);
-            if (roofTypeLookupId !== null) {
-                normalizedIncomingFields['66'] = roofTypeLookupId;
-                console.log('[Roofs][Update] Resolved roof type text to ID:', {
-                    label: resolvedRoofTypeId,
-                    id: roofTypeLookupId
+            record[70] = { value: brandId };
+        }
+
+        if (color !== undefined && String(color).trim() !== '') {
+            const parsedColorId = parseStrictNumericId(color);
+            const colorId = Number.isFinite(parsedColorId)
+                ? parsedColorId
+                : await tryResolveLookupRecordId(TABLES.ROOF_COLORS, 8, color);
+
+            if (colorId === null) {
+                return res.status(400).json({
+                    success: false,
+                    message: `No color lookup record found for label: ${color}`
                 });
+            }
+
+            record[64] = { value: colorId };
+        }
+
+        try {
+            const response = await axios.post(`${QB_API_ENDPOINT}/records`, {
+                to: TABLES.ROOFS,
+                data: [record],
+                fieldsToReturn: [3]
+            }, {
+                headers: {
+                    'QB-Realm-Hostname': QB_REALM_HOST,
+                    'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                }
+            });
+
+            const newId = response?.data?.metadata?.createdRecordIds?.[0];
+            return res.json({ success: true, recordId: newId ? String(newId) : null });
+        } catch (error) {
+            console.error('Add Roof Error:', error.response ? error.response.data : error.message);
+            return res.status(500).json({ success: false, message: 'Error adding roof record' });
+        }
+    });
+
+    // --- UPDATE EXISTING ROOF RECORD ---
+    const handleRoofUpdate = async (req, res) => {
+        console.log('============ BACKEND ROOF UPDATE MUTATION INTERCEPT ============');
+        console.log('[Roofs][Update] Request URL Trace:', {
+            method: req.method,
+            originalUrl: req.originalUrl || null,
+            url: req.url || null,
+            path: req.path || null
+        });
+        console.log('Inbound Payload Body Object:', req.body);
+
+        const {
+            recordId,
+            roofId,
+            fields,
+            label,
+            materialId,
+            material,
+            pitch,
+            roofTypeId,
+            roofType,
+            brandId,
+            brand,
+            colorId,
+            color,
+            sqft,
+            status
+        } = req.body || {};
+
+        const resolvedRecordId = recordId ?? roofId;
+        const inboundFields = fields && typeof fields === 'object' ? fields : {};
+
+        if (!resolvedRecordId) {
+            return res.status(400).json({ success: false, message: 'recordId is required' });
+        }
+
+        const normalizedRecordId = Number.parseInt(resolvedRecordId, 10);
+        if (!Number.isFinite(normalizedRecordId)) {
+            return res.status(400).json({ success: false, message: 'recordId must be numeric' });
+        }
+
+        const referenceFieldIds = new Set(['64', '66', '68', '70']);
+        const writableFieldSet = new Set(WRITABLE_FIELDS);
+        const normalizedIncomingFields = {};
+
+        for (const [rawFid, rawVal] of Object.entries(inboundFields)) {
+            const fid = String(rawFid);
+
+            if (fid === '67' || fid === '69' || fid === '71') {
+                console.log('[Roofs][Update] Ignoring read-only lookup text field:', fid);
+                continue;
+            }
+
+            if (!writableFieldSet.has(fid)) {
+                continue;
+            }
+
+            if (referenceFieldIds.has(fid)) {
+                const parsedRefId = Number.parseInt(rawVal, 10);
+                if (!Number.isFinite(parsedRefId)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Field ${fid} requires a numeric Quickbase Record ID`
+                    });
+                }
+
+                normalizedIncomingFields[fid] = parsedRefId;
+                continue;
+            }
+
+            if (fid === '61') {
+                normalizedIncomingFields[fid] = Number(rawVal) || 0;
+                continue;
+            }
+
+            if (fid === '3') {
+                const parsedRecordId = Number.parseInt(rawVal, 10);
+                if (!Number.isFinite(parsedRecordId)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Field 3 requires a numeric Quickbase Record ID'
+                    });
+                }
+
+                normalizedIncomingFields[fid] = parsedRecordId;
+                continue;
+            }
+
+            normalizedIncomingFields[fid] = rawVal;
+        }
+
+        if (sqft !== undefined && writableFieldSet.has('61')) normalizedIncomingFields['61'] = Number(sqft) || 0;
+        if (pitch !== undefined && writableFieldSet.has('63')) normalizedIncomingFields['63'] = pitch;
+
+        if (label !== undefined) {
+            console.log('[Roofs][Update] Ignoring non-writable field alias: label -> 60');
+        }
+        if (status !== undefined) {
+            console.log('[Roofs][Update] Ignoring non-writable field alias: status -> 59');
+        }
+
+        const resolvedMaterialId = materialId ?? material;
+        if (resolvedMaterialId !== undefined && writableFieldSet.has('68')) {
+            const parsedMaterialId = parseStrictNumericId(resolvedMaterialId);
+            if (Number.isFinite(parsedMaterialId)) {
+                normalizedIncomingFields['68'] = parsedMaterialId;
             } else {
-                const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, resolvedRoofTypeId);
-                if (brandLookupId !== null && normalizedIncomingFields['70'] === undefined) {
-                    normalizedIncomingFields['70'] = brandLookupId;
-                    console.log('[Roofs][Update] Resolved roofType text as brand ID fallback:', {
-                        label: resolvedRoofTypeId,
-                        id: brandLookupId
+                const materialLookupId = await tryResolveLookupRecordId(TABLES.ROOF_MATERIALS, 10, resolvedMaterialId);
+                if (materialLookupId !== null) {
+                    normalizedIncomingFields['68'] = materialLookupId;
+                    console.log('[Roofs][Update] Resolved material text to ID:', {
+                        label: resolvedMaterialId,
+                        id: materialLookupId
                     });
                 } else {
-                    console.warn('[Roofs][Update] Could not resolve roof type text; skipping:', {
-                        label: resolvedRoofTypeId
+                    console.warn('[Roofs][Update] Could not resolve material text; skipping:', {
+                        label: resolvedMaterialId
                     });
                 }
             }
         }
-    }
 
-    const resolvedBrandId = brandId ?? brand;
-    if (resolvedBrandId !== undefined && writableFieldSet.has('70')) {
-        const parsedBrandId = parseStrictNumericId(resolvedBrandId);
-        if (Number.isFinite(parsedBrandId)) {
-            normalizedIncomingFields['70'] = parsedBrandId;
-        } else {
-            const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, resolvedBrandId);
-            if (brandLookupId !== null) {
-                normalizedIncomingFields['70'] = brandLookupId;
-                console.log('[Roofs][Update] Resolved brand text to ID:', {
-                    label: resolvedBrandId,
-                    id: brandLookupId
-                });
+        const resolvedRoofTypeId = roofTypeId ?? roofType;
+        if (resolvedRoofTypeId !== undefined && writableFieldSet.has('66')) {
+            const parsedRoofTypeId = parseStrictNumericId(resolvedRoofTypeId);
+            if (Number.isFinite(parsedRoofTypeId)) {
+                normalizedIncomingFields['66'] = parsedRoofTypeId;
             } else {
-                const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, resolvedBrandId);
-                if (roofTypeLookupId !== null && normalizedIncomingFields['66'] === undefined) {
+                const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, resolvedRoofTypeId);
+                if (roofTypeLookupId !== null) {
                     normalizedIncomingFields['66'] = roofTypeLookupId;
-                    console.log('[Roofs][Update] Resolved brand text as roof type ID fallback:', {
-                        label: resolvedBrandId,
+                    console.log('[Roofs][Update] Resolved roof type text to ID:', {
+                        label: resolvedRoofTypeId,
                         id: roofTypeLookupId
                     });
                 } else {
-                    console.warn('[Roofs][Update] Could not resolve brand text; skipping:', {
-                        label: resolvedBrandId
+                    const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, resolvedRoofTypeId);
+                    if (brandLookupId !== null && normalizedIncomingFields['70'] === undefined) {
+                        normalizedIncomingFields['70'] = brandLookupId;
+                        console.log('[Roofs][Update] Resolved roofType text as brand ID fallback:', {
+                            label: resolvedRoofTypeId,
+                            id: brandLookupId
+                        });
+                    } else {
+                        console.warn('[Roofs][Update] Could not resolve roof type text; skipping:', {
+                            label: resolvedRoofTypeId
+                        });
+                    }
+                }
+            }
+        }
+
+        const resolvedBrandId = brandId ?? brand;
+        if (resolvedBrandId !== undefined && writableFieldSet.has('70')) {
+            const parsedBrandId = parseStrictNumericId(resolvedBrandId);
+            if (Number.isFinite(parsedBrandId)) {
+                normalizedIncomingFields['70'] = parsedBrandId;
+            } else {
+                const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, resolvedBrandId);
+                if (brandLookupId !== null) {
+                    normalizedIncomingFields['70'] = brandLookupId;
+                    console.log('[Roofs][Update] Resolved brand text to ID:', {
+                        label: resolvedBrandId,
+                        id: brandLookupId
+                    });
+                } else {
+                    const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, resolvedBrandId);
+                    if (roofTypeLookupId !== null && normalizedIncomingFields['66'] === undefined) {
+                        normalizedIncomingFields['66'] = roofTypeLookupId;
+                        console.log('[Roofs][Update] Resolved brand text as roof type ID fallback:', {
+                            label: resolvedBrandId,
+                            id: roofTypeLookupId
+                        });
+                    } else {
+                        console.warn('[Roofs][Update] Could not resolve brand text; skipping:', {
+                            label: resolvedBrandId
+                        });
+                    }
+                }
+            }
+        }
+
+        const resolvedColorId = colorId ?? color;
+        if (resolvedColorId !== undefined && writableFieldSet.has('64')) {
+            const parsedColorId = parseStrictNumericId(resolvedColorId);
+            if (Number.isFinite(parsedColorId)) {
+                normalizedIncomingFields['64'] = parsedColorId;
+            } else {
+                const colorLookupId = await tryResolveLookupRecordId(TABLES.ROOF_COLORS, 8, resolvedColorId);
+                if (colorLookupId !== null) {
+                    normalizedIncomingFields['64'] = colorLookupId;
+                    console.log('[Roofs][Update] Resolved color text to ID:', {
+                        label: resolvedColorId,
+                        id: colorLookupId
+                    });
+                } else {
+                    console.warn('[Roofs][Update] Could not resolve color text; skipping:', {
+                        label: resolvedColorId
                     });
                 }
             }
         }
-    }
 
-    const resolvedColorId = colorId ?? color;
-    if (resolvedColorId !== undefined && writableFieldSet.has('64')) {
-        const parsedColorId = parseStrictNumericId(resolvedColorId);
-        if (Number.isFinite(parsedColorId)) {
-            normalizedIncomingFields['64'] = parsedColorId;
-        } else {
-            const colorLookupId = await tryResolveLookupRecordId(TABLES.ROOF_COLORS, 8, resolvedColorId);
-            if (colorLookupId !== null) {
-                normalizedIncomingFields['64'] = colorLookupId;
-                console.log('[Roofs][Update] Resolved color text to ID:', {
-                    label: resolvedColorId,
-                    id: colorLookupId
+        if (inboundFields['69'] !== undefined && normalizedIncomingFields['68'] === undefined && writableFieldSet.has('68')) {
+            try {
+                const materialLookupId = await resolveLookupRecordId(TABLES.ROOF_MATERIALS, 10, inboundFields['69'], 'material');
+                normalizedIncomingFields['68'] = materialLookupId;
+                console.log('[Roofs][Update] Resolved fields[69] text to material ID:', {
+                    label: inboundFields['69'],
+                    id: materialLookupId
                 });
-            } else {
-                console.warn('[Roofs][Update] Could not resolve color text; skipping:', {
-                    label: resolvedColorId
+            } catch (lookupError) {
+                return res.status(400).json({
+                    success: false,
+                    message: lookupError.message
                 });
             }
         }
-    }
 
-    if (inboundFields['69'] !== undefined && normalizedIncomingFields['68'] === undefined && writableFieldSet.has('68')) {
-        try {
-            const materialLookupId = await resolveLookupRecordId(TABLES.ROOF_MATERIALS, 10, inboundFields['69'], 'material');
-            normalizedIncomingFields['68'] = materialLookupId;
-            console.log('[Roofs][Update] Resolved fields[69] text to material ID:', {
-                label: inboundFields['69'],
-                id: materialLookupId
-            });
-        } catch (lookupError) {
-            return res.status(400).json({
-                success: false,
-                message: lookupError.message
-            });
-        }
-    }
-
-    if (inboundFields['67'] !== undefined && normalizedIncomingFields['66'] === undefined && writableFieldSet.has('66')) {
-        const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, inboundFields['67']);
-        if (roofTypeLookupId !== null) {
-            normalizedIncomingFields['66'] = roofTypeLookupId;
-            console.log('[Roofs][Update] Resolved fields[67] text to roof type ID:', {
-                label: inboundFields['67'],
-                id: roofTypeLookupId
-            });
-        } else {
-            const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, inboundFields['67']);
-            if (brandLookupId !== null && normalizedIncomingFields['70'] === undefined && writableFieldSet.has('70')) {
-                normalizedIncomingFields['70'] = brandLookupId;
-                console.log('[Roofs][Update] Resolved fields[67] text to brand ID fallback:', {
-                    label: inboundFields['67'],
-                    id: brandLookupId
-                });
-            } else {
-                console.warn('[Roofs][Update] Could not resolve fields[67] text; skipping:', {
-                    label: inboundFields['67']
-                });
-            }
-        }
-    }
-
-    if (inboundFields['71'] !== undefined && normalizedIncomingFields['70'] === undefined && writableFieldSet.has('70')) {
-        const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, inboundFields['71']);
-        if (brandLookupId !== null) {
-            normalizedIncomingFields['70'] = brandLookupId;
-            console.log('[Roofs][Update] Resolved fields[71] text to brand ID:', {
-                label: inboundFields['71'],
-                id: brandLookupId
-            });
-        } else {
-            const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, inboundFields['71']);
-            if (roofTypeLookupId !== null && normalizedIncomingFields['66'] === undefined && writableFieldSet.has('66')) {
+        if (inboundFields['67'] !== undefined && normalizedIncomingFields['66'] === undefined && writableFieldSet.has('66')) {
+            const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, inboundFields['67']);
+            if (roofTypeLookupId !== null) {
                 normalizedIncomingFields['66'] = roofTypeLookupId;
-                console.log('[Roofs][Update] Resolved fields[71] text to roof type ID fallback:', {
-                    label: inboundFields['71'],
+                console.log('[Roofs][Update] Resolved fields[67] text to roof type ID:', {
+                    label: inboundFields['67'],
                     id: roofTypeLookupId
                 });
             } else {
-                console.warn('[Roofs][Update] Could not resolve fields[71] text; skipping:', {
-                    label: inboundFields['71']
+                const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, inboundFields['67']);
+                if (brandLookupId !== null && normalizedIncomingFields['70'] === undefined && writableFieldSet.has('70')) {
+                    normalizedIncomingFields['70'] = brandLookupId;
+                    console.log('[Roofs][Update] Resolved fields[67] text to brand ID fallback:', {
+                        label: inboundFields['67'],
+                        id: brandLookupId
+                    });
+                } else {
+                    console.warn('[Roofs][Update] Could not resolve fields[67] text; skipping:', {
+                        label: inboundFields['67']
+                    });
+                }
+            }
+        }
+
+        if (inboundFields['71'] !== undefined && normalizedIncomingFields['70'] === undefined && writableFieldSet.has('70')) {
+            const brandLookupId = await tryResolveLookupRecordId(TABLES.ROOF_BRANDS, 8, inboundFields['71']);
+            if (brandLookupId !== null) {
+                normalizedIncomingFields['70'] = brandLookupId;
+                console.log('[Roofs][Update] Resolved fields[71] text to brand ID:', {
+                    label: inboundFields['71'],
+                    id: brandLookupId
+                });
+            } else {
+                const roofTypeLookupId = await tryResolveLookupRecordId(TABLES.ROOF_TYPES, 6, inboundFields['71']);
+                if (roofTypeLookupId !== null && normalizedIncomingFields['66'] === undefined && writableFieldSet.has('66')) {
+                    normalizedIncomingFields['66'] = roofTypeLookupId;
+                    console.log('[Roofs][Update] Resolved fields[71] text to roof type ID fallback:', {
+                        label: inboundFields['71'],
+                        id: roofTypeLookupId
+                    });
+                } else {
+                    console.warn('[Roofs][Update] Could not resolve fields[71] text; skipping:', {
+                        label: inboundFields['71']
+                    });
+                }
+            }
+        }
+
+        if (inboundFields['65'] !== undefined && normalizedIncomingFields['64'] === undefined && writableFieldSet.has('64')) {
+            try {
+                const colorLookupId = await resolveLookupRecordId(TABLES.ROOF_COLORS, 8, inboundFields['65'], 'color');
+                normalizedIncomingFields['64'] = colorLookupId;
+                console.log('[Roofs][Update] Resolved fields[65] text to color ID:', {
+                    label: inboundFields['65'],
+                    id: colorLookupId
+                });
+            } catch (lookupError) {
+                return res.status(400).json({
+                    success: false,
+                    message: lookupError.message
                 });
             }
         }
-    }
 
-    if (inboundFields['65'] !== undefined && normalizedIncomingFields['64'] === undefined && writableFieldSet.has('64')) {
         try {
-            const colorLookupId = await resolveLookupRecordId(TABLES.ROOF_COLORS, 8, inboundFields['65'], 'color');
-            normalizedIncomingFields['64'] = colorLookupId;
-            console.log('[Roofs][Update] Resolved fields[65] text to color ID:', {
-                label: inboundFields['65'],
-                id: colorLookupId
+            const existingLookup = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.ROOFS,
+                select: [3, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71],
+                where: `{'3'.EX.'${normalizedRecordId}'}`
+            }, {
+                headers: {
+                    'QB-Realm-Hostname': QB_REALM_HOST,
+                    'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                }
             });
-        } catch (lookupError) {
-            return res.status(400).json({
-                success: false,
-                message: lookupError.message
+
+            const existingRecord = existingLookup?.data?.data?.[0] || { 3: { value: normalizedRecordId } };
+
+            // Correct Merge: Use existing as base, then override with new fields
+            const finalRecord = { ...existingRecord };
+            for (const [fid, val] of Object.entries(normalizedIncomingFields)) {
+                if (fid === '61') {
+                    finalRecord[fid] = { value: Number(val) || 0 };
+                } else if (referenceFieldIds.has(fid)) {
+                    finalRecord[fid] = { value: Number.parseInt(val, 10) };
+                } else {
+                    finalRecord[fid] = { value: val };
+                }
+            }
+
+            const READ_ONLY_FIELDS = ['67', '69', '71'];
+            READ_ONLY_FIELDS.forEach((fid) => delete finalRecord[fid]);
+
+            // Final safety gate: only send writable fields to Quickbase mutation endpoint.
+            Object.keys(finalRecord).forEach((fid) => {
+                if (!writableFieldSet.has(fid)) {
+                    delete finalRecord[fid];
+                }
             });
-        }
-    }
 
-    try {
-        const existingLookup = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
-            from: TABLES.ROOFS,
-            select: [3, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71],
-            where: `{'3'.EX.'${normalizedRecordId}'}`
-        }, {
-            headers: {
-                'QB-Realm-Hostname': QB_REALM_HOST,
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+            // Ensure RID is always present in the mutation body.
+            if (!finalRecord['3']) {
+                finalRecord['3'] = { value: normalizedRecordId };
             }
-        });
 
-        const existingRecord = existingLookup?.data?.data?.[0] || { 3: { value: normalizedRecordId } };
+            console.log('[Roofs][Update] Final Quickbase mutation payload (finalRecord):', finalRecord);
+            console.log('[Roofs][Update] Mapped Quickbase record payload:', finalRecord);
 
-        // Correct Merge: Use existing as base, then override with new fields
-        const finalRecord = { ...existingRecord };
-        for (const [fid, val] of Object.entries(normalizedIncomingFields)) {
-            if (fid === '61') {
-                finalRecord[fid] = { value: Number(val) || 0 };
-            } else if (referenceFieldIds.has(fid)) {
-                finalRecord[fid] = { value: Number.parseInt(val, 10) };
-            } else {
-                finalRecord[fid] = { value: val };
-            }
-        }
+            const qbPayload = {
+                to: 'bt73uh9ie',
+                data: [finalRecord],
+                fieldsToReturn: [63, 69, 61, 71, 65]
+            };
 
-        const READ_ONLY_FIELDS = ['67', '69', '71'];
-        READ_ONLY_FIELDS.forEach((fid) => delete finalRecord[fid]);
+            console.log('--- FINAL API PAYLOAD ---', JSON.stringify(qbPayload, null, 2));
 
-        // Final safety gate: only send writable fields to Quickbase mutation endpoint.
-        Object.keys(finalRecord).forEach((fid) => {
-            if (!writableFieldSet.has(fid)) {
-                delete finalRecord[fid];
-            }
-        });
-
-        // Ensure RID is always present in the mutation body.
-        if (!finalRecord['3']) {
-            finalRecord['3'] = { value: normalizedRecordId };
-        }
-
-        console.log('[Roofs][Update] Final Quickbase mutation payload (finalRecord):', finalRecord);
-        console.log('[Roofs][Update] Mapped Quickbase record payload:', finalRecord);
-
-        const qbPayload = {
-            to: 'bt73uh9ie',
-            data: [finalRecord],
-            fieldsToReturn: [63, 69, 61, 71, 65]
-        };
-
-        console.log('--- FINAL API PAYLOAD ---', JSON.stringify(qbPayload, null, 2));
-
-        const result = await axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, {
-            headers: {
-                'QB-Realm-Hostname': QB_REALM_HOST,
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
-            }
-        });
-
-        console.log('--- QUICKBASE API RESPONSE ---', {
-            status: result?.status || null,
-            statusText: result?.statusText || null,
-            data: result?.data || null
-        });
-
-        const lineErrors = result?.data?.metadata?.lineErrors || null;
-        if (result?.status === 207 || (lineErrors && Object.keys(lineErrors).length > 0)) {
-            console.error('--- QUICKBASE LINE ERRORS ---', JSON.stringify(lineErrors, null, 2));
-            return res.status(502).json({
-                success: false,
-                message: 'Quickbase rejected one or more fields in mutation payload',
-                quickbaseStatus: result?.status || null,
-                lineErrors
+            const result = await axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, {
+                headers: {
+                    'QB-Realm-Hostname': QB_REALM_HOST,
+                    'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                }
             });
-        }
 
-        return res.json({ success: true, recordId: String(normalizedRecordId) });
-    } catch (error) {
-        console.error('Update Roof Error:', {
-            message: error?.message || null,
-            status: error?.response?.status || null,
-            statusText: error?.response?.statusText || null,
-            data: error?.response?.data || null
-        });
-        return res.status(500).json({ success: false, message: 'Error updating roof record' });
-    }
-};
+            console.log('--- QUICKBASE API RESPONSE ---', {
+                status: result?.status || null,
+                statusText: result?.statusText || null,
+                data: result?.data || null
+            });
+
+            const lineErrors = result?.data?.metadata?.lineErrors || null;
+            if (result?.status === 207 || (lineErrors && Object.keys(lineErrors).length > 0)) {
+                console.error('--- QUICKBASE LINE ERRORS ---', JSON.stringify(lineErrors, null, 2));
+                return res.status(502).json({
+                    success: false,
+                    message: 'Quickbase rejected one or more fields in mutation payload',
+                    quickbaseStatus: result?.status || null,
+                    lineErrors
+                });
+            }
+
+            return res.json({ success: true, recordId: String(normalizedRecordId) });
+        } catch (error) {
+            console.error('Update Roof Error:', {
+                message: error?.message || null,
+                status: error?.response?.status || null,
+                statusText: error?.response?.statusText || null,
+                data: error?.response?.data || null
+            });
+            return res.status(500).json({ success: false, message: 'Error updating roof record' });
+        }
+    };
 
 // Register both variants so local calls are caught regardless of mounting path assumptions.
 app.post('/roofs/update', handleRoofUpdate);
