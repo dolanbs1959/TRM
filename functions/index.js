@@ -1186,7 +1186,7 @@ app.post('/job-detail', async (req, res) => {
     try {
         const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
             from: TABLES.SERVICE_ORDERS,
-            select: [3, 6, 7, 9, 10, 11, 15, 16, 26, 40, 41, 44, 46, 47, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 70, 71, 73, 90, 92, 93, 94, 105, 106, 107, 108, 110, 142],
+            select: [3, 6, 7, 9, 10, 11, 15, 16, 26, 40, 41, 44, 46, 153, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 70, 71, 73, 90, 92, 93, 94, 105, 106, 107, 108, 110, 142],
             where: `{'3'.EX.'${normalizedRecordId}'}`
         }, {
             headers: {
@@ -1781,7 +1781,7 @@ const inboundBody = req.body && typeof req.body === 'object' ? req.body : {};
         return res.status(400).json({ success: false, message: 'serviceOrderId must be numeric' });
     }
 
-    const masterFieldIds = [48, 49, 50, 47, 51, 52, 56, 57, 55, 53, 59, 58, 118, 120, 121, 122, 123, 124, 125, 126, 10];
+    const masterFieldIds = [48, 49, 50, 153, 51, 52, 56, 57, 55, 53, 59, 58, 118, 120, 121, 122, 123, 124, 125, 126, 10];
     const normalizedMasterValues = masterJobRecordValues && typeof masterJobRecordValues === 'object'
         ? masterJobRecordValues
         : {};
@@ -1915,6 +1915,8 @@ const inboundBody = req.body && typeof req.body === 'object' ? req.body : {};
 
             serviceOrderRecordWrite[fid] = { value: normalizedMasterValues[key] };
         }
+
+        console.log('FINAL QUICKBASE PAYLOAD:', JSON.stringify({ to: TABLES.SERVICE_ORDERS, data: [serviceOrderRecordWrite] }));
 
         await axios.post(`${QB_API_ENDPOINT}/records`, {
             to: TABLES.SERVICE_ORDERS,

@@ -345,15 +345,9 @@
                 (keydown.space)="$event.preventDefault(); $event.stopPropagation(); beginSectionPhotoCapture('flashing', $event)">
               </ion-icon>
             </ion-item>
-            <label *ngFor="let option of flashingsOptions" class="inspection-choice-option">
-              <input
-                type="radio"
-                name="flashingsNeedingService"
-                [value]="option"
-                [(ngModel)]="inspectionForm.flashingsNeedingService"
-                [disabled]="isHubInputLocked()" />
-              <span>{{ option }}</span>
-            </label>
+            <ion-select multiple="true" [(ngModel)]="inspectionForm.flashingsNeedingService" [disabled]="isHubInputLocked()" placeholder="Select flashings">
+              <ion-select-option *ngFor="let option of flashingsOptions" [value]="option">{{ option }}</ion-select-option>
+            </ion-select>
 
             <div class="inspection-photo-files-inline" *ngIf="getInspectionSectionFileNames('flashing').length > 0">
               <div class="inspection-photo-files-inline-item" *ngFor="let fileName of getInspectionSectionFileNames('flashing')">
