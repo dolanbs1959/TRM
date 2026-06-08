@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/@angular/service-worker/config/schema.json",
+  "index": "/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "resources": {
+        "files": [
+          "/favicon.ico",
+          "/index.html",
+          "/manifest.webmanifest",
+          "/*.vtt",
+          "/*.bundle.js",
+          "/*.chunk.js",
+          "/*.js",
+          "/*.css"
+        ]
+      }
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": [
+          "/assets/**",
+          "/*.(svg|png|jpg|jpeg|gif|webp|woff|woff2|ttf|eot|ico)"
+        ]
+      }
+    }
+  ],
+  "dataGroups": [
+    {
+      "name": "lookup-tables-freshness",
+      "urls": [
+        "http://localhost:5001/**",
+        "https://*.cloudfunctions.net/**"
+      ],
+      "cacheConfig": {
+        "maxSize": 20,
+        "maxAge": "12h",
+        "timeout": "3s",
+        "strategy": "freshness"
+      }
+    }
+  ]
+}
