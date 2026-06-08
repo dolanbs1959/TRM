@@ -865,7 +865,7 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
       '48': (inspectionForm.penetrationsLeaks || '').toString(),
       '49': (inspectionForm.fieldCondition || '').toString(),
       '50': (inspectionForm.ridgeCondition || '').toString(),
-      '47': (inspectionForm.flashingsNeedingService || '').toString(),
+      '153': Array.isArray(inspectionForm.flashingsNeedingService) ? inspectionForm.flashingsNeedingService.join(';') : (inspectionForm.flashingsNeedingService || '').toString(),
       '51': toQuickbaseCheckboxValue(inspectionForm.bootsNeeded),
       '52': toOptionalNumber(inspectionForm.bootQty15),
       '56': toOptionalNumber(inspectionForm.bootQty2),
