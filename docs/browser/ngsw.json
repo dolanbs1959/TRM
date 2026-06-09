@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1781026745332,
+  "timestamp": 1781031272348,
   "index": "/index.html",
   "assetGroups": [
     {
@@ -147,6 +147,9 @@
       "urls": [
         "/assets/TRM_logo.png",
         "/assets/icon/favicon.png",
+        "/assets/icon/icon-192x192.png",
+        "/assets/icon/icon-512x512.png",
+        "/assets/icon/maskable-512x512.png",
         "/assets/shapes.svg",
         "/assets/shingle-pattern.png",
         "/assets/truck-icon.png"
@@ -174,6 +177,9 @@
   "hashTable": {
     "/assets/TRM_logo.png": "f7469b9b47208449c70971fa41ea8a4c56b00464",
     "/assets/icon/favicon.png": "7798b8e0eb61d7375c245af78bbf5c916932bf13",
+    "/assets/icon/icon-192x192.png": "c6c1f52151bb4cf08216a1fb318bca3c578e36a7",
+    "/assets/icon/icon-512x512.png": "0c1dda230188f6d414d4e710b0794b9868cf2c8a",
+    "/assets/icon/maskable-512x512.png": "0c1dda230188f6d414d4e710b0794b9868cf2c8a",
     "/assets/shapes.svg": "5413e95adabcb2cb639970051f55e0ddb64ace53",
     "/assets/shingle-pattern.png": "f1657d66502c119e58eaca4bea554a8c1480fd80",
     "/assets/truck-icon.png": "5f768521b707922d1b7f8c90e8cdb587c98e70d7",
@@ -297,7 +303,7 @@
     "/chunk-ZPNF3NBX.js": "f25e299dd2e17f51490c79e92cc6858c972de03b",
     "/index.html": "187bd8fe595973f87040b0e3c71df32a4fc732fd",
     "/main-CG7ZST3R.js": "d2a841122c5277c0f92bba441ffff94e7f822c3b",
-    "/manifest.webmanifest": "76972e30b265fb8e71e48c00bd8bb96bb85a8f8a",
+    "/manifest.webmanifest": "3fd7ac4059c35f36c5e4fffd7c789a518ddecb1e",
     "/polyfills-TDCRLYKL.js": "454f6db4230cc7ab61b24fe465dcc92bf041737d",
     "/styles-PG2PYZAD.css": "25632698c00ea0db7fbe035d91bfd33e746738b5"
   },
