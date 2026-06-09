@@ -588,6 +588,22 @@ async function generateAndDispatchPDF(payload) {
             console.warn('[BackgroundWorker] No email provided, skipping email dispatch.');
         }
 
+        // Explicitly await the email dispatch prior to uploading
+        // We wait for tasks up to this point to guarantee sequencing
+        await Promise.allSettled(tasks).then(results => {
+             results.forEach((result, idx) => {
+                 if (result.status === 'rejected') {
+                     console.error(`[BackgroundWorker] Task ${idx} failed:`, result.reason);
+                 }
+             });
+        });
+
+        // Verify PDF before uploading
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+            throw new Error('[BackgroundWorker] PDF buffer is empty or corrupted, aborting upload.');
+        }
+        console.log(`[BackgroundWorker] PDF buffer verified, size: ${pdfBuffer.length} bytes.`);
+
         // Upload PDF to Quickbase (Field ID:144 on SERVICE_ORDERS table)
         if (payload.serviceOrderId) {
             console.log('[BackgroundWorker] Queuing non-blocking Quickbase API record update to upload PDF asset...');
@@ -603,25 +619,20 @@ async function generateAndDispatchPDF(payload) {
                 }]
             };
 
-            tasks.push(axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, {
-                headers: {
-                    'QB-Realm-Hostname': QB_REALM_HOST,
-                    'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
-                }
-            }).then(() => {
+            try {
+                await axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, {
+                    headers: {
+                        'QB-Realm-Hostname': QB_REALM_HOST,
+                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                    }
+                });
                 console.log('[BackgroundWorker] PDF asset uploaded to Quickbase master record successfully.');
-            }));
+            } catch (qbErr) {
+                console.error('[BackgroundWorker] Quickbase PDF upload failed:', qbErr);
+            }
         } else {
              console.warn('[BackgroundWorker] No service order ID provided, skipping Quickbase upload.');
         }
-
-        await Promise.allSettled(tasks).then(results => {
-             results.forEach((result, idx) => {
-                 if (result.status === 'rejected') {
-                     console.error(`[BackgroundWorker] Task ${idx} failed:`, result.reason);
-                 }
-             });
-        });
 
     } catch (err) {
         // Ensure any failures are captured in error logs but are structurally blocked from crashing
