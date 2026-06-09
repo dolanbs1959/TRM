@@ -514,22 +514,43 @@ async function generateAndDispatchPDF(payload) {
             <html>
             <head>
                 <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; }
-                    .header { text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 20px; }
-                    .line-item { margin-bottom: 10px; }
-                    .total { font-weight: bold; font-size: 1.2em; margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px; }
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 20px; }
+                    .logo-accent { font-size: 24px; font-weight: bold; color: #d9534f; } /* Company Logo Accent */
+                    .meta-block { margin-bottom: 20px; line-height: 1.5; }
+                    .meta-block h3 { margin-bottom: 5px; color: #555; }
+                    .line-item { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                    .total { font-weight: bold; font-size: 1.2em; margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px; text-align: right; }
+                    .signature-block { margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 20px; }
+                    .signature-block img { max-width: 300px; max-height: 100px; display: block; margin-top: 10px; }
                 </style>
             </head>
             <body>
                 <div class="header">
-                    <h1>Roof Medic Estimate</h1>
-                    <p>Service Order #: ${payload.serviceOrderId}</p>
+                    <div class="logo-accent">Roof Medic</div>
+                    <div>
+                        <h2>Estimate</h2>
+                        <p>Service Order #: ${payload.serviceOrderId}</p>
+                        <p>Date: ${payload.submissionDate}</p>
+                    </div>
+                </div>
+
+                <div class="meta-block">
+                    <h3>Customer Information</h3>
+                    <p><strong>Name:</strong> ${payload.customerName}</p>
+                    <p><strong>Address:</strong> ${payload.locationAddress}</p>
+                    <p><strong>Phone:</strong> ${payload.customerPhone}</p>
+                    <p><strong>Email:</strong> ${payload.locationEmail}</p>
                 </div>
 
                 <div>
                     <h3>Line Items</h3>
                     ${payload.activeEstimateItems && Array.isArray(payload.activeEstimateItems)
-                        ? payload.activeEstimateItems.map(item => `<div class="line-item">${item.description || 'Item'} - $${item.amount || 0}</div>`).join('')
+                        ? payload.activeEstimateItems.map(item => `
+                            <div class="line-item">
+                                <span>${item.description || 'Item'}</span>
+                                <span>$${item.amount || 0}</span>
+                            </div>`).join('')
                         : '<p>No items.</p>'}
                 </div>
 
@@ -537,6 +558,13 @@ async function generateAndDispatchPDF(payload) {
                     <p>Subtotal: $${payload.subtotal || 0}</p>
                     <p>Tax: $${payload.taxAmount || 0}</p>
                     <p>Total: $${payload.totalAmount || 0}</p>
+                </div>
+
+                <div class="signature-block">
+                    <h3>Authorization & Digital Signature</h3>
+                    ${payload.digitalSignatureDataUrl
+                        ? `<img src="${payload.digitalSignatureDataUrl}" alt="Customer Signature" />`
+                        : '<p><em>No signature provided.</em></p>'}
                 </div>
             </body>
             </html>
@@ -608,8 +636,12 @@ async function generateAndDispatchPDF(payload) {
         if (payload.serviceOrderId) {
             console.log('[BackgroundWorker] Queuing non-blocking Quickbase API record update to upload PDF asset...');
 
+            // Explicitly clone the buffer stream to ensure it is isolated and fully finalized
+            // before base64 encoding, preventing the race condition with the email tasks.
+            const uploadBuffer = Buffer.from(pdfBuffer);
+
             // For File attachment in JSON API, encode buffer to base64
-            const base64Pdf = pdfBuffer.toString('base64');
+            const base64Pdf = uploadBuffer.toString('base64');
 
             const qbPayload = {
                 to: TABLES.SERVICE_ORDERS,
@@ -773,7 +805,12 @@ async function handleSubmitEstimateData(req, res) {
             activeEstimateItems: estimateRows.map((row, index) => ({
                 description: activeEstimateItems[index]?.description || 'Item',
                 amount: activeEstimateItems[index]?.price || row['14']?.value || 0
-            }))
+            })),
+            customerName: inboundBody.customerName || 'Valued Customer',
+            locationAddress: inboundBody.locationAddress || 'N/A',
+            customerPhone: inboundBody.customerPhone || 'N/A',
+            digitalSignatureDataUrl: normalizedSignatureDataUrl || null,
+            submissionDate: new Date().toLocaleDateString()
         });
 
         return res.json({
