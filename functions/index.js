@@ -2,6 +2,8 @@ const functions = require('firebase-functions');
 const express = require('express');
 const cors = require('cors')({ origin: true });
 const axios = require('axios');
+const nodemailer = require('nodemailer');
+const puppeteer = require('puppeteer');
 
 const app = express();
 app.use(cors);
@@ -491,6 +493,185 @@ function normalizeRoofRecordIds(roofRecordIds) {
     ));
 }
 
+async function generateAndDispatchPDF(payload) {
+    try {
+        console.log('[BackgroundWorker] Starting PDF generation and dispatch...');
+
+        // Setup Nodemailer transporter
+        const transporter = nodemailer.createTransport({
+            host: 'smtp.ionos.com',
+            port: 465,
+            secure: true, // Forces SSL authentication protocol
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
+
+        // HTML presentation layout mapped from job variables
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 20px; }
+                    .logo-accent { font-size: 24px; font-weight: bold; color: #d9534f; } /* Company Logo Accent */
+                    .meta-block { margin-bottom: 20px; line-height: 1.5; }
+                    .meta-block h3 { margin-bottom: 5px; color: #555; }
+                    .line-item { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                    .total { font-weight: bold; font-size: 1.2em; margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px; text-align: right; }
+                    .signature-block { margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 20px; }
+                    .signature-block img { max-width: 300px; max-height: 100px; display: block; margin-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo-accent">Roof Medic</div>
+                    <div>
+                        <h2>Estimate</h2>
+                        <p>Service Order #: ${payload.serviceOrderId}</p>
+                        <p>Date: ${payload.submissionDate}</p>
+                    </div>
+                </div>
+
+                <div class="meta-block">
+                    <h3>Customer Information</h3>
+                    <p><strong>Name:</strong> ${payload.customerName}</p>
+                    <p><strong>Address:</strong> ${payload.locationAddress}</p>
+                    <p><strong>Phone:</strong> ${payload.customerPhone}</p>
+                    <p><strong>Email:</strong> ${payload.locationEmail}</p>
+                </div>
+
+                <div>
+                    <h3>Line Items</h3>
+                    ${payload.activeEstimateItems && Array.isArray(payload.activeEstimateItems)
+                        ? payload.activeEstimateItems.map(item => `
+                            <div class="line-item">
+                                <span>${item.description || 'Item'}</span>
+                                <span>$${item.amount || 0}</span>
+                            </div>`).join('')
+                        : '<p>No items.</p>'}
+                </div>
+
+                <div class="total">
+                    <p>Subtotal: $${payload.subtotal || 0}</p>
+                    <p>Tax: $${payload.taxAmount || 0}</p>
+                    <p>Total: $${payload.totalAmount || 0}</p>
+                </div>
+
+                <div class="signature-block">
+                    <h3>Authorization & Digital Signature</h3>
+                    ${payload.digitalSignatureDataUrl
+                        ? `<img src="${payload.digitalSignatureDataUrl}" alt="Customer Signature" />`
+                        : '<p><em>No signature provided.</em></p>'}
+                </div>
+            </body>
+            </html>
+        `;
+
+        // Launch Puppeteer to generate PDF in memory
+        console.log('[BackgroundWorker] Launching Puppeteer...');
+        let browser = null;
+        let pdfBuffer = null;
+        try {
+            browser = await puppeteer.launch({
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            });
+            const page = await browser.newPage();
+            await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+            pdfBuffer = await page.pdf({ format: 'A4' });
+            console.log('[BackgroundWorker] PDF compiled successfully in memory.');
+        } finally {
+            if (browser) {
+                await browser.close();
+            }
+        }
+
+        const filename = `Estimate_${payload.serviceOrderId}.pdf`;
+
+        // Parallel execution for email and upload
+        const tasks = [];
+
+        // Hand the PDF binary directly to the transactional email service
+        if (payload.locationEmail) {
+            console.log('[BackgroundWorker] Queuing PDF handover to transactional email service...');
+            const mailOptions = {
+                from: '"The Roof Medic Estimates" <' + process.env.EMAIL_USER + '>',
+                to: payload.locationEmail,
+                subject: `Your Roof Medic Estimate Details for Service Order #${payload.serviceOrderId}`,
+                text: "Please find your itemized roof service estimate attached as a PDF.",
+                attachments: [
+                    {
+                        filename: filename,
+                        content: pdfBuffer
+                    }
+                ]
+            };
+
+            tasks.push(transporter.sendMail(mailOptions).then(() => {
+                console.log('[BackgroundWorker] Email dispatched successfully to', payload.locationEmail);
+            }));
+        } else {
+            console.warn('[BackgroundWorker] No email provided, skipping email dispatch.');
+        }
+
+        // Explicitly await the email dispatch prior to uploading
+        // We wait for tasks up to this point to guarantee sequencing
+        await Promise.allSettled(tasks).then(results => {
+             results.forEach((result, idx) => {
+                 if (result.status === 'rejected') {
+                     console.error(`[BackgroundWorker] Task ${idx} failed:`, result.reason);
+                 }
+             });
+        });
+
+        // Verify PDF before uploading
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+            throw new Error('[BackgroundWorker] PDF buffer is empty or corrupted, aborting upload.');
+        }
+        console.log(`[BackgroundWorker] PDF buffer verified, size: ${pdfBuffer.length} bytes.`);
+
+        // Upload PDF to Quickbase (Field ID:144 on SERVICE_ORDERS table)
+        if (payload.serviceOrderId) {
+            console.log('[BackgroundWorker] Queuing non-blocking Quickbase API record update to upload PDF asset...');
+
+            // Explicitly clone the buffer stream to ensure it is isolated and fully finalized
+            // before base64 encoding, preventing the race condition with the email tasks.
+            const uploadBuffer = Buffer.from(pdfBuffer);
+
+            // For File attachment in JSON API, encode buffer to base64
+            const base64Pdf = uploadBuffer.toString('base64');
+
+            const qbPayload = {
+                to: TABLES.SERVICE_ORDERS,
+                data: [{
+                    '3': { value: parseInt(payload.serviceOrderId, 10) },
+                    '144': { value: { fileName: filename, data: base64Pdf } }
+                }]
+            };
+
+            try {
+                await axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, {
+                    headers: {
+                        'QB-Realm-Hostname': QB_REALM_HOST,
+                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                    }
+                });
+                console.log('[BackgroundWorker] PDF asset uploaded to Quickbase master record successfully.');
+            } catch (qbErr) {
+                console.error('[BackgroundWorker] Quickbase PDF upload failed:', qbErr);
+            }
+        } else {
+             console.warn('[BackgroundWorker] No service order ID provided, skipping Quickbase upload.');
+        }
+
+    } catch (err) {
+        // Ensure any failures are captured in error logs but are structurally blocked from crashing
+        console.error('[BackgroundWorker] Detached async error during PDF generation, email delivery, or attachment upload:', err);
+    }
+}
+
 async function handleSubmitEstimateData(req, res) {
     const inboundBody = req.body && typeof req.body === 'object' ? req.body : {};
     console.log('[Estimate][InboundBodyShape]', {
@@ -613,6 +794,24 @@ async function handleSubmitEstimateData(req, res) {
                 roofRecordIds: normalizedRoofRecordIds
             });
         }
+
+        // Trigger the detached asynchronous execution block
+        generateAndDispatchPDF({
+            serviceOrderId: normalizedServiceOrderId,
+            locationEmail: normalizedLocationEmail,
+            subtotal: normalizedSubtotal,
+            taxAmount: normalizedTaxAmount,
+            totalAmount: normalizedTotalAmount,
+            activeEstimateItems: estimateRows.map((row, index) => ({
+                description: activeEstimateItems[index]?.description || 'Item',
+                amount: activeEstimateItems[index]?.price || row['14']?.value || 0
+            })),
+            customerName: inboundBody.customerName || 'Valued Customer',
+            locationAddress: inboundBody.locationAddress || 'N/A',
+            customerPhone: inboundBody.customerPhone || 'N/A',
+            digitalSignatureDataUrl: normalizedSignatureDataUrl || null,
+            submissionDate: new Date().toLocaleDateString()
+        });
 
         return res.json({
             success: true,
