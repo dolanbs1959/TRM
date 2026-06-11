@@ -2,6 +2,7 @@ import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AlertController } from '@ionic/angular';
 import { AuthService, OfferedServiceItem } from '../services/auth.service';
+import { calculateTax, getTaxRate } from '../services/tax-utility.service';
 
 interface EstimateFieldDefinition {
   label: string;
@@ -59,6 +60,8 @@ interface EstimateSubmissionPayloadItem {
   sqFootage: number;
   price: number;
   lineSubtotal: number;
+  amount?: number;
+  uom?: string;
 }
 
 interface EstimateCategoryGroup {
@@ -128,54 +131,6 @@ export class EstimatePage implements OnInit {
   private static readonly INSPECTION_DRAFT_DB_VERSION = 1;
   private static readonly INSPECTION_PHOTO_STORE_NAME = 'inspectionPhotoDrafts';
   private static readonly PACKAGE_SECTION_ORDER = ['Budget', 'Value', 'Basic Maintenance'];
-  private static readonly DEFAULT_STATE_TAX_RATES: Record<string, number> = {
-    wa: 0.065,
-  };
-  private static readonly POSTAL_TAX_RATES: Record<string, number> = {
-    '98001': 0.101,
-    '98002': 0.101,
-    '98003': 0.101,
-    '98023': 0.101,
-    '98030': 0.102,
-    '98031': 0.102,
-    '98032': 0.102,
-    '98042': 0.102,
-    '98092': 0.101,
-    '98371': 0.103,
-    '98372': 0.103,
-    '98373': 0.103,
-    '98374': 0.103,
-    '98375': 0.101,
-    '98402': 0.103,
-    '98403': 0.103,
-    '98404': 0.103,
-    '98405': 0.103,
-    '98406': 0.103,
-    '98407': 0.103,
-    '98408': 0.103,
-    '98409': 0.103,
-    '98418': 0.103,
-    '98101': 0.1035,
-    '98102': 0.1035,
-    '98103': 0.1035,
-    '98104': 0.1035,
-    '98105': 0.1035,
-  };
-  private static readonly CITY_TAX_RATES: Record<string, Record<string, number>> = {
-    wa: {
-      auburn: 0.101,
-      'bonney lake': 0.101,
-      'federal way': 0.101,
-      fife: 0.101,
-      kent: 0.102,
-      lakewood: 0.102,
-      puyallup: 0.103,
-      seattle: 0.1035,
-      spanaway: 0.101,
-      sumner: 0.103,
-      tacoma: 0.103,
-    },
-  };
   readonly servicePledgeText = 'It is our pledge to render careful, professional cleaning services using reasonable care to obtain satisfactory results. We do not guarantee all leaks or cracks in any type of roof material will be discovered. Factors of installation and/or deterioration that are disguised or covered cannot be predicted in the hands of even the most careful workman. Gutters that are rusted and/or brittle can potentially leak or break during a cleaning process. We do guarantee that we will be careful to clean the roof in a manner that will reduce the risk of any of these instances.';
   readonly datesOfServiceText = 'All dates subject to change based on weather and other unforeseen circumstances. You will be notified as soon as possible if services need to be rescheduled. There is no exact time of arrival for these dates.';
   readonly authorizationText = 'By signing this you are acknowledging that you are authorizing The Roof Medic to perform all services that are indicated on this form and are agreeing to pay the prices quoted on this form for those services (plus sales tax, minus any discounts noted on this form) within 15 days of all services being completed (unless otherwise stated on this form). Late Fees will begin accumulating at a rate of 1.5% per month on any unpaid balance after the due date. You also agree to review the Pre-Cleaning Service Recommendations sheet provided and understand that you are responsible for any property preparations listed on that sheet as well as any rescheduling and/or cancellation fees and requirements noted on that sheet. In the event of legal action to collect sums due under this contract, The Roof Medic will be entitled to reasonable attorney fees and cost in addition to the contact amount. We may withdraw this proposal if not accepted in 30 days.';
@@ -818,7 +773,8 @@ export class EstimatePage implements OnInit {
   }
 
   getCartTaxTotal(): number {
-    return this.roundCurrency(this.getCartTaxableSubtotal() * this.getEstimatedTaxRate());
+    const postalCode = this.getPostalCode();
+    return this.roundCurrency(calculateTax(this.getCartTaxableSubtotal(), postalCode));
   }
 
   getCartGrandTotal(): number {
@@ -965,18 +921,7 @@ export class EstimatePage implements OnInit {
 
   getEstimatedTaxRate(): number {
     const postalCode = this.getPostalCode();
-    if (postalCode && Number.isFinite(EstimatePage.POSTAL_TAX_RATES[postalCode])) {
-      return EstimatePage.POSTAL_TAX_RATES[postalCode];
-    }
-
-    const stateKey = this.normalizeText(this.getFieldValue(104));
-    const cityKey = this.normalizeText(this.getFieldValue(92));
-    const stateRates = EstimatePage.CITY_TAX_RATES[stateKey] || {};
-    if (cityKey && Number.isFinite(stateRates[cityKey])) {
-      return stateRates[cityKey];
-    }
-
-    return EstimatePage.DEFAULT_STATE_TAX_RATES[stateKey] || 0;
+    return getTaxRate(postalCode);
   }
 
   getEstimatedTaxRateLabel(): string {
@@ -1209,6 +1154,8 @@ export class EstimatePage implements OnInit {
       sqFootage: Number(item.sqFootage || this.selectedRoofSquareFootage || 0) || 0,
       price: Number(item.price) || 0,
       lineSubtotal: Number(item.lineSubtotal) || 0,
+      amount: Number(item.lineSubtotal) || 0,
+      uom: String(item.unit || '').trim(),
     }));
   }
 
@@ -1226,6 +1173,25 @@ export class EstimatePage implements OnInit {
   }
 
   private buildEstimateSubmissionPayload(submissionMode: 'estimated' | 'sold', locationEmail: string) {
+    const customerFirstName = this.getFieldValue(93);
+    const customerLastName = this.getFieldValue(94);
+    const customerName = `${customerFirstName} ${customerLastName}`.trim();
+    const addressStreet = this.getFieldValue(106);
+    const addressCity = this.getFieldValue(92);
+    const addressZip = this.getFieldValue(105);
+    const locationAddress = `${addressStreet}, ${addressCity}, WA ${addressZip}`.trim();
+    const customerPhone = this.getFieldValue(95);
+
+    // Build roof structures data
+    const roofStructures = this.inspectionHubRoofTiles
+      .filter((tile) => tile.isAdded)
+      .map((tile) => ({
+        name: tile.name,
+        material: tile.material,
+        pitch: tile.pitch,
+        squareFootage: tile.squareFootage,
+      }));
+
     return {
       serviceOrderId: this.getJobRecordId(),
       locationRecordId: this.getLocationRecordId(),
@@ -1242,22 +1208,36 @@ export class EstimatePage implements OnInit {
       secondaryDiscountAmount: this.getCartDiscountTotal(),
       secondaryDiscountPercentage: this.secondaryDiscountPercentage,
       discountControlValue: this.discountControlValue,
+      customerName,
+      locationAddress,
+      customerPhone,
+      roofStructures,
+      totalSquareFootage: this.selectedRoofSquareFootage,
     };
   }
 
   async submitEstimate() {
+    console.log('[Estimate Submit] Starting submission process');
+    
     if (this.isSubmittingEstimate) {
+      console.log('[Estimate Submit] Already submitting, returning');
       return;
     }
 
     if (!this.job || this.activeEstimateItems.length === 0) {
+      console.log('[Estimate Submit] Missing job or no active items', {
+        hasJob: !!this.job,
+        itemCount: this.activeEstimateItems.length
+      });
       return;
     }
 
     let locationEmail = this.locationEmail;
     if (!locationEmail) {
+      console.log('[Estimate Submit] No location email, prompting user');
       const promptedEmail = await this.promptForLocationEmail();
       if (!promptedEmail) {
+        console.log('[Estimate Submit] User cancelled email prompt');
         return;
       }
       locationEmail = promptedEmail;
@@ -1265,9 +1245,11 @@ export class EstimatePage implements OnInit {
     }
 
     const submissionMode: 'estimated' | 'sold' = this.hasSignatureData() ? 'sold' : 'estimated';
+    console.log('[Estimate Submit] Submission mode:', submissionMode);
 
     const locationRecordId = this.getLocationRecordId();
     if (!locationRecordId) {
+      console.log('[Estimate Submit] Missing location record ID');
       const recordAlert = await this.alertController.create({
         header: 'Missing Location Record',
         message: 'Unable to resolve the related location record for this estimate.',
@@ -1277,10 +1259,13 @@ export class EstimatePage implements OnInit {
       return;
     }
 
+    console.log('[Estimate Submit] All validations passed, preparing payload');
     this.isSubmittingEstimate = true;
     try {
       const payload = this.buildEstimateSubmissionPayload(submissionMode, locationEmail);
+      console.log('[Estimate Submit] Payload built:', payload);
       const response = await this.authService.submitEstimateSubmission(payload);
+      console.log('[Estimate Submit] Response received:', response);
       if (!response?.success) {
         throw new Error(response?.message || 'Estimate submission failed');
       }

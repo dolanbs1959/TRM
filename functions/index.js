@@ -4,6 +4,7 @@ const cors = require('cors')({ origin: true });
 const axios = require('axios');
 const nodemailer = require('nodemailer');
 const puppeteer = require('puppeteer');
+const { generatePDFHtml } = require('./pdfGenerator');
 
 const app = express();
 app.use(cors);
@@ -508,67 +509,32 @@ async function generateAndDispatchPDF(payload) {
             }
         });
 
-        // HTML presentation layout mapped from job variables
-        const htmlContent = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
-                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 20px; }
-                    .logo-accent { font-size: 24px; font-weight: bold; color: #d9534f; } /* Company Logo Accent */
-                    .meta-block { margin-bottom: 20px; line-height: 1.5; }
-                    .meta-block h3 { margin-bottom: 5px; color: #555; }
-                    .line-item { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-                    .total { font-weight: bold; font-size: 1.2em; margin-top: 20px; border-top: 2px solid #ccc; padding-top: 10px; text-align: right; }
-                    .signature-block { margin-top: 40px; border-top: 1px dashed #ccc; padding-top: 20px; }
-                    .signature-block img { max-width: 300px; max-height: 100px; display: block; margin-top: 10px; }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <div class="logo-accent">Roof Medic</div>
-                    <div>
-                        <h2>Estimate</h2>
-                        <p>Service Order #: ${payload.serviceOrderId}</p>
-                        <p>Date: ${payload.submissionDate}</p>
-                    </div>
-                </div>
+        // Transform payload to match pdfGenerator expected format
+        const job = {
+            '3': payload.serviceOrderId,
+            '93': payload.customerName?.split(' ')[0] || '',
+            '94': payload.customerName?.split(' ').slice(1).join(' ') || '',
+            '106': payload.locationAddress || '',
+            '92': '', // Will be extracted from locationAddress if needed
+            '105': '', // Will be extracted from locationAddress if needed
+            '142': payload.locationEmail || '',
+            '95': payload.customerPhone || ''
+        };
 
-                <div class="meta-block">
-                    <h3>Customer Information</h3>
-                    <p><strong>Name:</strong> ${payload.customerName}</p>
-                    <p><strong>Address:</strong> ${payload.locationAddress}</p>
-                    <p><strong>Phone:</strong> ${payload.customerPhone}</p>
-                    <p><strong>Email:</strong> ${payload.locationEmail}</p>
-                </div>
+        const lineItems = payload.activeEstimateItems?.map(item => ({
+            qty: 1,
+            unitPrice: item.amount || 0,
+            uom: item.uom || 'ea',
+            sqFootage: item.sqFootage || 0,
+            description: item.description || 'Item'
+        })) || [];
 
-                <div>
-                    <h3>Line Items</h3>
-                    ${payload.activeEstimateItems && Array.isArray(payload.activeEstimateItems)
-                        ? payload.activeEstimateItems.map(item => `
-                            <div class="line-item">
-                                <span>${item.description || 'Item'}</span>
-                                <span>$${item.amount || 0}</span>
-                            </div>`).join('')
-                        : '<p>No items.</p>'}
-                </div>
+        const signatureData = payload.digitalSignatureDataUrl || null;
+        const roofStructures = payload.roofStructures || [];
+        const totalSquareFootage = payload.totalSquareFootage || 0;
 
-                <div class="total">
-                    <p>Subtotal: $${payload.subtotal || 0}</p>
-                    <p>Tax: $${payload.taxAmount || 0}</p>
-                    <p>Total: $${payload.totalAmount || 0}</p>
-                </div>
-
-                <div class="signature-block">
-                    <h3>Authorization & Digital Signature</h3>
-                    ${payload.digitalSignatureDataUrl
-                        ? `<img src="${payload.digitalSignatureDataUrl}" alt="Customer Signature" />`
-                        : '<p><em>No signature provided.</em></p>'}
-                </div>
-            </body>
-            </html>
-        `;
+        // Generate HTML using the pdfGenerator
+        const htmlContent = generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage);
 
         // Launch Puppeteer to generate PDF in memory
         console.log('[BackgroundWorker] Launching Puppeteer...');
