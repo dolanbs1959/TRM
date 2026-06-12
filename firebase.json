@@ -13,7 +13,7 @@
       ]
     }
   ],
-"hosting": {
+  "hosting": {
     "public": "docs/browser",
     "ignore": [
       "firebase.json",
@@ -21,6 +21,10 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/api/**",
+        "function": "apiV2"
+      },
       {
         "source": "**",
         "destination": "/index.html"

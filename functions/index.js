@@ -3,12 +3,26 @@ const express = require('express');
 const cors = require('cors')({ origin: true });
 const axios = require('axios');
 const nodemailer = require('nodemailer');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const { generatePDFHtml } = require('./pdfGenerator');
 
 const app = express();
+    app.use((req, res, next) => {
+        console.log(`[DEBUG-REQUEST] Incoming ${req.method} ${req.url}`);
+        next();
+    });
 app.use(cors);
 app.use(express.json({ limit: '50mb' }));
+// Add middleware to log all incoming requests
+app.use((req, res, next) => {
+    console.log('[REQUEST]', {
+        method: req.method,
+        path: req.path,
+        url: req.url,
+        timestamp: new Date().toISOString()
+    });
+    next();
+});
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // --- TRM CONFIGURATION ---
@@ -496,7 +510,22 @@ function normalizeRoofRecordIds(roofRecordIds) {
 
 async function generateAndDispatchPDF(payload) {
     try {
-        console.log('[BackgroundWorker] Starting PDF generation and dispatch...');
+        console.log('[BackgroundWorker] Starting PDF generation and dispatch (v2)...');
+        console.log('[BackgroundWorker] Payload:', {
+            serviceOrderId: payload.serviceOrderId,
+            locationEmail: payload.locationEmail,
+            hasLineItems: !!payload.activeEstimateItems?.length,
+            lineItemCount: payload.activeEstimateItems?.length || 0,
+            hasRoofStructures: !!payload.roofStructures?.length,
+            roofStructureCount: payload.roofStructures?.length || 0,
+            totalSquareFootage: payload.totalSquareFootage
+        });
+
+        // Check environment variables
+        console.log('[BackgroundWorker] Environment check:', {
+            hasEmailUser: !!process.env.EMAIL_USER,
+            hasEmailPass: !!process.env.EMAIL_PASS
+        });
 
         // Setup Nodemailer transporter
         const transporter = nodemailer.createTransport({
@@ -534,23 +563,38 @@ async function generateAndDispatchPDF(payload) {
         const totalSquareFootage = payload.totalSquareFootage || 0;
 
         // Generate HTML using the pdfGenerator
+        console.log('[BackgroundWorker] Generating HTML...');
         const htmlContent = generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage);
+        console.log('[BackgroundWorker] HTML generated, length:', htmlContent.length);
 
         // Launch Puppeteer to generate PDF in memory
         console.log('[BackgroundWorker] Launching Puppeteer...');
         let browser = null;
         let pdfBuffer = null;
         try {
-            browser = await puppeteer.launch({
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
-            });
+        // Consolidate the configuration into one clean definition
+        const executablePath = process.env.CHROME_EXECUTABLE_PATH || '/usr/bin/google-chrome';
+
+        browser = await puppeteer.launch({
+            executablePath, // Uses the single declaration above
+            headless: 'new',
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ]
+        });            console.log('[BackgroundWorker] Puppeteer launched');
             const page = await browser.newPage();
+            console.log('[BackgroundWorker] Setting page content...');
             await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+            console.log('[BackgroundWorker] Generating PDF...');
             pdfBuffer = await page.pdf({ format: 'A4' });
-            console.log('[BackgroundWorker] PDF compiled successfully in memory.');
+            console.log('[BackgroundWorker] PDF compiled successfully in memory, size:', pdfBuffer.length);
         } finally {
             if (browser) {
                 await browser.close();
+                console.log('[BackgroundWorker] Puppeteer closed');
             }
         }
 
@@ -561,6 +605,7 @@ async function generateAndDispatchPDF(payload) {
 
         // Hand the PDF binary directly to the transactional email service
         if (payload.locationEmail) {
+            console.log('[BackgroundWorker] Preparing email to:', payload.locationEmail);
             console.log('[BackgroundWorker] Queuing PDF handover to transactional email service...');
             const mailOptions = {
                 from: '"The Roof Medic Estimates" <' + process.env.EMAIL_USER + '>',
@@ -577,6 +622,9 @@ async function generateAndDispatchPDF(payload) {
 
             tasks.push(transporter.sendMail(mailOptions).then(() => {
                 console.log('[BackgroundWorker] Email dispatched successfully to', payload.locationEmail);
+            }).catch((error) => {
+                console.error('[BackgroundWorker] Email send failed:', error);
+                throw error;
             }));
         } else {
             console.warn('[BackgroundWorker] No email provided, skipping email dispatch.');
@@ -633,12 +681,18 @@ async function generateAndDispatchPDF(payload) {
         }
 
     } catch (err) {
-        // Ensure any failures are captured in error logs but are structurally blocked from crashing
-        console.error('[BackgroundWorker] Detached async error during PDF generation, email delivery, or attachment upload:', err);
-    }
+            // Force the full error object and stack trace to appear
+            console.error('[BackgroundWorker][FATAL_FAILURE]', {
+                message: err.message,
+                stack: err.stack,
+                cause: err.cause,
+                code: err.code
+            });
+        }
 }
 
 async function handleSubmitEstimateData(req, res) {
+    console.log('[DEBUG-TRIGGER] Submit Estimate endpoint was called');
     const inboundBody = req.body && typeof req.body === 'object' ? req.body : {};
     console.log('[Estimate][InboundBodyShape]', {
         topLevelKeys: Object.keys(inboundBody),
@@ -762,7 +816,9 @@ async function handleSubmitEstimateData(req, res) {
         }
 
         // Trigger the detached asynchronous execution block
-        generateAndDispatchPDF({
+        console.log('[Estimate] About to call generateAndDispatchPDF with serviceOrderId:', normalizedServiceOrderId);
+        console.log('[Estimate] Calling PDF generation with updated Puppeteer config for cloud compatibility');
+        await generateAndDispatchPDF({
             serviceOrderId: normalizedServiceOrderId,
             locationEmail: normalizedLocationEmail,
             subtotal: normalizedSubtotal,
@@ -776,8 +832,12 @@ async function handleSubmitEstimateData(req, res) {
             locationAddress: inboundBody.locationAddress || 'N/A',
             customerPhone: inboundBody.customerPhone || 'N/A',
             digitalSignatureDataUrl: normalizedSignatureDataUrl || null,
-            submissionDate: new Date().toLocaleDateString()
+            submissionDate: new Date().toLocaleDateString(),
+            roofStructures: inboundBody.roofStructures || [],
+            totalSquareFootage: inboundBody.totalSquareFootage || 0
         });
+        
+        console.log('[Estimate] generateAndDispatchPDF called (async, non-blocking)');
 
         return res.json({
             success: true,
@@ -1131,7 +1191,7 @@ app.post('/login', async (req, res) => {
             }
         });
 
-if (response.data.data.length > 0) {
+    if (response.data.data.length > 0) {
             const userData = response.data.data[0];
             const employeeRecordId = userData['3'].value; 
             const todayStr = new Date().toISOString().split('T')[0];
@@ -2344,7 +2404,20 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
     app.post('/api/submit-inspection-data', handleSubmitInspectionData);
     app.post('/inspections/submit', handleSubmitInspectionData);
     app.post('/estimate/submit', handleSubmitEstimateData);
-    app.post('/api/estimate/submit', handleSubmitEstimateData);
+
+    app.post('/api/estimate/submit', async (req, res) => {
+            const submissionData = req.body;
+
+            // 1. Send the 202 Accepted status immediately
+            // This tells the PWA "I have the data, you can stop waiting"
+            res.status(202).json({ success: true, message: 'Data received, processing email in background' });
+
+            // 2. Now run the heavy lifting (PDF generation + Emailing) in the background
+            // We do NOT 'await' this, so it doesn't block the response
+            generateAndSendEmail(submissionData).catch(err => {
+                console.error('Background Email/PDF Failure:', err);
+            });
+        });
 
     // --- QUERY ROOFS BY LOCATION ---
     app.post('/roofs/query', async (req, res) => {
@@ -2922,4 +2995,9 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
 app.post('/roofs/update', handleRoofUpdate);
 app.post('/api/roofs/update', handleRoofUpdate);
 
-exports.api = functions.https.onRequest(app);
+// --- DEPLOYMENT VERIFICATION ENDPOINT ---
+app.get('/verify-deploy', (req, res) => {
+    res.status(200).send('DEPLOYMENT_ACTIVE_2026_06_12_10AM');
+});
+
+exports.apiV2 = functions.https.onRequest(app);
