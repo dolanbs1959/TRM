@@ -1,5 +1,5 @@
 export const environment = {
   production: true,
-  // apiUrl: 'https://us-central1-trm-mobile-7aa17.cloudfunctions.net/api'
-  apiUrl: 'https://us-central1-trm-mobile-7aa17.cloudfunctions.net/apiV2'
+  // Point to the relative path so that Firebase Hosting proxy intercepts and rewrites to the Cloud Function
+  apiUrl: '/api'
 };
