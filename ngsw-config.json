@@ -35,7 +35,7 @@
       "name": "lookup-tables-freshness",
       "urls": [
         "http://localhost:5001/**",
-        "https://*.cloudfunctions.net/**"
+        "/api/**"
       ],
       "cacheConfig": {
         "maxSize": 20,

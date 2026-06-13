@@ -3000,4 +3000,10 @@ app.get('/verify-deploy', (req, res) => {
     res.status(200).send('DEPLOYMENT_ACTIVE_2026_06_12_10AM');
 });
 
+// CATCH-ALL MIDDLEWARE FOR DIAGNOSTIC LOGGING
+app.use('*', (req, res) => {
+    console.error(`[EXPRESS-404-CATCHALL] Unhandled Request: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ success: false, message: 'Route not found' });
+});
+
 exports.apiV2 = functions.https.onRequest(app);
