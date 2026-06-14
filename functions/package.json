@@ -3,6 +3,7 @@
   "description": "Cloud Functions for Firebase - Updated for cloud compatibility",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
+    "serve:all": "firebase emulators:start",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
@@ -13,6 +14,7 @@
   },
   "main": "index.js",
   "dependencies": {
+    "@sparticuz/chromium": "^149.0.0",
     "axios": "^1.16.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",

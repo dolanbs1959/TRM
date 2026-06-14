@@ -4,6 +4,7 @@ const cors = require('cors')({ origin: true });
 const axios = require('axios');
 const nodemailer = require('nodemailer');
 const puppeteer = require('puppeteer-core');
+const chromium = require('@sparticuz/chromium').default;
 const { generatePDFHtml } = require('./pdfGenerator');
 
 const app = express();
@@ -573,7 +574,10 @@ async function generateAndDispatchPDF(payload) {
         let pdfBuffer = null;
         try {
         // Consolidate the configuration into one clean definition
-        const executablePath = process.env.CHROME_EXECUTABLE_PATH || '/usr/bin/google-chrome';
+        const executablePath =
+            process.env.FUNCTIONS_EMULATOR === 'true'
+            ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+            : await chromium.executablePath();
 
         browser = await puppeteer.launch({
             executablePath, // Uses the single declaration above
@@ -584,7 +588,8 @@ async function generateAndDispatchPDF(payload) {
                 '--disable-dev-shm-usage',
                 '--disable-gpu'
             ]
-        });            console.log('[BackgroundWorker] Puppeteer launched');
+        });            
+        console.log('[BackgroundWorker] Puppeteer launched');
             const page = await browser.newPage();
             console.log('[BackgroundWorker] Setting page content...');
             await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
