@@ -1,4 +1,5 @@
 const functions = require('firebase-functions');
+const { onRequest } = require('firebase-functions/v2/https');
 const express = require('express');
 const cors = require('cors')({ origin: true });
 const axios = require('axios');
@@ -3005,4 +3006,10 @@ app.get('/verify-deploy', (req, res) => {
     res.status(200).send('DEPLOYMENT_ACTIVE_2026_06_12_10AM');
 });
 
-exports.apiV2 = functions.https.onRequest(app);
+exports.apiV2 = onRequest(
+    {
+        memory: '1GiB',
+        timeoutSeconds: 120
+    },
+    app
+);
