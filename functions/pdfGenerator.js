@@ -51,8 +51,8 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
         return `
             <tr>
                 <td>${qty}</td>
-                <td>${item.description || 'N/A'} ${uom !== 'ea' ? `(${uom})` : ''}</td>
-                <td>$${price.toFixed(2)}</td>
+                <td>${item.description || 'N/A'}</td>
+                <td>$${price.toFixed(2)}${uom ? ` / ${uom}` : ''}</td>
                 <td>$${total.toFixed(2)}</td>
             </tr>
         `;
