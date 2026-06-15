@@ -553,7 +553,7 @@ async function generateAndDispatchPDF(payload) {
         };
 
         const lineItems = payload.activeEstimateItems?.map(item => ({
-            qty: 1,
+            qty: item.qtyNeeded || 1,
             unitPrice: item.amount || 0,
             uom: item.uom || 'ea',
             sqFootage: item.sqFootage || 0,
@@ -832,6 +832,7 @@ async function handleSubmitEstimateData(req, res) {
             totalAmount: normalizedTotalAmount,
             activeEstimateItems: estimateRows.map((row, index) => ({
                 description: activeEstimateItems[index]?.description || 'Item',
+                qtyNeeded: activeEstimateItems[index]?.qtyNeeded || row['16']?.value || 1,
                 amount: activeEstimateItems[index]?.price || row['14']?.value || 0
             })),
             customerName: inboundBody.customerName || 'Valued Customer',
