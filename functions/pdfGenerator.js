@@ -43,7 +43,7 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
         const uom = item.uom || 'ea';
         const sqFootage = parseFloat(item.sqFootage) || parseFloat(totalSquareFootage) || 0;
         
-        const multiplier = isPerSquareUnit(uom) ? sqFootage : 1;
+        const multiplier = isPerSquareUnit(uom) ? sqFootage : (uom.toLowerCase().includes('lf') ? sqFootage : 1);
         const total = qty * price * multiplier;
         
         subtotal += total;

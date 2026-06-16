@@ -865,14 +865,21 @@ export class EstimatePage implements OnInit {
   private recomputeItemPricing(item: ActiveEstimateItem) {
     const qty = Math.max(1, Number.parseInt(String(item.qtyNeeded), 10) || 1);
     const price = Math.max(0, Number(item.price) || 0);
-    const sqFootage = Math.max(0, Number(item.sqFootage || this.selectedRoofSquareFootage || 0) || 0);
-    const multiplier = this.isPerSquareUnit(item.unit) ? sqFootage : 1;
+        const sqFootage = Math.max(0, Number(item.sqFootage || this.selectedRoofSquareFootage || 0) || 0);
+    const isSquare = this.isPerSquareUnit(item.unit);
+    const isLinear = this.isPerLinearUnit(item.unit);
+    const multiplier = (isSquare || isLinear) ? sqFootage : 1;
     const baseSubtotal = qty * price * multiplier;
 
     item.qtyNeeded = qty;
     item.price = price;
     item.sqFootage = sqFootage;
     item.lineSubtotal = baseSubtotal;
+  }
+
+    isPerLinearUnit(unit: string): boolean {
+    const normalized = this.normalizeText(unit);
+    return normalized.includes('lf') || normalized.includes('linear');
   }
 
   isPerSquareUnit(unit: string): boolean {

@@ -258,8 +258,8 @@
               <span class="detail-value">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
             </div>
 
-            <div class="active-item-grid">
-              <label>
+            <div class="active-item-grid" style="align-items: center; justify-content: flex-start; gap: 8px;">
+              <label style="flex: 1; max-width: 80px;">
                 <span class="detail-label">Qty Needed</span>
                 <ion-input
                   type="number"
@@ -270,7 +270,9 @@
                 ></ion-input>
               </label>
 
-              <label>
+              <span style="color: var(--ion-color-medium); font-weight: bold; margin-top: 15px;">&times;</span>
+
+              <label style="flex: 1; max-width: 100px;">
                 <span class="detail-label">Price</span>
                 <ion-input
                   type="number"
@@ -282,8 +284,10 @@
                 ></ion-input>
               </label>
 
-              <label *ngIf="isPerSquareUnit(item.unit)">
-                <span class="detail-label">Sq Footage</span>
+              <span style="color: var(--ion-color-medium); font-weight: bold; margin-top: 15px;" *ngIf="isPerSquareUnit(item.unit) || isPerLinearUnit(item.unit)">&times;</span>
+
+              <label *ngIf="isPerSquareUnit(item.unit) || isPerLinearUnit(item.unit)" style="flex: 1; max-width: 100px;">
+                <span class="detail-label">{{ isPerLinearUnit(item.unit) ? 'Linear Feet' : 'Sq Footage' }}</span>
                 <ion-input
                   type="number"
                   min="0"
@@ -294,19 +298,12 @@
                 ></ion-input>
               </label>
 
-              <div class="active-item-subtotal">
+              <span style="color: var(--ion-color-medium); font-weight: bold; margin-top: 15px;">=</span>
+
+              <div class="active-item-subtotal" style="flex: 1; margin-top: 15px;">
                 <span class="detail-label">Line Subtotal</span>
                 <span class="pricing-value">{{ formatCurrency(item.lineSubtotal) }}</span>
               </div>
-            </div>
-
-            <div class="calculation-preview" style="padding: 4px 16px 8px 16px; font-size: 0.85rem; color: var(--ion-color-medium);">
-              <span class="muted-preview" *ngIf="isPerSquareUnit(item.unit)">
-                {{ item.qtyNeeded || 0 }} QTY &times; {{ formatCurrency(item.price) }} &times; {{ item.sqFootage || 0 }} SQ FT = {{ formatCurrency(item.lineSubtotal) }}
-              </span>
-              <span class="muted-preview" *ngIf="!isPerSquareUnit(item.unit)">
-                {{ item.qtyNeeded || 0 }} QTY &times; {{ formatCurrency(item.price) }} = {{ formatCurrency(item.lineSubtotal) }}
-              </span>
             </div>
 
             <ion-button size="small" color="medium" fill="clear" (click)="removeCatalogItemFromEstimate(item)">
