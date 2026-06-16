@@ -1,6 +1,6 @@
 {
   "configVersion": 1,
-  "timestamp": 1781400545531,
+  "timestamp": 1781638792216,
   "index": "/index.html",
   "assetGroups": [
     {
@@ -12,7 +12,6 @@
       },
       "urls": [
         "/chunk-23JQMX74.js",
-        "/chunk-26CRVQ5C.js",
         "/chunk-26TTNVHV.js",
         "/chunk-2ASAM65E.js",
         "/chunk-2LAHADPZ.js",
@@ -64,6 +63,7 @@
         "/chunk-JHI3MBHO.js",
         "/chunk-JIWYQWFB.js",
         "/chunk-JKZUX2RC.js",
+        "/chunk-JSC3I5MK.js",
         "/chunk-JSKUUUES.js",
         "/chunk-JWPEWEJN.js",
         "/chunk-KNECXGWD.js",
@@ -130,7 +130,7 @@
         "/chunk-ZCVFCQIS.js",
         "/chunk-ZPNF3NBX.js",
         "/index.html",
-        "/main-SQALDUNB.js",
+        "/main-P22X2EFS.js",
         "/manifest.webmanifest",
         "/polyfills-TDCRLYKL.js",
         "/styles-PG2PYZAD.css"
@@ -184,7 +184,6 @@
     "/assets/shingle-pattern.png": "f1657d66502c119e58eaca4bea554a8c1480fd80",
     "/assets/truck-icon.png": "5f768521b707922d1b7f8c90e8cdb587c98e70d7",
     "/chunk-23JQMX74.js": "2c03e78976680369256a98edfc575c08d656ed0b",
-    "/chunk-26CRVQ5C.js": "93233260b10256ae2407464deeb1246b7374a2a0",
     "/chunk-26TTNVHV.js": "e348fcdd7e4b1b9e5d9112cffc68001c5905975d",
     "/chunk-2ASAM65E.js": "b027129fb57711a07f0b6a1299de4797582227a6",
     "/chunk-2LAHADPZ.js": "ad19441c5dd164f2fd899906de453de41e6280c8",
@@ -236,6 +235,7 @@
     "/chunk-JHI3MBHO.js": "a36b3242848dc514776e1c7fd2cc5d64f3a737b2",
     "/chunk-JIWYQWFB.js": "88c43d2fde1862a011641206ebab4510b1424693",
     "/chunk-JKZUX2RC.js": "0fcdd46e2a1683166b1652d4cb165a8b70d6fe7d",
+    "/chunk-JSC3I5MK.js": "21a7d11ec6b2ad69e2849a9fb6df13afd5d1c2f4",
     "/chunk-JSKUUUES.js": "d2d5cbf9ef440a418c442c5f63ed050d07df8572",
     "/chunk-JWPEWEJN.js": "92b00f241b4f40043eb3db80ad5dbb28ff6a3a0e",
     "/chunk-KNECXGWD.js": "1a52f74b696cf7e2d91023d783e74b99b0aee226",
@@ -301,8 +301,8 @@
     "/chunk-YYA75QQZ.js": "189abfe7960c355e97f288c3f801a27bddb18cd8",
     "/chunk-ZCVFCQIS.js": "81bc499bbfbc0174964b02e4624f47baca4657d2",
     "/chunk-ZPNF3NBX.js": "f25e299dd2e17f51490c79e92cc6858c972de03b",
-    "/index.html": "59309ef95d1dc32d143eb5905c0a981307070510",
-    "/main-SQALDUNB.js": "404bec98a07817b333c3e45a0cbae2a14b13b211",
+    "/index.html": "3780e8a12206f4fd5fd7c26e4c7f9c2fd168be47",
+    "/main-P22X2EFS.js": "866c89c78cc51833d47dbfc3218581faca168962",
     "/manifest.webmanifest": "c61117ce5d5e8c1225909a4bc29a9f3b03595e78",
     "/polyfills-TDCRLYKL.js": "454f6db4230cc7ab61b24fe465dcc92bf041737d",
     "/styles-PG2PYZAD.css": "25632698c00ea0db7fbe035d91bfd33e746738b5"
