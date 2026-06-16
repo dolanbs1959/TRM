@@ -833,9 +833,7 @@ async function handleSubmitEstimateData(req, res) {
             activeEstimateItems: estimateRows.map((row, index) => ({
                 description: activeEstimateItems[index]?.description || 'Item',
                 qtyNeeded: activeEstimateItems[index]?.qtyNeeded || row['16']?.value || 1,
-                amount: activeEstimateItems[index]?.price || row['14']?.value || 0,
-                uom: activeEstimateItems[index]?.uom || 'ea',
-                sqFootage: activeEstimateItems[index]?.sqFootage || row['23']?.value || 0
+                amount: activeEstimateItems[index]?.price || row['14']?.value || 0
             })),
             customerName: inboundBody.customerName || 'Valued Customer',
             locationAddress: inboundBody.locationAddress || 'N/A',

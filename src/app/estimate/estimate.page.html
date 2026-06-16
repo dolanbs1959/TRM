@@ -282,7 +282,7 @@
                 ></ion-input>
               </label>
 
-              <label>
+              <label *ngIf="isPerSquareUnit(item.unit)">
                 <span class="detail-label">Sq Footage</span>
                 <ion-input
                   type="number"
@@ -298,6 +298,15 @@
                 <span class="detail-label">Line Subtotal</span>
                 <span class="pricing-value">{{ formatCurrency(item.lineSubtotal) }}</span>
               </div>
+            </div>
+
+            <div class="calculation-preview" style="padding: 4px 16px 8px 16px; font-size: 0.85rem; color: var(--ion-color-medium);">
+              <span class="muted-preview" *ngIf="isPerSquareUnit(item.unit)">
+                {{ item.qtyNeeded || 0 }} QTY &times; {{ formatCurrency(item.price) }} &times; {{ item.sqFootage || 0 }} SQ FT = {{ formatCurrency(item.lineSubtotal) }}
+              </span>
+              <span class="muted-preview" *ngIf="!isPerSquareUnit(item.unit)">
+                {{ item.qtyNeeded || 0 }} QTY &times; {{ formatCurrency(item.price) }} = {{ formatCurrency(item.lineSubtotal) }}
+              </span>
             </div>
 
             <ion-button size="small" color="medium" fill="clear" (click)="removeCatalogItemFromEstimate(item)">
