@@ -875,7 +875,7 @@ export class EstimatePage implements OnInit {
     item.lineSubtotal = baseSubtotal;
   }
 
-  private isPerSquareUnit(unit: string): boolean {
+  isPerSquareUnit(unit: string): boolean {
     const normalized = this.normalizeText(unit);
     return /\bsq\b/.test(normalized) || normalized.includes('square');
   }

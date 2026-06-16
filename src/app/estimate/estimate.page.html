@@ -282,8 +282,8 @@
                 ></ion-input>
               </label>
 
-              <label>
-                <span class="detail-label">Sq Footage</span>
+              <label *ngIf="isPerSquareUnit(item.unit)">
+                <span class="detail-label">Service Area</span>
                 <ion-input
                   type="number"
                   min="0"
@@ -344,11 +344,6 @@
               <div class="summary-row">
                 <span class="detail-label">Subtotal</span>
                 <span class="pricing-value">{{ formatCurrency(getCartSubtotal()) }}</span>
-              </div>
-
-              <div class="summary-row">
-                <span class="detail-label">Selected Roof Sq Ft</span>
-                <span class="pricing-value">{{ selectedRoofSquareFootage || 0 }} sq ft</span>
               </div>
 
               <label class="summary-toggle-row">
