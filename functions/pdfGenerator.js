@@ -36,8 +36,12 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
 
     let subtotal = 0;
     
-    // Safety check for lineItems
-    const lineItemsHtml = (Array.isArray(lineItems) ? lineItems : []).map(item => {
+    // Safety check for lineItems and separate into two groups
+    const safeLineItems = Array.isArray(lineItems) ? lineItems : [];
+    const areaBasedItems = [];
+    const otherItems = [];
+    
+    safeLineItems.forEach(item => {
         const qty = parseFloat(item.qty) || 0;
         const price = parseFloat(item.unitPrice) || 0;
         const uom = item.uom || 'ea';
@@ -48,15 +52,125 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
         
         subtotal += total;
         
+        const itemData = {
+            qty,
+            price,
+            uom,
+            sqFootage,
+            total,
+            description: item.description || 'N/A'
+        };
+        
+        if (isPerSquareUnit(uom)) {
+            areaBasedItems.push(itemData);
+        } else {
+            otherItems.push(itemData);
+        }
+    });
+    
+    // Generate Area-Based Services table HTML
+    const areaBasedItemsHtml = areaBasedItems.map(item => {
+        const rows = `
+            <tr>
+                <td>${item.description}</td>
+                <td>$${item.price.toFixed(2)}${item.uom ? ` / ${item.uom}` : ''}</td>
+                <td>${item.sqFootage} sq ft</td>
+                <td>$${item.total.toFixed(2)}</td>
+            </tr>
+            <tr>
+                <td colspan="4" style="padding: 5px 15px; font-size: 12px; color: #999; font-style: italic; border-bottom: 1px solid #ddd;">
+                    ${item.qty} × $${item.price.toFixed(2)} × ${item.sqFootage} sq ft = $${item.total.toFixed(2)}
+                </td>
+            </tr>
+        `;
+        return rows;
+    }).join('');
+    
+    // Generate Other Services table HTML
+    const otherItemsHtml = otherItems.map(item => {
         return `
             <tr>
-                <td>${qty}</td>
-                <td>${item.description || 'N/A'}</td>
-                <td>$${price.toFixed(2)}${uom ? ` / ${uom}` : ''}</td>
-                <td>$${total.toFixed(2)}</td>
+                <td>${item.qty}</td>
+                <td>${item.description}</td>
+                <td>$${item.price.toFixed(2)}${item.uom ? ` / ${item.uom}` : ''}</td>
+                <td>$${item.total.toFixed(2)}</td>
             </tr>
         `;
     }).join('');
+    
+    // Determine which sections to display
+    let lineItemsSectionHtml = '';
+    
+    if (areaBasedItems.length > 0 && otherItems.length > 0) {
+        // Both categories exist - display both with headings
+        lineItemsSectionHtml = `
+            <h3 style="color: #f21616; font-size: 18px; margin: 30px 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Full Service Roof Clean & Maintenance Packages</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Description</th>
+                        <th style="width: 25%;">Unit Price</th>
+                        <th style="width: 20%;">Service Area</th>
+                        <th style="width: 15%;">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${areaBasedItemsHtml}
+                </tbody>
+            </table>
+            
+            <h3 style="color: #f21616; font-size: 18px; margin: 30px 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Additional Services & Repairs</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">Qty</th>
+                        <th style="width: 50%;">Description</th>
+                        <th style="width: 20%;">Unit Price</th>
+                        <th style="width: 20%;">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${otherItemsHtml}
+                </tbody>
+            </table>
+        `;
+    } else if (areaBasedItems.length > 0) {
+        // Only area-based services
+        lineItemsSectionHtml = `
+            <h3 style="color: #f21616; font-size: 18px; margin: 30px 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Full Service Roof Clean & Maintenance Packages</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Description</th>
+                        <th style="width: 25%;">Unit Price</th>
+                        <th style="width: 20%;">Service Area</th>
+                        <th style="width: 15%;">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${areaBasedItemsHtml}
+                </tbody>
+            </table>
+        `;
+    } else if (otherItems.length > 0) {
+        // Only other services
+        lineItemsSectionHtml = `
+            <h3 style="color: #f21616; font-size: 18px; margin: 30px 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Additional Services & Repairs</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">Qty</th>
+                        <th style="width: 50%;">Description</th>
+                        <th style="width: 20%;">Unit Price</th>
+                        <th style="width: 20%;">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${otherItemsHtml}
+                </tbody>
+            </table>
+        `;
+    }
 
     const taxAmount = calculateTax(subtotal, addressZip);
     const taxRate = getTaxRate(addressZip);
@@ -94,7 +208,7 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
         '{{CUSTOMER_PHONE}}': phone || 'N/A',
         '{{CUSTOMER_EMAIL}}': email || 'N/A',
         '{{ROOF_STRUCTURES_HTML}}': roofStructuresHtml,
-        '{{LINE_ITEMS_HTML}}': lineItemsHtml,
+        '{{LINE_ITEMS_SECTION_HTML}}': lineItemsSectionHtml,
         '{{SUBTOTAL}}': `$${subtotal.toFixed(2)}`,
         '{{TAX_RATE_PERCENT}}': (taxRate * 100).toFixed(2),
         '{{TAX_AMOUNT}}': `$${taxAmount.toFixed(2)}`,
