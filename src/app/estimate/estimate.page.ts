@@ -1213,6 +1213,9 @@ export class EstimatePage implements OnInit {
       customerPhone,
       roofStructures,
       totalSquareFootage: this.selectedRoofSquareFootage,
+      serviceNotes: this.serviceNotes || '',
+      cleanMaintenanceScheduledFor: this.cleanMaintenanceScheduledFor || '',
+      repairServicesScheduledFor: this.repairServicesScheduledFor || '',
     };
   }
 

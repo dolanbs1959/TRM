@@ -563,10 +563,13 @@ async function generateAndDispatchPDF(payload) {
         const signatureData = payload.digitalSignatureDataUrl || null;
         const roofStructures = payload.roofStructures || [];
         const totalSquareFootage = payload.totalSquareFootage || 0;
+        const serviceNotes = payload.serviceNotes || '';
+        const cleanMaintenanceScheduledFor = payload.cleanMaintenanceScheduledFor || '';
+        const repairServicesScheduledFor = payload.repairServicesScheduledFor || '';
 
         // Generate HTML using the pdfGenerator
         console.log('[BackgroundWorker] Generating HTML...');
-        const htmlContent = generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage);
+        const htmlContent = generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage, serviceNotes, cleanMaintenanceScheduledFor, repairServicesScheduledFor);
         console.log('[BackgroundWorker] HTML generated, length:', htmlContent.length);
 
         // Launch Puppeteer to generate PDF in memory
@@ -721,7 +724,10 @@ async function handleSubmitEstimateData(req, res) {
         taxAmount,
         totalAmount,
         secondaryDiscountAmount,
-        secondaryDiscountPercentage
+        secondaryDiscountPercentage,
+        serviceNotes,
+        cleanMaintenanceScheduledFor,
+        repairServicesScheduledFor
     } = inboundBody;
 
     const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
@@ -843,7 +849,10 @@ async function handleSubmitEstimateData(req, res) {
             digitalSignatureDataUrl: normalizedSignatureDataUrl || null,
             submissionDate: new Date().toLocaleDateString(),
             roofStructures: inboundBody.roofStructures || [],
-            totalSquareFootage: inboundBody.totalSquareFootage || 0
+            totalSquareFootage: inboundBody.totalSquareFootage || 0,
+            serviceNotes: serviceNotes || '',
+            cleanMaintenanceScheduledFor: cleanMaintenanceScheduledFor || '',
+            repairServicesScheduledFor: repairServicesScheduledFor || ''
         });
         
         console.log('[Estimate] generateAndDispatchPDF called (async, non-blocking)');

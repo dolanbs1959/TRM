@@ -15,7 +15,7 @@ function isPerSquareUnit(unit) {
     return /\bsq\b/.test(normalized) || normalized.includes('square');
 }
 
-function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = [], totalSquareFootage = 0) {
+function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = [], totalSquareFootage = 0, serviceNotes = '', cleanMaintenanceScheduledFor = '', repairServicesScheduledFor = '') {
     // Defensive coding: Ensure job is an object to prevent crashes
     const safeJob = job || {};
     
@@ -196,6 +196,50 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
     const templatePath = path.join(__dirname, 'template.html');
     let html = fs.readFileSync(templatePath, 'utf8');
 
+    // Generate Service Notes section HTML
+    const servicePledgeText = 'It is our pledge to render careful, professional cleaning services using reasonable care to obtain satisfactory results. We do not guarantee all leaks or cracks in any type of roof material will be discovered. Factors of installation and/or deterioration that are disguised or covered cannot be predicted in the hands of even the most careful workman. Gutters that are rusted and/or brittle can potentially leak or break during a cleaning process. We do guarantee that we will be careful to clean the roof in a manner that will reduce the risk of any of these instances.';
+    
+    let serviceNotesHtml = '';
+    if (serviceNotes && serviceNotes.trim()) {
+        // Preserve line breaks by converting newlines to <br> tags
+        const formattedNotes = serviceNotes.replace(/\n/g, '<br>');
+        serviceNotesHtml = `
+            <div style="margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
+                <h3 style="color: #f21616; font-size: 18px; margin: 0 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Service Notes</h3>
+                <p style="font-size: 13px; color: #555; margin: 0 0 15px 0; line-height: 1.6;">${servicePledgeText}</p>
+                <div style="font-size: 14px; color: #333; line-height: 1.6; white-space: pre-wrap;">${formattedNotes}</div>
+            </div>
+        `;
+    } else {
+        // Only display explanatory text if no user notes
+        serviceNotesHtml = `
+            <div style="margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
+                <h3 style="color: #f21616; font-size: 18px; margin: 0 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Service Notes</h3>
+                <p style="font-size: 13px; color: #555; margin: 0; line-height: 1.6;">${servicePledgeText}</p>
+            </div>
+        `;
+    }
+    
+    // Generate Dates of Services section HTML
+    const datesOfServiceText = 'All dates subject to change based on weather and other unforeseen circumstances. You will be notified as soon as possible if services need to be rescheduled. There is no exact time of arrival for these dates.';
+    
+    const datesOfServicesHtml = `
+        <div style="margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
+            <h3 style="color: #f21616; font-size: 18px; margin: 0 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Dates of Services</h3>
+            <p style="font-size: 13px; color: #555; margin: 0 0 20px 0; line-height: 1.6;">${datesOfServiceText}</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <div style="font-size: 14px; color: #333; font-weight: bold; margin-bottom: 8px;">Clean / Maintenance Services Scheduled For</div>
+                    <div style="font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px;">${cleanMaintenanceScheduledFor || '________________________'}</div>
+                </div>
+                <div>
+                    <div style="font-size: 14px; color: #333; font-weight: bold; margin-bottom: 8px;">Repair Services Scheduled For</div>
+                    <div style="font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px;">${repairServicesScheduledFor || '________________________'}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
     // Mappings for Template
     const replacements = {
         '{{COMPANY_NAME}}': companyConfig.name,
@@ -209,6 +253,8 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
         '{{CUSTOMER_EMAIL}}': email || 'N/A',
         '{{ROOF_STRUCTURES_HTML}}': roofStructuresHtml,
         '{{LINE_ITEMS_SECTION_HTML}}': lineItemsSectionHtml,
+        '{{SERVICE_NOTES_HTML}}': serviceNotesHtml,
+        '{{DATES_OF_SERVICES_HTML}}': datesOfServicesHtml,
         '{{SUBTOTAL}}': `$${subtotal.toFixed(2)}`,
         '{{TAX_RATE_PERCENT}}': (taxRate * 100).toFixed(2),
         '{{TAX_AMOUNT}}': `$${taxAmount.toFixed(2)}`,
