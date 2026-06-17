@@ -1,6 +1,8 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AlertController } from '@ionic/angular';
+import { addIcons } from 'ionicons';
+import { trash } from 'ionicons/icons';
 import { AuthService, OfferedServiceItem } from '../services/auth.service';
 import { calculateTax, getTaxRate } from '../services/tax-utility.service';
 
@@ -182,7 +184,9 @@ export class EstimatePage implements OnInit {
     private router: Router,
     private authService: AuthService,
     private alertController: AlertController
-  ) {}
+  ) {
+    addIcons({ trash });
+  }
 
   ngOnInit() {
     this.jobId = String(this.route.snapshot.paramMap.get('jobId') || '').trim();

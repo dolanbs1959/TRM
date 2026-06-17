@@ -255,7 +255,12 @@
           <div class="active-item" *ngFor="let item of activeEstimateItems">
             <div class="active-item-header">
               <span class="detail-label">{{ item.name }}</span>
-              <span class="detail-value">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+              <div class="active-item-header-right">
+                <span class="detail-value">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
+                <ion-button size="small" fill="clear" color="danger" (click)="removeCatalogItemFromEstimate(item)">
+                  <ion-icon slot="icon-only" name="trash"></ion-icon>
+                </ion-button>
+              </div>
             </div>
 
             <div class="active-item-grid">
@@ -299,10 +304,6 @@
                 <span class="pricing-value">{{ formatCurrency(item.lineSubtotal) }}</span>
               </div>
             </div>
-
-            <ion-button size="small" color="medium" fill="clear" (click)="removeCatalogItemFromEstimate(item)">
-              Remove
-            </ion-button>
           </div>
         </ion-card-content>
       </ion-card>

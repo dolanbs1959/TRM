@@ -541,6 +541,12 @@
   gap: 8px;
 }
 
+.active-item-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .active-item-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
