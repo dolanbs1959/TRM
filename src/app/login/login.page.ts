@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router'; 
 import { AuthService } from '../services/auth.service';
+import { APP_VERSION } from '../app.version';
 
 @Component({
   selector: 'app-login',
@@ -16,6 +17,7 @@ export class LoginPage implements OnInit {
   isLoggingIn: boolean = false;
   firstName: string = '';
   sessionStateWarning: string = '';
+  appVersion: string = APP_VERSION;
 
   constructor(private authService: AuthService, private router: Router) { }
 

@@ -185,3 +185,26 @@ ion-button {
     border-bottom: 2px solid #444;
   }
 }
+
+.login-footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+
+  .version-text {
+    color: #999;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin: 0;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .login-footer {
+    border-top: 1px solid #333;
+
+    .version-text {
+      color: #666;
+    }
+  }
+}
