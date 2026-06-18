@@ -484,6 +484,11 @@
   padding: 10px;
 }
 
+.catalog-item-added {
+  border-color: #6ea8d9;
+  background: linear-gradient(180deg, #f4f9ff 0%, #e9f3ff 100%);
+}
+
 .catalog-copy {
   min-width: 0;
 
@@ -845,6 +850,11 @@
   .catalog-item {
     background: #2a2a2a;
     border: 1px solid #444;
+  }
+
+  .catalog-item-added {
+    border-color: #555;
+    background: linear-gradient(180deg, #3a3a3a 0%, #2a2a2a 100%);
   }
 
   .catalog-copy {

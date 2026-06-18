@@ -3,7 +3,7 @@
     <ion-buttons slot="start">
       <ion-img src="assets/TRM_logo.png" class="header-logo-large"></ion-img>
     </ion-buttons>
-    <ion-title class="header-title-large">Estimates</ion-title>
+    <ion-title class="header-title-large">Estimate</ion-title>
   </ion-toolbar>
 
   <ion-toolbar color="danger" class="sub-header">
@@ -143,7 +143,7 @@
           <div class="package-section-wrap" *ngFor="let section of packageSections">
             <h4 class="package-section-title">{{ section.label }}</h4>
             <div class="catalog-stack">
-              <div class="catalog-item" *ngFor="let item of section.items">
+              <div class="catalog-item" *ngFor="let item of section.items" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
                 <div class="catalog-copy">
                   <div class="catalog-name-row">
                     <h4>{{ item.name }}</h4>
@@ -152,8 +152,8 @@
                   <p *ngIf="item.description">{{ item.description }}</p>
                   <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
                 </div>
-                <ion-button size="small" color="danger" (click)="addCatalogItemToEstimate(item)">
-                  Add
+                <ion-button size="small" fill="outline" color="primary" (click)="addCatalogItemToEstimate(item)">
+                  {{ getCatalogItemCount(item) > 0 ? 'Added (' + getCatalogItemCount(item) + ')' : 'Add' }}
                 </ion-button>
               </div>
             </div>
@@ -167,14 +167,14 @@
       <ion-card class="estimate-card">
         <ion-card-content>
           <div class="catalog-stack">
-            <div class="catalog-item" *ngFor="let item of tipTopRoofCareClubItems">
+            <div class="catalog-item" *ngFor="let item of tipTopRoofCareClubItems" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
               <div class="catalog-copy">
                 <h4>{{ item.name }}</h4>
                 <p *ngIf="item.description">{{ item.description }}</p>
                 <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
               </div>
               <ion-button size="small" fill="outline" color="success" (click)="addCatalogItemToEstimate(item)">
-                Opt In
+                {{ getCatalogItemCount(item) > 0 ? 'Added (' + getCatalogItemCount(item) + ')' : 'Opt In' }}
               </ion-button>
             </div>
           </div>
@@ -195,7 +195,7 @@
                 <ion-label>{{ group.label }}</ion-label>
               </ion-item>
               <div slot="content" class="repair-group-content">
-                <div class="catalog-item" *ngFor="let item of group.items">
+                <div class="catalog-item" *ngFor="let item of group.items" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
                   <div class="catalog-copy">
                     <h4>{{ item.name }}</h4>
                     <p *ngIf="item.serviceType">Type: {{ item.serviceType }}</p>
@@ -203,7 +203,7 @@
                     <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
                   </div>
                   <ion-button size="small" fill="outline" color="danger" (click)="addCatalogItemToEstimate(item)">
-                    Add
+                    {{ getCatalogItemCount(item) > 0 ? 'Added (' + getCatalogItemCount(item) + ')' : 'Add' }}
                   </ion-button>
                 </div>
               </div>
@@ -229,7 +229,7 @@
           </div>
 
           <div class="catalog-stack" *ngIf="serviceSearchTerm && filteredCatalogItems.length > 0">
-            <div class="catalog-item" *ngFor="let item of filteredCatalogItems">
+            <div class="catalog-item" *ngFor="let item of filteredCatalogItems" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
               <div class="catalog-copy">
                 <div class="catalog-name-row">
                   <h4>{{ item.name }}</h4>
@@ -240,7 +240,7 @@
                 <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
               </div>
               <ion-button size="small" fill="outline" color="danger" (click)="addCatalogItemToEstimate(item)">
-                Add
+                {{ getCatalogItemCount(item) > 0 ? 'Added (' + getCatalogItemCount(item) + ')' : 'Add' }}
               </ion-button>
             </div>
           </div>

@@ -790,6 +790,11 @@ export class EstimatePage implements OnInit {
     return `$${numericValue.toFixed(2)}`;
   }
 
+  getCatalogItemCount(item: EstimateCatalogItem): number {
+    const existing = this.activeEstimateItems.find((row) => row.id === item.id);
+    return existing ? existing.qtyNeeded : 0;
+  }
+
   addCatalogItemToEstimate(item: EstimateCatalogItem) {
     if (!item || !item.name) {
       return;
