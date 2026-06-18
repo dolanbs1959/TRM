@@ -22,11 +22,19 @@ export class LoginPage implements OnInit {
   constructor(private authService: AuthService, private router: Router) { }
 
   ngOnInit() {
+    if (this.authService.hasValidSession()) {
+      this.router.navigate(['/home'], { replaceUrl: true });
+      return;
+    }
     this.authService.clearLoginSession();
     this.updateSessionStateWarning();
   }
 
   ionViewWillEnter() {
+    if (this.authService.hasValidSession()) {
+      this.router.navigate(['/home'], { replaceUrl: true });
+      return;
+    }
     this.authService.clearLoginSession();
     this.resetLoginViewState();
     this.updateSessionStateWarning();

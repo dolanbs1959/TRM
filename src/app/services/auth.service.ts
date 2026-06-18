@@ -70,7 +70,9 @@ export class AuthService {
   private static readonly LOGIN_AT_KEY = 'trm.loginAtMs';
   private static readonly POST_BUFFER_REFRESH_AT_KEY = 'trm.postBufferRefreshAtMs';
   private static readonly ROOF_OPTIONS_CACHE_KEY = 'trm.roofOptionsCache';
+  private static readonly LAST_ACTIVITY_KEY = 'trm.lastActivityMs';
   private static readonly SCHEDULE_REFRESH_BUFFER_MS = 15 * 60 * 1000;
+  private static readonly SESSION_EXPIRATION_MS = 10 * 60 * 60 * 1000; // 10 hours
 
   private readonly apiBaseUrl = environment.apiUrl;
   
@@ -81,12 +83,18 @@ export class AuthService {
   private postBufferRefreshAtMs: number | null = null;
 
   constructor(private http: HttpClient) {
-    this.loggedInUser = null;
-    localStorage.removeItem(AuthService.STORAGE_KEY);
     this.scheduleCache = this.readStoredScheduleCache();
     this.roofOptionsCache = this.readStoredRoofOptionsCache();
     this.loginAtMs = this.readStoredNumber(AuthService.LOGIN_AT_KEY);
     this.postBufferRefreshAtMs = this.readStoredNumber(AuthService.POST_BUFFER_REFRESH_AT_KEY);
+
+    const storedUser = this.readStoredUser();
+    if (storedUser && this.isSessionValid()) {
+      this.loggedInUser = storedUser;
+      this.updateActivityTimestamp();
+    } else {
+      this.clearExpiredSession();
+    }
   }
 
   private emptyRoofOptionCacheData(): RoofOptionCacheData {
@@ -146,6 +154,45 @@ export class AuthService {
       localStorage.removeItem(AuthService.STORAGE_KEY);
       return null;
     }
+  }
+
+  private persistUser(user: any) {
+    try {
+      localStorage.setItem(AuthService.STORAGE_KEY, JSON.stringify(user));
+    } catch (error) {
+      console.error('Failed to persist user session:', error);
+    }
+  }
+
+  private updateActivityTimestamp() {
+    const nowMs = Date.now();
+    localStorage.setItem(AuthService.LAST_ACTIVITY_KEY, String(nowMs));
+  }
+
+  private isSessionValid(): boolean {
+    const lastActivityMs = this.readStoredNumber(AuthService.LAST_ACTIVITY_KEY);
+    if (!lastActivityMs) {
+      return false;
+    }
+
+    const inactiveMs = Date.now() - lastActivityMs;
+    return inactiveMs < AuthService.SESSION_EXPIRATION_MS;
+  }
+
+  hasValidSession(): boolean {
+    const storedUser = this.readStoredUser();
+    if (!storedUser) {
+      return false;
+    }
+    return this.isSessionValid();
+  }
+
+  private clearExpiredSession() {
+    this.loggedInUser = null;
+    this.loginAtMs = null;
+    localStorage.removeItem(AuthService.STORAGE_KEY);
+    localStorage.removeItem(AuthService.LOGIN_AT_KEY);
+    localStorage.removeItem(AuthService.LAST_ACTIVITY_KEY);
   }
 
   private readStoredScheduleCache() {
@@ -297,10 +344,12 @@ const localProxyUrl = `${this.apiBaseUrl}/login`;
 
 try {
     const response: any = await this.http.post(localProxyUrl, { phone, pin }).toPromise();
-    
+
     if (response && response.success) {
       this.loggedInUser = response.user;
   this.setLoginTimestamp(Date.now());
+      this.persistUser(this.loggedInUser);
+      this.updateActivityTimestamp();
       console.log('Handshake successful through Firebase Emulator.');
       // console.log('Employee Data Received:', JSON.stringify(this.loggedInUser, null, 2));
       return true;
@@ -418,6 +467,7 @@ async getJobDetail(recordId: string) {
     localStorage.removeItem(AuthService.LOGIN_AT_KEY);
     localStorage.removeItem(AuthService.POST_BUFFER_REFRESH_AT_KEY);
     localStorage.removeItem(AuthService.ROOF_OPTIONS_CACHE_KEY);
+    localStorage.removeItem(AuthService.LAST_ACTIVITY_KEY);
     this.clearScheduleCache();
     this.roofOptionsCache = null;
   }
@@ -425,6 +475,7 @@ async getJobDetail(recordId: string) {
   clearLoginSession() {
     this.loggedInUser = null;
     localStorage.removeItem(AuthService.STORAGE_KEY);
+    localStorage.removeItem(AuthService.LAST_ACTIVITY_KEY);
   }
 
   async clockInTimecard(techId: string | number, coordinates: string) {
@@ -559,9 +610,13 @@ async getJobDetail(recordId: string) {
   }
 
   getUser() {
+    if (this.loggedInUser) {
+      this.updateActivityTimestamp();
+    }
     return this.loggedInUser;
   } 
 // ... your existing login() or getUser() methods are up here ...
+
 
   // DROP IT RIGHT HERE:
 async checkActiveTimecardSession(employeeId: any, dateStr: string) {
