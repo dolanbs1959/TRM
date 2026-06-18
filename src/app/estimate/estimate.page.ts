@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { Component, DoCheck, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AlertController } from '@ionic/angular';
 import { addIcons } from 'ionicons';
@@ -82,7 +82,7 @@ interface EstimatePackageSection {
   styleUrls: ['./estimate.page.scss'],
   standalone: false,
 })
-export class EstimatePage implements OnInit {
+export class EstimatePage implements OnInit, DoCheck {
   @ViewChild('signatureCanvas') signatureCanvasRef?: ElementRef<HTMLCanvasElement>;
 
   job: any = null;
@@ -128,10 +128,13 @@ export class EstimatePage implements OnInit {
   private viewerTouchStartX: number | null = null;
   private indexedDbInspectionPhotos: CachedInspectionPhoto[] = [];
   private msDiscountManuallyEdited = false;
+  private lastDraftSnapshot = '';
+  private lastPhotoDraftSnapshot = '';
   private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
   private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
   private static readonly INSPECTION_DRAFT_DB_VERSION = 1;
   private static readonly INSPECTION_PHOTO_STORE_NAME = 'inspectionPhotoDrafts';
+  private static readonly ESTIMATE_DRAFT_STORAGE_KEY_PREFIX = 'trm_estimate_draft_';
   private static readonly PACKAGE_SECTION_ORDER = ['Budget', 'Value', 'Basic Maintenance'];
   readonly servicePledgeText = 'It is our pledge to render careful, professional cleaning services using reasonable care to obtain satisfactory results. We do not guarantee all leaks or cracks in any type of roof material will be discovered. Factors of installation and/or deterioration that are disguised or covered cannot be predicted in the hands of even the most careful workman. Gutters that are rusted and/or brittle can potentially leak or break during a cleaning process. We do guarantee that we will be careful to clean the roof in a manner that will reduce the risk of any of these instances.';
   readonly datesOfServiceText = 'All dates subject to change based on weather and other unforeseen circumstances. You will be notified as soon as possible if services need to be rescheduled. There is no exact time of arrival for these dates.';
@@ -208,6 +211,10 @@ export class EstimatePage implements OnInit {
     this.refreshSignatureCanvas();
   }
 
+  ngDoCheck() {
+    this.persistEstimateDraftIfChanged();
+  }
+
   private refreshSummaryViewModel() {
     this.summaryFields = this.getSummaryFields();
     this.inspectionFields = this.getInspectionFields();
@@ -233,6 +240,7 @@ export class EstimatePage implements OnInit {
     void this.loadInspectionPhotosFromIndexedDb();
     void this.loadOfferedServiceItems();
     void this.loadInspectionHubRoofs();
+    void this.hydrateEstimateDraftIfPresent();
   }
 
   private async loadInspectionPhotosFromIndexedDb() {
@@ -1283,6 +1291,7 @@ export class EstimatePage implements OnInit {
       }
 
       this.clearSignaturePad();
+      this.clearEstimateDraft();
       this.router.navigate(['/home']);
     } catch (error) {
       console.error('Submit Estimate Error:', error);
@@ -1325,6 +1334,122 @@ export class EstimatePage implements OnInit {
     } catch {
       return null;
     }
+  }
+
+  private getEstimateDraftStorageKey(): string {
+    const serviceOrderId = this.getJobRecordId();
+    return `${EstimatePage.ESTIMATE_DRAFT_STORAGE_KEY_PREFIX}${(serviceOrderId || '').trim()}`;
+  }
+
+  private buildEstimateDraftData() {
+    return {
+      serviceOrderId: this.getJobRecordId(),
+      activeEstimateItems: this.activeEstimateItems,
+      formFields: {
+        workOrderedBy: this.workOrderedBy,
+        serviceNotes: this.serviceNotes,
+        locationEmail: this.locationEmail,
+        customerRecordId: this.customerRecordId,
+        locationRecordId: this.locationRecordId,
+        customerReadyToBegin: this.customerReadyToBegin,
+        discountControlValue: this.discountControlValue,
+        secondaryDiscountAmount: this.secondaryDiscountAmount,
+        secondaryDiscountPercentage: this.secondaryDiscountPercentage,
+        cleanMaintenanceScheduledFor: this.cleanMaintenanceScheduledFor,
+        repairServicesScheduledFor: this.repairServicesScheduledFor,
+        signatureDate: this.signatureDate,
+        discountMS: this.discountMS,
+        discountOther: this.discountOther,
+        msDiscountAmount: this.msDiscountAmount,
+        otherDiscountAmount: this.otherDiscountAmount
+      },
+      signatureDataUrl: this.signatureDataUrl,
+      uiState: {
+        serviceSearchTerm: this.serviceSearchTerm,
+        selectedRoofSquareFootage: this.selectedRoofSquareFootage
+      }
+    };
+  }
+
+  private persistEstimateDraftIfChanged() {
+    const serviceOrderId = this.getJobRecordId();
+    if (!serviceOrderId) {
+      return;
+    }
+
+    try {
+      const currentData = this.buildEstimateDraftData();
+      const serialized = JSON.stringify(currentData);
+      if (!serialized || serialized === this.lastDraftSnapshot) {
+        return;
+      }
+
+      localStorage.setItem(this.getEstimateDraftStorageKey(), serialized);
+      this.lastDraftSnapshot = serialized;
+    } catch (error) {
+      console.warn('[Estimate] Failed to persist local estimate draft.', error);
+    }
+  }
+
+  private async hydrateEstimateDraftIfPresent() {
+    const serviceOrderId = this.getJobRecordId();
+    if (!serviceOrderId) {
+      return;
+    }
+
+    const storageKey = this.getEstimateDraftStorageKey();
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.activeEstimateItems && Array.isArray(parsed.activeEstimateItems)) {
+        this.activeEstimateItems = parsed.activeEstimateItems;
+      }
+
+      if (parsed?.formFields && typeof parsed.formFields === 'object') {
+        this.workOrderedBy = parsed.formFields.workOrderedBy || this.workOrderedBy;
+        this.serviceNotes = parsed.formFields.serviceNotes || this.serviceNotes;
+        this.locationEmail = parsed.formFields.locationEmail || this.locationEmail;
+        this.customerRecordId = parsed.formFields.customerRecordId || this.customerRecordId;
+        this.locationRecordId = parsed.formFields.locationRecordId || this.locationRecordId;
+        this.customerReadyToBegin = parsed.formFields.customerReadyToBegin ?? this.customerReadyToBegin;
+        this.discountControlValue = parsed.formFields.discountControlValue || this.discountControlValue;
+        this.secondaryDiscountAmount = parsed.formFields.secondaryDiscountAmount ?? this.secondaryDiscountAmount;
+        this.secondaryDiscountPercentage = parsed.formFields.secondaryDiscountPercentage ?? this.secondaryDiscountPercentage;
+        this.cleanMaintenanceScheduledFor = parsed.formFields.cleanMaintenanceScheduledFor || this.cleanMaintenanceScheduledFor;
+        this.repairServicesScheduledFor = parsed.formFields.repairServicesScheduledFor || this.repairServicesScheduledFor;
+        this.signatureDate = parsed.formFields.signatureDate || this.signatureDate;
+        this.discountMS = parsed.formFields.discountMS ?? this.discountMS;
+        this.discountOther = parsed.formFields.discountOther ?? this.discountOther;
+        this.msDiscountAmount = parsed.formFields.msDiscountAmount ?? this.msDiscountAmount;
+        this.otherDiscountAmount = parsed.formFields.otherDiscountAmount ?? this.otherDiscountAmount;
+      }
+
+      if (parsed?.signatureDataUrl) {
+        this.signatureDataUrl = parsed.signatureDataUrl;
+      }
+
+      if (parsed?.uiState && typeof parsed.uiState === 'object') {
+        this.serviceSearchTerm = parsed.uiState.serviceSearchTerm || this.serviceSearchTerm;
+        this.selectedRoofSquareFootage = parsed.uiState.selectedRoofSquareFootage ?? this.selectedRoofSquareFootage;
+      }
+
+      this.lastDraftSnapshot = JSON.stringify(this.buildEstimateDraftData());
+      this.syncPricingSummary();
+    } catch (error) {
+      console.warn('[Estimate] Failed to hydrate local estimate draft. Clearing corrupt draft.', error);
+      localStorage.removeItem(storageKey);
+      this.lastDraftSnapshot = '';
+    }
+  }
+
+  private clearEstimateDraft() {
+    const storageKey = this.getEstimateDraftStorageKey();
+    localStorage.removeItem(storageKey);
+    this.lastDraftSnapshot = '';
   }
 
   private applyInspectionCacheToJob(cache: any) {
