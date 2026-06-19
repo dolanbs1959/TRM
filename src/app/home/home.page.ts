@@ -4,6 +4,7 @@ import { IonModal } from '@ionic/angular';
 import { AlertController } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, WorkflowLogPayload } from '../services/auth.service';
+import { LoadingService } from '../services/loading.service';
 
 @Component({
   selector: 'app-home',
@@ -66,7 +67,8 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
     private authService: AuthService,
     private router: Router,
     private alertController: AlertController,
-    private changeDetectorRef: ChangeDetectorRef
+    private changeDetectorRef: ChangeDetectorRef,
+    private loadingService: LoadingService
   ) {}
 
   async getLocalWeather() {
@@ -502,27 +504,39 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
 
     const currentIndex = selectedJob._jobActionIndex || 0;
     if (currentIndex === 0) {
-      const didUpdate = await this.updateSelectedJobStatus('En Route', 'Dispatch');
-      if (!didUpdate) {
-        return;
-      }
-      this.workflowLockedJobRecordId = this.selectedJobRecordId;
+      await this.loadingService.withLoading(
+        'Dispatching...',
+        async () => {
+          const didUpdate = await this.updateSelectedJobStatus('En Route', 'Dispatch');
+          if (!didUpdate) {
+            return;
+          }
+          this.workflowLockedJobRecordId = this.selectedJobRecordId;
+        }
+      );
+      // return;
     }
 
     if (currentIndex === 1) {
-      if (this.isInspectionJob(selectedJob)) {
-        try {
-          await this.authService.getRoofOptionCache();
-        } catch (error) {
-          console.warn('Roof option cache preload failed on ARRIVE:', error);
-        }
-      }
+      await this.loadingService.withLoading(
+        'Recording Arrival...',
+        async () => {
+          if (this.isInspectionJob(selectedJob)) {
+            try {
+              await this.authService.getRoofOptionCache();
+            } catch (error) {
+              console.warn('Roof option cache preload failed on ARRIVE:', error);
+            }
+          }
 
-      const didUpdate = await this.updateSelectedJobStatus('In Progress', 'Arrival');
-      if (!didUpdate) {
-        return;
-      }
-      selectedJob._isPaused = false;
+          const didUpdate = await this.updateSelectedJobStatus('In Progress', 'Arrival');
+          if (!didUpdate) {
+            return;
+          }
+          selectedJob._isPaused = false;
+        }
+      );
+      // return;
     }
 
     if (currentIndex < this.jobActionStates.length - 1) {
@@ -1010,32 +1024,37 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
       return;
     }
 
-    const didUpdate = await this.updateSelectedJobStatus('Return Required', 'Return Required');
-    if (!didUpdate) {
-      return;
-    }
-
-    if (this.activeTimecardRecordId) {
-      try {
-        const didRecordEvent = await this.authService.recordTimecardJobEvent(
-          this.activeTimecardRecordId,
-          'return_required'
-        );
-        if (!didRecordEvent) {
-          console.warn('Timecard RETURN REQUIRED timestamp was not recorded.');
+    await this.loadingService.withLoading(
+      'Updating Job Status...',
+      async () => {
+        const didUpdate = await this.updateSelectedJobStatus('Return Required', 'Return Required');
+        if (!didUpdate) {
+          return;
         }
-      } catch (error) {
-        console.warn('Failed to record RETURN REQUIRED timestamp on timecard:', error);
-      }
-    }
 
-    selectedJob._jobActionIndex = 0;
-    selectedJob._isPaused = false;
-    this.workflowLockedJobRecordId = null;
-    this.selectedJobRecordId = null;
-    this.saveJobActionIndexes();
-    this.saveUiState();
-    await this.fetchScheduleForDate(this.today);
+        if (this.activeTimecardRecordId) {
+          try {
+            const didRecordEvent = await this.authService.recordTimecardJobEvent(
+              this.activeTimecardRecordId,
+              'return_required'
+            );
+            if (!didRecordEvent) {
+              console.warn('Timecard RETURN REQUIRED timestamp was not recorded.');
+            }
+          } catch (error) {
+            console.warn('Failed to record RETURN REQUIRED timestamp on timecard:', error);
+          }
+        }
+
+        selectedJob._jobActionIndex = 0;
+        selectedJob._isPaused = false;
+        this.workflowLockedJobRecordId = null;
+        this.selectedJobRecordId = null;
+        this.saveJobActionIndexes();
+        this.saveUiState();
+        await this.fetchScheduleForDate(this.today);
+      }
+    );
   }
 
   private async updateSelectedJobStatus(nextStatus: string, workflowEventType?: string): Promise<boolean> {

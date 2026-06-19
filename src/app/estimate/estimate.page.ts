@@ -227,6 +227,9 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   private async initializeEstimateData() {
+    // Prevent draft persistence during initialization
+    this.skipDraftPersistence = true;
+
     if (this.jobId && !this.hasEstimateLookupFields()) {
       const detailedJob = await this.authService.getJobDetail(this.jobId);
       if (detailedJob) {
@@ -241,7 +244,14 @@ export class EstimatePage implements OnInit, DoCheck {
     void this.loadInspectionPhotosFromIndexedDb();
     void this.loadOfferedServiceItems();
     void this.loadInspectionHubRoofs();
-    void this.hydrateEstimateDraftIfPresent();
+    await this.hydrateEstimateDraftIfPresent();
+
+    // Initialize lastDraftSnapshot to prevent creating a draft on page load
+    // This ensures ngDoCheck won't persist a draft until the user makes actual changes
+    this.lastDraftSnapshot = JSON.stringify(this.buildEstimateDraftData());
+
+    // Re-enable draft persistence after initialization completes
+    this.skipDraftPersistence = false;
   }
 
   private async loadInspectionPhotosFromIndexedDb() {

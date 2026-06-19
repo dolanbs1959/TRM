@@ -19,7 +19,10 @@ export class LoginPage implements OnInit {
   sessionStateWarning: string = '';
   appVersion: string = APP_VERSION;
 
-  constructor(private authService: AuthService, private router: Router) { }
+  constructor(
+    private authService: AuthService, 
+    private router: Router
+  ) { }
 
   ngOnInit() {
     if (this.authService.hasValidSession()) {
@@ -41,11 +44,15 @@ export class LoginPage implements OnInit {
   }
 
   async onLogin() {
+    if (this.isLoggingIn) {
+      return;
+    }
+
     this.isLoggingIn = true;
     console.log('Attempting login for:', this.phoneNumber);
-    
+
     const success = await this.authService.login(this.phoneNumber, this.pin);
-    
+
     if (success) {
       this.firstName = this.authService.getUser()?.[6]?.value || '';
       console.log('Login success! Welcome,', this.firstName);
