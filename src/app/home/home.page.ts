@@ -552,48 +552,58 @@ import { LoadingService } from '../services/loading.service';
     }
 
     if (isInspectionSelected) {
-      const didCompleteInspection = await this.completeInspectionFromDraft(selectedRecordId);
-      if (!didCompleteInspection) {
-        return;
-      }
+      await this.loadingService.withLoading(
+        'Completing Inspection...',
+        async () => {
+          const didCompleteInspection = await this.completeInspectionFromDraft(selectedRecordId);
+          if (!didCompleteInspection) {
+            return;
+          }
 
-      selectedJob._jobActionIndex = 0;
-      selectedJob._isPaused = false;
-      this.workflowLockedJobRecordId = null;
-      this.selectedJobRecordId = null;
-      this.saveJobActionIndexes();
-      this.saveUiState();
-      await this.fetchScheduleForDate(this.today);
-      return;
-    }
-
-    const completionStatus = 'Invoiced';
-    const didComplete = await this.updateSelectedJobStatus(completionStatus, 'Complete');
-    if (!didComplete) {
-      return;
-    }
-
-    if (completionStatus === 'Invoiced' && this.activeTimecardRecordId) {
-      try {
-        const didRecordEvent = await this.authService.recordTimecardJobEvent(
-          this.activeTimecardRecordId,
-          'complete'
-        );
-        if (!didRecordEvent) {
-          console.warn('Timecard COMPLETE timestamp was not recorded.');
+          selectedJob._jobActionIndex = 0;
+          selectedJob._isPaused = false;
+          this.workflowLockedJobRecordId = null;
+          this.selectedJobRecordId = null;
+          this.saveJobActionIndexes();
+          this.saveUiState();
+          await this.fetchScheduleForDate(this.today);
         }
-      } catch (error) {
-        console.warn('Failed to record COMPLETE timestamp on timecard:', error);
-      }
+      );
+      return;
     }
 
-    selectedJob._jobActionIndex = 0;
-    selectedJob._isPaused = false;
-    this.workflowLockedJobRecordId = null;
-    this.selectedJobRecordId = null;
-    this.saveJobActionIndexes();
-    this.saveUiState();
-    await this.fetchScheduleForDate(this.today);
+    await this.loadingService.withLoading(
+      'Completing...',
+      async () => {
+        const completionStatus = 'Invoiced';
+        const didComplete = await this.updateSelectedJobStatus(completionStatus, 'Complete');
+        if (!didComplete) {
+          return;
+        }
+
+        if (completionStatus === 'Invoiced' && this.activeTimecardRecordId) {
+          try {
+            const didRecordEvent = await this.authService.recordTimecardJobEvent(
+              this.activeTimecardRecordId,
+              'complete'
+            );
+            if (!didRecordEvent) {
+              console.warn('Timecard COMPLETE timestamp was not recorded.');
+            }
+          } catch (error) {
+            console.warn('Failed to record COMPLETE timestamp on timecard:', error);
+          }
+        }
+
+        selectedJob._jobActionIndex = 0;
+        selectedJob._isPaused = false;
+        this.workflowLockedJobRecordId = null;
+        this.selectedJobRecordId = null;
+        this.saveJobActionIndexes();
+        this.saveUiState();
+        await this.fetchScheduleForDate(this.today);
+      }
+    );
   }
 
   private async completeInspectionFromDraft(serviceOrderId: string): Promise<boolean> {
@@ -972,19 +982,24 @@ import { LoadingService } from '../services/loading.service';
     this.isJobPauseActionLoading = true;
     try {
       if (selectedJob._isPaused) {
-        const resumeNote = this.buildNoteEntry('Job resumed');
-        const resumeWorkflowLog = await this.buildWorkflowLogPayload('Resume', 'Job resumed');
-        const didAppendResume = await this.authService.appendServiceOrderNote(
-          selectedRecordId,
-          resumeNote,
-          resumeWorkflowLog
+        await this.loadingService.withLoading(
+          'Resuming Job...',
+          async () => {
+            const resumeNote = this.buildNoteEntry('Job resumed');
+            const resumeWorkflowLog = await this.buildWorkflowLogPayload('Resume', 'Job resumed');
+            const didAppendResume = await this.authService.appendServiceOrderNote(
+              selectedRecordId,
+              resumeNote,
+              resumeWorkflowLog
+            );
+            if (!didAppendResume) {
+              console.error('Failed to append resume note.');
+              return;
+            }
+            selectedJob._isPaused = false;
+            this.saveJobActionIndexes();
+          }
         );
-        if (!didAppendResume) {
-          console.error('Failed to append resume note.');
-          return;
-        }
-        selectedJob._isPaused = false;
-        this.saveJobActionIndexes();
         return;
       }
 
@@ -993,20 +1008,24 @@ import { LoadingService } from '../services/loading.service';
         return;
       }
 
-      const pauseNote = this.buildNoteEntry(`Pause reason: ${reason}`);
-      const pauseWorkflowLog = await this.buildWorkflowLogPayload('Pause', `Pause reason: ${reason}`);
-      const didAppendPause = await this.authService.appendServiceOrderNote(
-        selectedRecordId,
-        pauseNote,
-        pauseWorkflowLog
+      await this.loadingService.withLoading(
+        'Pausing Job...',
+        async () => {
+          const pauseNote = this.buildNoteEntry(`Pause reason: ${reason}`);
+          const pauseWorkflowLog = await this.buildWorkflowLogPayload('Pause', `Pause reason: ${reason}`);
+          const didAppendPause = await this.authService.appendServiceOrderNote(
+            selectedRecordId,
+            pauseNote,
+            pauseWorkflowLog
+          );
+          if (!didAppendPause) {
+            console.error('Failed to append pause reason.');
+            return;
+          }
+          selectedJob._isPaused = true;
+          this.saveJobActionIndexes();
+        }
       );
-      if (!didAppendPause) {
-        console.error('Failed to append pause reason.');
-        return;
-      }
-
-      selectedJob._isPaused = true;
-      this.saveJobActionIndexes();
     } catch (error) {
       console.error('Pause/resume action failed:', error);
     } finally {

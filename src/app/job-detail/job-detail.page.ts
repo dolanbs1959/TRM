@@ -3,6 +3,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, RoofOptionCacheData, WorkflowLogPayload } from '../services/auth.service';
+import { LoadingService } from '../services/loading.service';
 
 type InspectionPhotoSectionKey =
   | 'penetrations'
@@ -137,7 +138,8 @@ export class JobDetailPage implements OnInit, DoCheck {
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private authService: AuthService
+    private authService: AuthService,
+    private loadingService: LoadingService
   ) {}
 
   private get serviceOrderId(): string {
@@ -796,33 +798,38 @@ export class JobDetailPage implements OnInit, DoCheck {
 
     this.isCompletingInspection = true;
     try {
-      const payload = this.buildInspectionSubmissionPayload();
-      console.log(
-        'DEBUG INSPECTION SUBMISSION PAYLOAD\n' +
-          JSON.stringify(payload, null, 2)
+      await this.loadingService.withLoading(
+        'Completing Inspection...',
+        async () => {
+          const payload = this.buildInspectionSubmissionPayload();
+          console.log(
+            'DEBUG INSPECTION SUBMISSION PAYLOAD\n' +
+              JSON.stringify(payload, null, 2)
+          );
+
+          const didSubmit = await this.authService.submitInspectionData(payload);
+          if (!didSubmit) {
+            console.error('[InspectionHub] Inspection data submission failed.');
+            return;
+          }
+
+          const workflowLog = this.buildInspectionWorkflowLogPayload();
+          const didAdvanceStatus = await this.authService.updateServiceOrderStatus(
+            this.activeJobId,
+            'Inspected',
+            workflowLog
+          );
+          if (!didAdvanceStatus) {
+            console.error('[InspectionHub] Inspection status advancement to Inspected failed.');
+            return;
+          }
+
+          this.persistInspectionCache(payload);
+          await this.clearInspectionDraft();
+
+          this.goBack();
+        }
       );
-
-      const didSubmit = await this.authService.submitInspectionData(payload);
-      if (!didSubmit) {
-        console.error('[InspectionHub] Inspection data submission failed.');
-        return;
-      }
-
-      const workflowLog = this.buildInspectionWorkflowLogPayload();
-      const didAdvanceStatus = await this.authService.updateServiceOrderStatus(
-        this.activeJobId,
-        'Inspected',
-        workflowLog
-      );
-      if (!didAdvanceStatus) {
-        console.error('[InspectionHub] Inspection status advancement to Inspected failed.');
-        return;
-      }
-
-      this.persistInspectionCache(payload);
-      await this.clearInspectionDraft();
-
-      this.goBack();
     } finally {
       this.isCompletingInspection = false;
     }
