@@ -130,6 +130,7 @@ export class EstimatePage implements OnInit, DoCheck {
   private msDiscountManuallyEdited = false;
   private lastDraftSnapshot = '';
   private lastPhotoDraftSnapshot = '';
+  private skipDraftPersistence = false;
   private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
   private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
   private static readonly INSPECTION_DRAFT_DB_VERSION = 1;
@@ -1366,12 +1367,17 @@ export class EstimatePage implements OnInit, DoCheck {
       signatureDataUrl: this.signatureDataUrl,
       uiState: {
         serviceSearchTerm: this.serviceSearchTerm,
-        selectedRoofSquareFootage: this.selectedRoofSquareFootage
+        selectedRoofSquareFootage: this.selectedRoofSquareFootage,
+        inspectionHubRoofTiles: this.inspectionHubRoofTiles
       }
     };
   }
 
   private persistEstimateDraftIfChanged() {
+    if (this.skipDraftPersistence) {
+      return;
+    }
+
     const serviceOrderId = this.getJobRecordId();
     if (!serviceOrderId) {
       return;
@@ -1435,6 +1441,9 @@ export class EstimatePage implements OnInit, DoCheck {
       if (parsed?.uiState && typeof parsed.uiState === 'object') {
         this.serviceSearchTerm = parsed.uiState.serviceSearchTerm || this.serviceSearchTerm;
         this.selectedRoofSquareFootage = parsed.uiState.selectedRoofSquareFootage ?? this.selectedRoofSquareFootage;
+        if (Array.isArray(parsed.uiState.inspectionHubRoofTiles)) {
+          this.inspectionHubRoofTiles = parsed.uiState.inspectionHubRoofTiles;
+        }
       }
 
       this.lastDraftSnapshot = JSON.stringify(this.buildEstimateDraftData());
@@ -1450,6 +1459,65 @@ export class EstimatePage implements OnInit, DoCheck {
     const storageKey = this.getEstimateDraftStorageKey();
     localStorage.removeItem(storageKey);
     this.lastDraftSnapshot = '';
+    this.skipDraftPersistence = true;
+    setTimeout(() => {
+      this.skipDraftPersistence = false;
+    }, 5000);
+  }
+
+  async startOverEstimate() {
+    const alert = await this.alertController.create({
+      header: 'Start Over?',
+      message: 'This will permanently remove the saved estimate draft and clear all estimate entries.',
+      buttons: [
+        {
+          text: 'Cancel',
+          role: 'cancel',
+          cssClass: 'secondary'
+        },
+        {
+          text: 'Start Over',
+          role: 'destructive',
+          handler: () => {
+            this.resetEstimateToInitialState();
+          }
+        }
+      ]
+    });
+
+    await alert.present();
+  }
+
+  private resetEstimateToInitialState() {
+    this.clearEstimateDraft();
+
+    this.activeEstimateItems = [];
+    this.serviceSearchTerm = '';
+    this.selectedRoofSquareFootage = 0;
+    this.workOrderedBy = '';
+    this.serviceNotes = '';
+    this.customerReadyToBegin = false;
+    this.discountControlValue = '';
+    this.secondaryDiscountAmount = 0;
+    this.secondaryDiscountPercentage = 0;
+    this.discountMS = false;
+    this.discountOther = false;
+    this.msDiscountAmount = 0;
+    this.otherDiscountAmount = 0;
+    this.cleanMaintenanceScheduledFor = this.getTodayDateInputValue();
+    this.repairServicesScheduledFor = this.getTodayDateInputValue();
+    this.signatureDate = this.getTodayDateInputValue();
+    this.signatureDataUrl = '';
+
+    this.inspectionHubRoofTiles = this.inspectionHubRoofTiles.map((tile) => ({
+      ...tile,
+      isAdded: false
+    }));
+
+    this.syncPricingSummary();
+
+    const emptyData = this.buildEstimateDraftData();
+    this.lastDraftSnapshot = JSON.stringify(emptyData);
   }
 
   private applyInspectionCacheToJob(cache: any) {

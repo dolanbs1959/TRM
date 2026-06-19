@@ -291,6 +291,12 @@
   border: 1px solid #c8d9ef;
 }
 
+.button-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .secondary-discount-header,
 .signature-pad-header {
   display: flex;

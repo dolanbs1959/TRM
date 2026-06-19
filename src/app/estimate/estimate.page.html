@@ -505,14 +505,25 @@
               <span class="pricing-value">{{ locationRecordId || 'Unresolved' }}</span>
             </div>
           </div>
-          <ion-button
-            expand="block"
-            color="success"
-            [disabled]="isSubmittingEstimate || activeEstimateItems.length === 0"
-            (click)="submitEstimate()"
-          >
-            {{ isSubmittingEstimate ? 'Submitting...' : 'Submit Estimate' }}
-          </ion-button>
+          <div class="button-row">
+            <ion-button
+              expand="block"
+              color="success"
+              [disabled]="isSubmittingEstimate || activeEstimateItems.length === 0"
+              (click)="submitEstimate()"
+            >
+              {{ isSubmittingEstimate ? 'Submitting...' : 'Submit Estimate' }}
+            </ion-button>
+            <ion-button
+              expand="block"
+              fill="outline"
+              color="danger"
+              [disabled]="isSubmittingEstimate"
+              (click)="startOverEstimate()"
+            >
+              Start Over
+            </ion-button>
+          </div>
         </ion-card-content>
       </ion-card>
     </section>

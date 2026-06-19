@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { IonModal } from '@ionic/angular';
 import { AlertController } from '@ionic/angular';
@@ -24,6 +24,7 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
     private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
     private static readonly INSPECTION_DRAFT_DB_VERSION = 1;
     private static readonly INSPECTION_PHOTO_STORE_NAME = 'inspectionPhotoDrafts';
+    private static readonly ESTIMATE_DRAFT_STORAGE_KEY_PREFIX = 'trm_estimate_draft_';
 
     tech: any = {
       id: '',
@@ -58,11 +59,14 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
   isJobPauseActionLoading: boolean = false;
    private citySearchDebounce: any;
    apiKey: string = '1aeba395c05d88a9369eb7127f21afca';
+  private viewEnterCount = 0;
+  private draftStateCache: Record<string, boolean> = {};
 
   constructor(
     private authService: AuthService,
     private router: Router,
-    private alertController: AlertController
+    private alertController: AlertController,
+    private changeDetectorRef: ChangeDetectorRef
   ) {}
 
   async getLocalWeather() {
@@ -381,6 +385,14 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
       return;
     }
 
+    // Toggle selection: if already selected, unselect it
+    if (this.selectedJobRecordId === jobRecordId) {
+      this.selectedJobRecordId = null;
+      this.saveUiState();
+      return;
+    }
+
+    // Select the new job (single selection model)
     this.selectedJobRecordId = jobRecordId;
     this.saveUiState();
   }
@@ -1312,6 +1324,21 @@ import { AuthService, WorkflowLogPayload } from '../services/auth.service';
     }
   }
 
+  private hasEstimateDraft(jobRecordId: string): boolean {
+    const id = (jobRecordId || '').trim();
+    if (!id) {
+      return false;
+    }
+
+    const storageKey = `${HomePage.ESTIMATE_DRAFT_STORAGE_KEY_PREFIX}${id}`;
+    const raw = localStorage.getItem(storageKey);
+    return !!raw;
+  }
+
+  private getDraftStateForJob(jobRecordId: string): boolean {
+    return this.hasEstimateDraft(jobRecordId);
+  }
+
   private persistInspectionCache(serviceOrderId: string, submissionPayload: any) {
     const id = (serviceOrderId || '').trim();
     if (!id) {
@@ -1591,7 +1618,27 @@ async ngOnInit() {
       return;
     }
 
+    this.viewEnterCount++;
     await this.fetchScheduleForDate(this.today);
+    this.refreshDraftStateCache();
+    this.serviceOrders = this.serviceOrders ? [...this.serviceOrders] : null;
+    this.changeDetectorRef.detectChanges();
+  }
+
+  private refreshDraftStateCache() {
+    if (!this.serviceOrders) {
+      this.draftStateCache = {};
+      return;
+    }
+
+    this.draftStateCache = {};
+    this.serviceOrders.forEach((job) => {
+      const jobRecordId = this.getJobRecordId(job);
+      if (jobRecordId) {
+        const hasDraft = this.hasEstimateDraft(jobRecordId);
+        this.draftStateCache[jobRecordId] = hasDraft;
+      }
+    });
   }
 
   ngOnDestroy() {
@@ -1693,6 +1740,10 @@ async ngOnInit() {
 
   getViewJobButtonLabel(job: any): string {
     if (this.isInspectedJob(job)) {
+      const jobRecordId = this.getJobRecordId(job);
+      if (this.draftStateCache[jobRecordId]) {
+        return 'RESUME ESTIMATE';
+      }
       return 'START ESTIMATE';
     }
 
