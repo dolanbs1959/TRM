@@ -62,6 +62,7 @@ import { LoadingService } from '../services/loading.service';
    apiKey: string = '1aeba395c05d88a9369eb7127f21afca';
   private viewEnterCount = 0;
   private draftStateCache: Record<string, boolean> = {};
+  private historicalRetrievalCache: Map<string, any> = new Map();
 
   constructor(
     private authService: AuthService,
@@ -326,6 +327,18 @@ import { LoadingService } from '../services/loading.service';
 
   private isInspectionJob(job: any): boolean {
     return (job?.['40']?.value || '').toString().trim().toLowerCase() === 'inspection';
+  }
+
+  private isJobForToday(job: any): boolean {
+    const serviceDate = job?.['9']?.value;
+    if (!serviceDate) {
+      return false;
+    }
+
+    const jobDate = new Date(serviceDate);
+    const todayDate = new Date(this.today);
+
+    return jobDate.toDateString() === todayDate.toDateString();
   }
 
   selectJob(job: any) {
@@ -1819,8 +1832,47 @@ async ngOnInit() {
     this.openJobDetail(jobRecordId, mode, isPaused);
   }
 
-  private openEstimate(jobRecordId: string, job: any) {
-    const inspectionCache = this.readInspectionCache(jobRecordId);
+  private async openEstimate(jobRecordId: string, job: any) {
+    let inspectionCache = this.readInspectionCache(jobRecordId);
+    const isToday = this.isJobForToday(job);
+
+    if (!isToday || !inspectionCache) {
+      if (!this.historicalRetrievalCache.has(jobRecordId)) {
+        await this.loadingService.withLoading(
+          'Loading inspection data...',
+          async () => {
+            inspectionCache = await this.authService.getHistoricalInspection(jobRecordId);
+            if (inspectionCache) {
+              console.log('[Home Page][Historical Inspection Received]', {
+                photoCount: inspectionCache.photoBatchData?.rows?.length || 0,
+                firstPhotoFid8Length: inspectionCache.photoBatchData?.rows?.[0]?.fid_8?.length || 0,
+                firstPhotoFid8Preview: inspectionCache.photoBatchData?.rows?.[0]?.fid_8?.substring(0, 100) || ''
+              });
+              // Store in session cache regardless of date to avoid repeated API calls
+              this.historicalRetrievalCache.set(jobRecordId, inspectionCache);
+              // Only persist to localStorage if it's today's inspection (no photos in cache)
+              // Historical inspections with photos are kept in session memory only to avoid quota issues
+              if (isToday) {
+                this.persistInspectionCache(jobRecordId, inspectionCache);
+              }
+            }
+          }
+        );
+      } else {
+        // Historical inspection already retrieved this session - use session cache
+        inspectionCache = this.historicalRetrievalCache.get(jobRecordId);
+        console.log('[Home Page][Using Session Cache]', {
+          photoCount: inspectionCache?.photoBatchData?.rows?.length || 0,
+          firstPhotoFid8Length: inspectionCache?.photoBatchData?.rows?.[0]?.fid_8?.length || 0
+        });
+      }
+    }
+
+    console.log('[Home Page][Navigating to Estimate]', {
+      photoCount: inspectionCache?.photoBatchData?.rows?.length || 0,
+      firstPhotoFid8Length: inspectionCache?.photoBatchData?.rows?.[0]?.fid_8?.length || 0
+    });
+
     this.router.navigate(['/estimate', jobRecordId], {
       state: { job, inspectionCache }
     });

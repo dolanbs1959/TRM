@@ -642,4 +642,20 @@ async checkActiveTimecardSession(employeeId: any, dateStr: string) {
       return { shiftContext: { isClockedIn: false } };
     }
   }
+
+  async getHistoricalInspection(serviceOrderId: string): Promise<any | null> {
+    const url = `${this.apiBaseUrl}/inspection/historical/${serviceOrderId}`;
+
+    try {
+      const response: any = await this.http.get(url).toPromise();
+      if (response?.success && response?.data) {
+        return response.data;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Fetch Historical Inspection Error:', error);
+      return null;
+    }
+  }
 }

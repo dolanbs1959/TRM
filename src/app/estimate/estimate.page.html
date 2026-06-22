@@ -70,8 +70,8 @@
           <p>{{ getCachedPhotoCount() }} photo(s) cached from completed inspection.</p>
         </div>
 
-        <div class="estimate-photo-gallery" *ngIf="getCachedInspectionPhotos().length > 0">
-          <div class="estimate-photo-item" *ngFor="let photo of getCachedInspectionPhotos(); let i = index">
+        <div class="estimate-photo-gallery" *ngIf="cachedInspectionPhotos.length > 0">
+          <div class="estimate-photo-item" *ngFor="let photo of cachedInspectionPhotos; let i = index">
             <button
               type="button"
               class="estimate-photo-trigger"

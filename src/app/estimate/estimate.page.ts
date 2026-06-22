@@ -127,6 +127,7 @@ export class EstimatePage implements OnInit, DoCheck {
   private signatureHasInk = false;
   private viewerTouchStartX: number | null = null;
   private indexedDbInspectionPhotos: CachedInspectionPhoto[] = [];
+  cachedInspectionPhotos: CachedInspectionPhoto[] = [];
   private msDiscountManuallyEdited = false;
   private lastDraftSnapshot = '';
   private lastPhotoDraftSnapshot = '';
@@ -205,6 +206,10 @@ export class EstimatePage implements OnInit, DoCheck {
     }
 
     this.inspectionCache = navState?.inspectionCache || this.readInspectionCache(this.jobId);
+
+    // Cache inspection photos once during initialization
+    this.cachedInspectionPhotos = this.getCachedInspectionPhotos();
+
     void this.initializeEstimateData();
   }
 
@@ -562,6 +567,7 @@ export class EstimatePage implements OnInit, DoCheck {
       cachedAt: new Date().toISOString(),
     };
 
+    // Always use compact cache for localStorage to avoid quota issues with photos
     const compactCache = {
       ...nextCache,
       photoBatchData: { tableId: 'bv3mp7tra', rows: [] },
@@ -570,26 +576,20 @@ export class EstimatePage implements OnInit, DoCheck {
 
     const storageKey = this.getInspectionCacheStorageKey(serviceOrderId);
 
+    // Keep full cache (with photos) in memory for rendering
     this.inspectionCache = nextCache;
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(nextCache));
-      return;
-    } catch (error) {
-      if (!this.isStorageQuotaExceededError(error)) {
-        console.warn('Failed to persist roofs into inspection cache.', error);
-        return;
-      }
 
-      console.warn('Inspection cache exceeded localStorage quota while saving roofs. Retrying with compact payload.', {
-        serviceOrderId,
-      });
-    }
-
-    this.inspectionCache = compactCache;
+    // Only persist compact cache (without photos) to localStorage
     try {
       localStorage.setItem(storageKey, JSON.stringify(compactCache));
     } catch (error) {
-      console.warn('Failed to persist compact roofs cache. Continuing without local cache update.', error);
+      if (this.isStorageQuotaExceededError(error)) {
+        console.warn('Inspection cache exceeded localStorage quota even with compact payload. Continuing without local cache update.', {
+          serviceOrderId,
+        });
+      } else {
+        console.warn('Failed to persist roofs into inspection cache.', error);
+      }
     }
   }
 
@@ -1560,6 +1560,7 @@ export class EstimatePage implements OnInit, DoCheck {
 
   getCachedInspectionPhotos(): CachedInspectionPhoto[] {
     const rows = this.inspectionCache?.photoBatchData?.rows;
+
     const fromCacheRows = Array.isArray(rows)
       ? rows
       .map((row: any) => {
@@ -1568,8 +1569,13 @@ export class EstimatePage implements OnInit, DoCheck {
           return null;
         }
 
+        const dataUrl = this.toImageDataUrl(base64);
+        if (!dataUrl || !dataUrl.startsWith('data:image/')) {
+          return null;
+        }
+
         return {
-          src: this.toImageDataUrl(base64),
+          src: dataUrl,
           section: this.toPhotoSectionLabel(String(row?.fid_6 || '')),
           notes: String(row?.fid_7 || '').trim(),
         } as CachedInspectionPhoto;
@@ -1585,7 +1591,7 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   openPhotoViewer(photo: CachedInspectionPhoto, index?: number) {
-    const photos = this.getCachedInspectionPhotos();
+    const photos = this.cachedInspectionPhotos;
     const resolvedIndex = typeof index === 'number' ? index : photos.findIndex((row) => row.src === photo.src);
     this.selectedPhotoIndex = resolvedIndex >= 0 ? resolvedIndex : 0;
     this.selectedPhoto = photo;
@@ -1600,7 +1606,7 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   showPreviousPhoto() {
-    const photos = this.getCachedInspectionPhotos();
+    const photos = this.cachedInspectionPhotos;
     if (photos.length === 0 || this.selectedPhotoIndex < 0) {
       return;
     }
@@ -1610,7 +1616,7 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   showNextPhoto() {
-    const photos = this.getCachedInspectionPhotos();
+    const photos = this.cachedInspectionPhotos;
     if (photos.length === 0 || this.selectedPhotoIndex < 0) {
       return;
     }

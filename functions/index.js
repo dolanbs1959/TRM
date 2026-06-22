@@ -3013,6 +3013,158 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
 app.post('/roofs/update', handleRoofUpdate);
 app.post('/api/roofs/update', handleRoofUpdate);
 
+// --- GET HISTORICAL INSPECTION DATA ---
+app.get('/inspection/historical/:serviceOrderId', async (req, res) => {
+    const { serviceOrderId } = req.params || {};
+
+    if (!serviceOrderId) {
+        return res.status(400).json({ success: false, message: 'serviceOrderId is required' });
+    }
+
+    const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+    if (!Number.isFinite(normalizedServiceOrderId)) {
+        return res.status(400).json({ success: false, message: 'serviceOrderId must be numeric' });
+    }
+
+    try {
+        // Query service order for masterJobRecordValues
+        const serviceOrderResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.SERVICE_ORDERS,
+            select: [3, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 118, 120, 121, 122, 123, 124, 125, 126, 153],
+            where: `{'3'.EX.'${normalizedServiceOrderId}'}`
+        }, {
+            headers: {
+                'QB-Realm-Hostname': QB_REALM_HOST,
+                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+            }
+        });
+
+        const serviceOrderRecord = serviceOrderResponse?.data?.data?.[0] || null;
+        if (!serviceOrderRecord) {
+            return res.status(404).json({ success: false, message: 'Service order not found' });
+        }
+
+        // Query photo table for photos
+        const photoResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.JOB_PHOTOS,
+            select: [3, 6, 7, 8, 9],
+            where: `{'9'.EX.'${normalizedServiceOrderId}'}`
+        }, {
+            headers: {
+                'QB-Realm-Hostname': QB_REALM_HOST,
+                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+            }
+        });
+
+        const photoRows = photoResponse?.data?.data || [];
+
+        console.log('[Historical Inspection][Photo Data]', JSON.stringify({
+            photoCount: photoRows.length,
+            samplePhoto: photoRows[0] || null
+        }, null, 2));
+
+        // Download photo files and convert to base64
+        const photoRowsWithBase64 = await Promise.all(photoRows.map(async (photo) => {
+            const fileRef = photo['8']?.value;
+            const photoRecordId = photo['3']?.value;
+            let base64Data = '';
+
+            if (fileRef && fileRef.url && photoRecordId) {
+                try {
+                    // Construct file download URL using record ID and field ID
+                    const fileUrl = `${QB_API_ENDPOINT}/files/${TABLES.JOB_PHOTOS}/${photoRecordId}/8/1`;
+                    console.log('[Historical Inspection][Downloading File]', { fileUrl, photoRecordId });
+                    const fileResponse = await axios.get(fileUrl, {
+                        headers: {
+                            'QB-Realm-Hostname': QB_REALM_HOST,
+                            'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
+                        },
+                        responseType: 'arraybuffer'
+                    });
+
+                    // QuickBase returns base64-encoded data, not raw binary
+                    // Decode the buffer as UTF-8 to get the base64 string
+                    const buffer = Buffer.from(fileResponse.data);
+                    const base64String = buffer.toString('utf-8').trim();
+
+                    // Detect MIME type from base64 signature or file extension
+                    const fileName = fileRef.versions?.[0]?.fileName || '';
+                    const extension = fileName.split('.').pop()?.toLowerCase() || '';
+                    let mimeType = 'image/png';
+
+                    // Check base64 signature for JPEG
+                    if (base64String.startsWith('/9j/')) {
+                        mimeType = 'image/jpeg';
+                    } else if (extension === 'jpg' || extension === 'jpeg') {
+                        mimeType = 'image/jpeg';
+                    }
+
+                    base64Data = `data:${mimeType};base64,${base64String}`;
+                    console.log('[Historical Inspection][File Download Success]', {
+                        photoRecordId,
+                        fileName,
+                        mimeType,
+                        bufferSize: fileResponse.data?.length || 0,
+                        base64Length: base64String.length,
+                        totalDataUrlLength: base64Data.length,
+                        preview: base64Data.substring(0, 100)
+                    });
+                } catch (fileError) {
+                    console.error('[Historical Inspection][File Download Error]', {
+                        photoRecordId,
+                        attemptedUrl: `${QB_API_ENDPOINT}/files/${TABLES.JOB_PHOTOS}/${photoRecordId}/8/1`,
+                        error: fileError.message,
+                        status: fileError.response?.status,
+                        responseData: fileError.response?.data
+                    });
+                }
+            }
+
+            return {
+                fid_6: photo['6']?.value !== undefined ? photo['6'].value : photo['6'],
+                fid_7: photo['7']?.value !== undefined ? photo['7'].value : photo['7'],
+                fid_8: base64Data,
+                fid_9: photo['9']?.value !== undefined ? photo['9'].value : photo['9']
+            };
+        }));
+
+        // Build masterJobRecordValues object
+        const masterJobRecordValues = {};
+        const inspectionFields = [48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 118, 120, 121, 122, 123, 124, 125, 126, 153];
+        inspectionFields.forEach(fid => {
+            const value = serviceOrderRecord[String(fid)];
+            if (value !== undefined && value !== null) {
+                masterJobRecordValues[String(fid)] = value.value !== undefined ? value.value : value;
+            }
+        });
+
+        // Build photoBatchData
+        const photoBatchData = {
+            tableId: TABLES.JOB_PHOTOS,
+            rows: photoRowsWithBase64
+        };
+
+        console.log('[Historical Inspection][Photo Batch Data]', JSON.stringify({
+            photoCount: photoBatchData.rows.length,
+            firstRowFid8Type: typeof photoBatchData.rows[0]?.fid_8,
+            firstRowFid8Value: photoBatchData.rows[0]?.fid_8?.substring(0, 100) || photoBatchData.rows[0]?.fid_8
+        }, null, 2));
+
+        const inspectionCache = {
+            serviceOrderId: String(normalizedServiceOrderId),
+            masterJobRecordValues,
+            photoBatchData,
+            photoCount: photoRows.length,
+            cachedAt: new Date().toISOString()
+        };
+
+        return res.json({ success: true, data: inspectionCache });
+    } catch (error) {
+        console.error('Historical Inspection Query Error:', error.response ? error.response.data : error.message);
+        return res.status(500).json({ success: false, message: 'Error retrieving historical inspection data' });
+    }
+});
+
 // --- DEPLOYMENT VERIFICATION ENDPOINT ---
 app.get('/verify-deploy', (req, res) => {
     res.status(200).send('DEPLOYMENT_ACTIVE_2026_06_12_10AM');
