@@ -132,6 +132,7 @@ export class EstimatePage implements OnInit, DoCheck {
   private lastDraftSnapshot = '';
   private lastPhotoDraftSnapshot = '';
   private skipDraftPersistence = false;
+  isEstimateRevision = false;
   private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
   private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
   private static readonly INSPECTION_DRAFT_DB_VERSION = 1;
@@ -198,14 +199,26 @@ export class EstimatePage implements OnInit, DoCheck {
     const navState = this.router.getCurrentNavigation()?.extras?.state as {
       job?: any;
       inspectionCache?: any;
+      isEstimateRevision?: boolean;
     } | undefined;
-    this.job = navState?.job || history.state?.job || null;
+    const historyState = history.state as {
+      job?: any;
+      inspectionCache?: any;
+      isEstimateRevision?: boolean;
+    } | undefined;
+
+    this.job = navState?.job || historyState?.job || null;
+    this.isEstimateRevision = (navState?.isEstimateRevision || historyState?.isEstimateRevision) === true;
+    console.log('[EstimateInit] isEstimateRevision set to:', this.isEstimateRevision, {
+      navState: navState?.isEstimateRevision,
+      historyState: historyState?.isEstimateRevision
+    });
 
     if (!this.job && this.jobId) {
       this.job = { '3': { value: this.jobId } };
     }
 
-    this.inspectionCache = navState?.inspectionCache || this.readInspectionCache(this.jobId);
+    this.inspectionCache = navState?.inspectionCache || historyState?.inspectionCache || this.readInspectionCache(this.jobId);
 
     // Cache inspection photos once during initialization
     this.cachedInspectionPhotos = this.getCachedInspectionPhotos();
@@ -249,7 +262,14 @@ export class EstimatePage implements OnInit, DoCheck {
     void this.loadInspectionPhotosFromIndexedDb();
     void this.loadOfferedServiceItems();
     void this.loadInspectionHubRoofs();
-    await this.hydrateEstimateDraftIfPresent();
+
+    // If in revision mode, retrieve and reconstruct estimate data from QuickBase
+    if (this.isEstimateRevision) {
+      await this.reconstructEstimateFromQuickBase();
+    } else {
+      // Only hydrate draft if not in revision mode to prevent overwriting reconstructed data
+      await this.hydrateEstimateDraftIfPresent();
+    }
 
     // Initialize lastDraftSnapshot to prevent creating a draft on page load
     // This ensures ngDoCheck won't persist a draft until the user makes actual changes
@@ -1244,7 +1264,9 @@ export class EstimatePage implements OnInit, DoCheck {
       serviceNotes: this.serviceNotes || '',
       cleanMaintenanceScheduledFor: this.cleanMaintenanceScheduledFor || '',
       repairServicesScheduledFor: this.repairServicesScheduledFor || '',
+      isEstimateRevision: this.isEstimateRevision,
     };
+    console.log('[EstimatePayload] isEstimateRevision in payload:', this.isEstimateRevision);
   }
 
   async submitEstimate() {
@@ -1679,6 +1701,120 @@ export class EstimatePage implements OnInit, DoCheck {
 
   getJobRecordId(job: any = this.job): string {
     return String(job?.['3']?.value || this.jobId || '').trim();
+  }
+
+  private async reconstructEstimateFromQuickBase() {
+    console.log('[EstimateReconstruction] Starting reconstruction from QuickBase', { jobId: this.jobId });
+
+    const response = await this.authService.retrieveEstimate(this.jobId);
+
+    if (!response.success || !response.data) {
+      console.warn('[EstimateReconstruction] Failed to retrieve estimate data', {
+        success: response.success,
+        message: response.message
+      });
+      return;
+    }
+
+    const { serviceOrder, lineItems, roofs, roofAssociations, photos } = response.data;
+
+    // Reconstruct line items
+    if (Array.isArray(lineItems) && lineItems.length > 0) {
+      this.activeEstimateItems = lineItems.map(item => ({
+        id: item.offeredServiceItemId,
+        name: item.description,
+        description: item.description,
+        category: '',
+        serviceType: '',
+        unit: 'ea',
+        price: item.price,
+        isPackage: false,
+        packageTier: '',
+        sortOrder: 0,
+        qtyNeeded: item.qtyNeeded,
+        lineSubtotal: item.lineSubtotal,
+        sqFootage: item.sqFootage
+      }));
+      console.log('[EstimateReconstruction] Reconstructed line items', { count: this.activeEstimateItems.length });
+    }
+
+    // Reconstruct roof selections
+    if (Array.isArray(roofs) && Array.isArray(roofAssociations)) {
+      const associatedRoofIds = new Set(roofAssociations.map(a => a.roofRecordId));
+
+      this.inspectionHubRoofTiles = roofs.map(roof => ({
+        id: String(roof.recordId),
+        name: roof.name,
+        material: roof.material,
+        pitch: roof.pitch,
+        squareFootage: roof.squareFootage,
+        squareFootageLabel: String(roof.squareFootage),
+        type: roof.type,
+        status: roof.status,
+        isAdded: associatedRoofIds.has(roof.recordId)
+      }));
+
+      // Recalculate selected roof square footage
+      this.selectedRoofSquareFootage = this.inspectionHubRoofTiles
+        .filter(tile => tile.isAdded)
+        .reduce((sum, tile) => sum + (tile.squareFootage || 0), 0);
+
+      console.log('[EstimateReconstruction] Reconstructed roofs', {
+        total: this.inspectionHubRoofTiles.length,
+        selected: this.inspectionHubRoofTiles.filter(t => t.isAdded).length,
+        totalSquareFootage: this.selectedRoofSquareFootage
+      });
+    }
+
+    // Reconstruct photos
+    if (Array.isArray(photos) && photos.length > 0) {
+      this.cachedInspectionPhotos = photos
+        .filter(photo => photo.dataUrl && photo.dataUrl.length > 0)
+        .map(photo => ({
+          src: photo.dataUrl,
+          section: photo.photoType || 'General',
+          notes: ''
+        }));
+      console.log('[EstimateReconstruction] Reconstructed photos', { count: this.cachedInspectionPhotos.length });
+    }
+
+    // Restore service notes and scheduling dates
+    if (serviceOrder) {
+      this.serviceNotes = serviceOrder.serviceNotes || '';
+      this.cleanMaintenanceScheduledFor = serviceOrder.cleanMaintenanceScheduledFor || this.getTodayDateInputValue();
+      this.repairServicesScheduledFor = serviceOrder.repairServicesScheduledFor || this.getTodayDateInputValue();
+
+      // Restore discount values
+      this.secondaryDiscountAmount = serviceOrder.secondaryDiscountAmount || 0;
+
+      // Restore location email
+      if (serviceOrder.locationEmail) {
+        this.locationEmail = serviceOrder.locationEmail;
+      }
+
+      // Restore customer record ID if available
+      if (this.job && serviceOrder.customerFirstName) {
+        this.job['93'] = { value: serviceOrder.customerFirstName };
+      }
+      if (this.job && serviceOrder.customerLastName) {
+        this.job['94'] = { value: serviceOrder.customerLastName };
+      }
+      if (this.job && serviceOrder.customerPhone) {
+        this.job['95'] = { value: serviceOrder.customerPhone };
+      }
+
+      console.log('[EstimateReconstruction] Restored service order fields', {
+        hasServiceNotes: !!this.serviceNotes,
+        hasMaintenanceDate: !!this.cleanMaintenanceScheduledFor,
+        hasRepairDate: !!this.repairServicesScheduledFor,
+        discountAmount: this.secondaryDiscountAmount
+      });
+    }
+
+    // Recalculate pricing totals using existing logic
+    this.syncPricingSummary();
+
+    console.log('[EstimateReconstruction] Reconstruction complete, isEstimateRevision:', this.isEstimateRevision);
   }
 
   getFieldValue(fid: number, job: any = this.job): string {

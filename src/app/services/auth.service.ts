@@ -59,6 +59,7 @@ export interface EstimateSubmissionPayload {
   secondaryDiscountAmount: number;
   secondaryDiscountPercentage: number;
   discountControlValue?: string;
+  isEstimateRevision?: boolean;
 }
 
 @Injectable({
@@ -600,6 +601,24 @@ async getJobDetail(recordId: string) {
     } catch (error) {
       console.error('Submit Estimate Error:', error);
       return { success: false, message: 'Estimate submission request failed' };
+    }
+  }
+
+  async retrieveEstimate(serviceOrderId: string): Promise<{ success: boolean; data?: any; message?: string }> {
+    const url = `${this.apiBaseUrl}/estimate/retrieve/${serviceOrderId}`;
+    try {
+      const response: any = await this.http.get(url).toPromise();
+      if (response && typeof response === 'object') {
+        return {
+          success: !!response.success,
+          data: response.data,
+          message: response.message,
+        };
+      }
+      return { success: false, message: 'Empty response from estimate retrieval endpoint' };
+    } catch (error) {
+      console.error('Retrieve Estimate Error:', error);
+      return { success: false, message: 'Estimate retrieval request failed' };
     }
   }
 

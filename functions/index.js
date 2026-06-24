@@ -452,6 +452,111 @@ async function writeQuickbaseRecords(tableId, rows, fieldsToReturn = [3]) {
     return response;
 }
 
+async function deleteQuickbaseRecords(tableId, recordIds) {
+    if (!Array.isArray(recordIds) || recordIds.length === 0) {
+        console.log('[QuickbaseDelete] No record IDs provided, skipping deletion');
+        return;
+    }
+
+    const payload = {
+        from: tableId,
+        where: `{'3'.EX.${recordIds.join('.OR.')}}`
+    };
+
+    try {
+        const response = await axios.delete(`${QB_API_ENDPOINT}/records`, {
+            data: payload,
+            headers: buildQuickbaseHeaders()
+        });
+
+        console.log('[QuickbaseDelete] Deletion completed', {
+            tableId,
+            recordIds,
+            status: response.status,
+            deletedCount: recordIds.length
+        });
+
+        return response;
+    } catch (error) {
+        console.error('[QuickbaseDelete] Deletion failed', {
+            tableId,
+            recordIds,
+            error: error.message
+        });
+        throw error;
+    }
+}
+
+async function queryEstimateLineItemsByServiceOrder(serviceOrderId) {
+    const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+    if (!Number.isFinite(normalizedServiceOrderId)) {
+        console.warn('[EstimateLineItemsQuery] Invalid serviceOrderId');
+        return [];
+    }
+
+    try {
+        const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.ESTIMATE_LINE_ITEMS,
+            select: [3],
+            where: `{'13'.EX.${normalizedServiceOrderId}}`
+        }, {
+            headers: buildQuickbaseHeaders()
+        });
+
+        const records = Array.isArray(response?.data?.data) ? response.data.data : [];
+        const recordIds = records.map(record => record['3']?.value).filter(id => Number.isFinite(id));
+
+        console.log('[EstimateLineItemsQuery] Query completed', {
+            serviceOrderId: normalizedServiceOrderId,
+            foundCount: recordIds.length,
+            recordIds
+        });
+
+        return recordIds;
+    } catch (error) {
+        console.error('[EstimateLineItemsQuery] Query failed', {
+            serviceOrderId: normalizedServiceOrderId,
+            error: error.message
+        });
+        return [];
+    }
+}
+
+async function queryServiceOrderRoofsByServiceOrder(serviceOrderId) {
+    const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+    if (!Number.isFinite(normalizedServiceOrderId)) {
+        console.warn('[ServiceOrderRoofsQuery] Invalid serviceOrderId');
+        return [];
+    }
+
+    try {
+        const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.SERVICE_ORDER_ROOFS,
+            select: [3],
+            where: `{'24'.EX.${normalizedServiceOrderId}}`
+        }, {
+            headers: buildQuickbaseHeaders()
+        });
+
+        const records = Array.isArray(response?.data?.data) ? response.data.data : [];
+        const recordIds = records.map(record => record['3']?.value).filter(id => Number.isFinite(id));
+
+        console.log('[ServiceOrderRoofsQuery] Query completed', {
+            serviceOrderId: normalizedServiceOrderId,
+            foundCount: recordIds.length,
+            recordIds
+        });
+
+        return recordIds;
+    } catch (error) {
+        console.error('[ServiceOrderRoofsQuery] Query failed', {
+            serviceOrderId: normalizedServiceOrderId,
+            error: error.message
+        });
+        return [];
+    }
+}
+
 function normalizeEstimateSubmissionMode(value) {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'sold' || normalized === 'ready' || normalized === 'customer_ready_to_begin') {
@@ -727,7 +832,8 @@ async function handleSubmitEstimateData(req, res) {
         secondaryDiscountPercentage,
         serviceNotes,
         cleanMaintenanceScheduledFor,
-        repairServicesScheduledFor
+        repairServicesScheduledFor,
+        isEstimateRevision
     } = inboundBody;
 
     const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
@@ -787,19 +893,148 @@ async function handleSubmitEstimateData(req, res) {
             });
         }
 
-        await writeQuickbaseRecords(TABLES.SERVICE_ORDERS, [{
+        const serviceOrderUpdate = {
             3: { value: normalizedServiceOrderId },
             11: { value: nextStatus },
             137: { value: normalizedSubtotal },
             66: { value: normalizedTaxAmount },
             67: { value: normalizedTotalAmount },
-            83: { value: normalizedSecondaryDiscountAmount }
-        }], [3, 11, 137, 66, 67, 83]);
+            83: { value: normalizedSecondaryDiscountAmount },
+            154: { value: String(inboundBody.cleanMaintenanceScheduledFor || '') },
+            155: { value: String(inboundBody.repairServicesScheduledFor || '') },
+            73: { value: String(inboundBody.serviceNotes || '') }
+        };
+
+        if (normalizedSubmissionMode === 'sold') {
+            serviceOrderUpdate[69] = { value: new Date().toISOString().split('T')[0] };
+            serviceOrderUpdate[40] = { value: 'Service Order' };
+        }
+
+        await writeQuickbaseRecords(TABLES.SERVICE_ORDERS, [serviceOrderUpdate], [3, 11, 137, 66, 67, 83, 154, 155, 73, 69, 40]);
+
+        // Handle estimate revision: delete existing data before inserting new ones
+        if (isEstimateRevision === true) {
+            console.log('[EstimateRevision] Revision mode detected, deleting existing data', {
+                serviceOrderId: normalizedServiceOrderId
+            });
+
+            try {
+                // Delete existing estimate line items by relationship field (field 13)
+                console.log('[EstimateRevision] Deleting line items by service order ID', {
+                    serviceOrderId: normalizedServiceOrderId
+                });
+
+                const lineItemDeletePayload = {
+                    from: TABLES.ESTIMATE_LINE_ITEMS,
+                    where: `{'13'.EX.${normalizedServiceOrderId}}`
+                };
+
+                const lineItemDeleteResponse = await axios.delete(`${QB_API_ENDPOINT}/records`, {
+                    data: lineItemDeletePayload,
+                    headers: buildQuickbaseHeaders()
+                });
+
+                console.log('[EstimateRevision][DELETE Response] Line items deletion response', {
+                    serviceOrderId: normalizedServiceOrderId,
+                    status: lineItemDeleteResponse.status,
+                    statusText: lineItemDeleteResponse.statusText,
+                    headers: lineItemDeleteResponse.headers,
+                    responseBody: lineItemDeleteResponse.data,
+                    metadata: lineItemDeleteResponse.data?.metadata,
+                    lineErrors: lineItemDeleteResponse.data?.metadata?.lineErrors,
+                    deletedRecordCount: lineItemDeleteResponse.data?.metadata?.deletedRecordCount || lineItemDeleteResponse.data?.deletedRecordCount
+                });
+
+                // Verification query: confirm records are actually gone
+                const verificationLineItemIds = await queryEstimateLineItemsByServiceOrder(normalizedServiceOrderId);
+                console.log('[EstimateRevision][Verification] Line items after deletion', {
+                    serviceOrderId: normalizedServiceOrderId,
+                    remainingCount: verificationLineItemIds.length,
+                    remainingRecordIds: verificationLineItemIds
+                });
+
+                // Delete existing service order roof associations by relationship field (field 24)
+                console.log('[EstimateRevision] Deleting service order roofs by service order ID', {
+                    serviceOrderId: normalizedServiceOrderId
+                });
+
+                const serviceOrderRoofDeletePayload = {
+                    from: TABLES.SERVICE_ORDER_ROOFS,
+                    where: `{'24'.EX.${normalizedServiceOrderId}}`
+                };
+
+                const serviceOrderRoofDeleteResponse = await axios.delete(`${QB_API_ENDPOINT}/records`, {
+                    data: serviceOrderRoofDeletePayload,
+                    headers: buildQuickbaseHeaders()
+                });
+
+                console.log('[EstimateRevision][DELETE Response] Service order roofs deletion response', {
+                    serviceOrderId: normalizedServiceOrderId,
+                    status: serviceOrderRoofDeleteResponse.status,
+                    statusText: serviceOrderRoofDeleteResponse.statusText,
+                    headers: serviceOrderRoofDeleteResponse.headers,
+                    responseBody: serviceOrderRoofDeleteResponse.data,
+                    metadata: serviceOrderRoofDeleteResponse.data?.metadata,
+                    lineErrors: serviceOrderRoofDeleteResponse.data?.metadata?.lineErrors,
+                    deletedRecordCount: serviceOrderRoofDeleteResponse.data?.metadata?.deletedRecordCount || serviceOrderRoofDeleteResponse.data?.deletedRecordCount
+                });
+
+                // Verification query: confirm records are actually gone
+                const verificationServiceOrderRoofIds = await queryServiceOrderRoofsByServiceOrder(normalizedServiceOrderId);
+                console.log('[EstimateRevision][Verification] Service order roofs after deletion', {
+                    serviceOrderId: normalizedServiceOrderId,
+                    remainingCount: verificationServiceOrderRoofIds.length,
+                    remainingRecordIds: verificationServiceOrderRoofIds
+                });
+
+                // Delete existing PDF file attachment from FID144 (all versions)
+                // DISABLED: QuickBase maintains file revision history automatically.
+                // Uploading a new PDF creates a new revision and older revisions are purged
+                // by QuickBase according to the field's revision limit.
+                // Code left in place for future reference if needed.
+                /*
+                console.log('[EstimateRevision] Deleting PDF file attachment from FID144');
+                const serviceOrderFileDeletePayload = {
+                    to: TABLES.SERVICE_ORDERS,
+                    data: [
+                        {
+                            3: { value: normalizedServiceOrderId },
+                            144: { value: '' }
+                        }
+                    ],
+                    fieldsToReturn: [3, 144]
+                };
+
+                await axios.post(`${QB_API_ENDPOINT}/records`, serviceOrderFileDeletePayload, {
+                    headers: buildQuickbaseHeaders()
+                });
+                console.log('[EstimateRevision] PDF file attachment deleted successfully');
+                */
+
+            } catch (deletionError) {
+                console.error('[EstimateRevision] Failed to delete existing data', {
+                    serviceOrderId: normalizedServiceOrderId,
+                    error: deletionError.message
+                });
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to delete existing estimate data during revision. Please try again.'
+                });
+            }
+        }
 
         const lineItemResponse = await writeQuickbaseRecords(TABLES.ESTIMATE_LINE_ITEMS, estimateRows, [3]);
         const insertedLineItemCount = Array.isArray(lineItemResponse?.data?.data)
             ? lineItemResponse.data.data.length
             : estimateRows.length;
+
+        // Verification query: confirm new line items exist after insertion
+        const afterInsertionLineItemIds = await queryEstimateLineItemsByServiceOrder(normalizedServiceOrderId);
+        console.log('[EstimateRevision][Verification] Line items after insertion', {
+            serviceOrderId: normalizedServiceOrderId,
+            totalCount: afterInsertionLineItemIds.length,
+            recordIds: afterInsertionLineItemIds
+        });
 
         let insertedServiceOrderRoofCount = 0;
         if (normalizedRoofRecordIds.length > 0) {
@@ -824,6 +1059,14 @@ async function handleSubmitEstimateData(req, res) {
                 serviceOrderId: normalizedServiceOrderId,
                 insertedServiceOrderRoofCount,
                 roofRecordIds: normalizedRoofRecordIds
+            });
+
+            // Verification query: confirm new service order roofs exist after insertion
+            const afterInsertionServiceOrderRoofIds = await queryServiceOrderRoofsByServiceOrder(normalizedServiceOrderId);
+            console.log('[EstimateRevision][Verification] Service order roofs after insertion', {
+                serviceOrderId: normalizedServiceOrderId,
+                totalCount: afterInsertionServiceOrderRoofIds.length,
+                recordIds: afterInsertionServiceOrderRoofIds
             });
         }
 
@@ -2422,6 +2665,215 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
     app.post('/api/submit-inspection-data', handleSubmitInspectionData);
     app.post('/inspections/submit', handleSubmitInspectionData);
     app.post('/estimate/submit', handleSubmitEstimateData);
+
+    app.get('/estimate/retrieve/:serviceOrderId', async (req, res) => {
+        const { serviceOrderId } = req.params;
+        const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+
+        if (!Number.isFinite(normalizedServiceOrderId)) {
+            return res.status(400).json({ success: false, message: 'Invalid serviceOrderId' });
+        }
+
+        console.log('[EstimateRetrieve] Retrieving estimate data', { serviceOrderId: normalizedServiceOrderId });
+
+        try {
+            // Query SERVICE_ORDERS
+            const serviceOrderResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.SERVICE_ORDERS,
+                select: [3, 11, 40, 66, 67, 69, 73, 83, 137, 154, 155, 93, 94, 95, 106, 92, 105, 142, 57],
+                where: `{'3'.EX.${normalizedServiceOrderId}}`
+            }, {
+                headers: buildQuickbaseHeaders()
+            });
+
+            const serviceOrderRecords = Array.isArray(serviceOrderResponse?.data?.data)
+                ? serviceOrderResponse.data.data
+                : [];
+
+            if (serviceOrderRecords.length === 0) {
+                return res.status(404).json({ success: false, message: 'Service order not found' });
+            }
+
+            const serviceOrder = serviceOrderRecords[0];
+
+            // Query ESTIMATE_LINE_ITEMS
+            const lineItemsResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.ESTIMATE_LINE_ITEMS,
+                select: [3, 13, 16, 17, 18, 19, 20, 23, 24],
+                where: `{'13'.EX.${normalizedServiceOrderId}}`
+            }, {
+                headers: buildQuickbaseHeaders()
+            });
+
+            const lineItems = Array.isArray(lineItemsResponse?.data?.data)
+                ? lineItemsResponse.data.data
+                : [];
+
+            // Query SERVICE_ORDER_ROOFS
+            const serviceOrderRoofsResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.SERVICE_ORDER_ROOFS,
+                select: [3, 22, 24],
+                where: `{'24'.EX.${normalizedServiceOrderId}}`
+            }, {
+                headers: buildQuickbaseHeaders()
+            });
+
+            const serviceOrderRoofs = Array.isArray(serviceOrderRoofsResponse?.data?.data)
+                ? serviceOrderRoofsResponse.data.data
+                : [];
+
+            // Extract roof record IDs
+            const roofRecordIds = serviceOrderRoofs
+                .map(record => record['22']?.value)
+                .filter(id => Number.isFinite(id));
+
+            // Query ROOFS for details
+            let roofs = [];
+            if (roofRecordIds.length > 0) {
+                const roofsWhereClause = roofRecordIds.length === 1
+                    ? `{'3'.EX.${roofRecordIds[0]}}`
+                    : `{'3'.EX.${roofRecordIds.join('.OR.')}}`;
+
+                const roofsResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                    from: TABLES.ROOFS,
+                    select: [3, 7, 59, 60, 61, 63, 64, 65, 66, 67, 68, 69, 70, 71],
+                    where: roofsWhereClause
+                }, {
+                    headers: buildQuickbaseHeaders()
+                });
+
+                roofs = Array.isArray(roofsResponse?.data?.data)
+                    ? roofsResponse.data.data
+                    : [];
+            }
+
+            // Query JOB_PHOTOS for photos associated with this service order
+            const photoResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.JOB_PHOTOS,
+                select: [3, 6, 7, 8, 9],
+                where: `{'9'.EX.'${normalizedServiceOrderId}'}`
+            }, {
+                headers: buildQuickbaseHeaders()
+            });
+
+            const photoRows = Array.isArray(photoResponse?.data?.data) ? photoResponse.data.data : [];
+
+            console.log('[EstimateRetrieve] Photo data retrieved', {
+                serviceOrderId: normalizedServiceOrderId,
+                photoCount: photoRows.length
+            });
+
+            // Download photo files and convert to base64
+            const photos = await Promise.all(photoRows.map(async (photo) => {
+                const fileRef = photo['8']?.value;
+                const photoRecordId = photo['3']?.value;
+                let base64Data = '';
+
+                if (fileRef && fileRef.url && photoRecordId) {
+                    try {
+                        const fileUrl = `${QB_API_ENDPOINT}/files/${TABLES.JOB_PHOTOS}/${photoRecordId}/8/1`;
+                        const fileResponse = await axios.get(fileUrl, {
+                            headers: buildQuickbaseHeaders(),
+                            responseType: 'arraybuffer'
+                        });
+
+                        const buffer = Buffer.from(fileResponse.data);
+                        const base64String = buffer.toString('utf-8').trim();
+
+                        const fileName = fileRef.versions?.[0]?.fileName || '';
+                        const extension = fileName.split('.').pop()?.toLowerCase() || '';
+                        let mimeType = 'image/png';
+
+                        if (base64String.startsWith('/9j/')) {
+                            mimeType = 'image/jpeg';
+                        } else if (extension === 'jpg' || extension === 'jpeg') {
+                            mimeType = 'image/jpeg';
+                        }
+
+                        base64Data = `data:${mimeType};base64,${base64String}`;
+                    } catch (fileError) {
+                        console.error('[EstimateRetrieve][Photo Download Error]', {
+                            photoRecordId,
+                            error: fileError.message
+                        });
+                    }
+                }
+
+                return {
+                    recordId: photoRecordId,
+                    photoType: photo['6']?.value || '',
+                    roofId: photo['7']?.value || '',
+                    dataUrl: base64Data,
+                    serviceOrderId: photo['9']?.value || ''
+                };
+            }));
+
+            // Build response payload
+            const responseData = {
+                serviceOrder: {
+                    recordId: serviceOrder['3']?.value,
+                    status: serviceOrder['11']?.value,
+                    stage: serviceOrder['40']?.value,
+                    subtotal: serviceOrder['137']?.value || 0,
+                    taxAmount: serviceOrder['66']?.value || 0,
+                    totalAmount: serviceOrder['67']?.value || 0,
+                    secondaryDiscountAmount: serviceOrder['83']?.value || 0,
+                    serviceNotes: serviceOrder['73']?.value || '',
+                    cleanMaintenanceScheduledFor: serviceOrder['154']?.value || '',
+                    repairServicesScheduledFor: serviceOrder['155']?.value || '',
+                    soldDate: serviceOrder['69']?.value || '',
+                    customerFirstName: serviceOrder['93']?.value || '',
+                    customerLastName: serviceOrder['94']?.value || '',
+                    customerPhone: serviceOrder['95']?.value || '',
+                    locationAddressStreet: serviceOrder['106']?.value || '',
+                    locationAddressCity: serviceOrder['92']?.value || '',
+                    locationAddressZip: serviceOrder['105']?.value || '',
+                    locationEmail: serviceOrder['142']?.value || serviceOrder['57']?.value || ''
+                },
+                lineItems: lineItems.map(item => ({
+                    recordId: item['3']?.value,
+                    offeredServiceItemId: item['17']?.value,
+                    description: item['19']?.value,
+                    qtyNeeded: item['16']?.value || 1,
+                    sqFootage: item['23']?.value || 0,
+                    price: item['18']?.value || 0,
+                    lineSubtotal: item['24']?.value || 0
+                })),
+                roofs: roofs.map(roof => ({
+                    recordId: roof['3']?.value,
+                    name: roof['60']?.value || '',
+                    material: roof['69']?.value || '',
+                    pitch: roof['63']?.value || '',
+                    squareFootage: roof['61']?.value || 0,
+                    type: roof['67']?.value || '',
+                    status: roof['59']?.value || ''
+                })),
+                roofAssociations: serviceOrderRoofs.map(assoc => ({
+                    roofRecordId: assoc['22']?.value
+                })),
+                photos: photos
+            };
+
+            console.log('[EstimateRetrieve] Retrieval successful', {
+                serviceOrderId: normalizedServiceOrderId,
+                lineItemCount: responseData.lineItems.length,
+                roofCount: responseData.roofs.length,
+                photoCount: responseData.photos.length
+            });
+
+            return res.json({ success: true, data: responseData });
+
+        } catch (error) {
+            console.error('[EstimateRetrieve] Retrieval failed', {
+                serviceOrderId: normalizedServiceOrderId,
+                error: error.message
+            });
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to retrieve estimate data'
+            });
+        }
+    });
 
     app.post('/api/estimate/submit', async (req, res) => {
             const submissionData = req.body;

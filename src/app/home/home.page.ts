@@ -1798,6 +1798,11 @@ async ngOnInit() {
       return 'START ESTIMATE';
     }
 
+    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
+    if (status === 'estimated') {
+      return 'REVISE ESTIMATE';
+    }
+
     return this.isInProgressJob(job) ? 'RETURN TO HUB' : 'VIEW JOB';
   }
 
@@ -1823,6 +1828,17 @@ async ngOnInit() {
 
     if (this.isInspectedJob(job)) {
       this.openEstimate(jobRecordId, job);
+      return;
+    }
+
+    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
+    if (status === 'estimated') {
+      this.router.navigate(['/estimate', jobRecordId], {
+        state: {
+          job,
+          isEstimateRevision: true
+        }
+      });
       return;
     }
 
