@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 const { calculateTax, getTaxRate } = require('./taxUtility');
 
 const companyConfig = {
@@ -15,7 +16,58 @@ function isPerSquareUnit(unit) {
     return /\bsq\b/.test(normalized) || normalized.includes('square');
 }
 
-function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = [], totalSquareFootage = 0, serviceNotes = '', cleanMaintenanceScheduledFor = '', repairServicesScheduledFor = '') {
+async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
+    try {
+        const base64Data = base64DataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        const originalSize = buffer.length;
+        const metadata = await sharp(buffer).metadata();
+        const originalDimensions = `${metadata.width} × ${metadata.height}`;
+
+        let resizedBuffer;
+        if (metadata.width > maxWidth) {
+            resizedBuffer = await sharp(buffer)
+                .resize(maxWidth, null, {
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .jpeg({
+                    quality: 85,
+                    progressive: false
+                })
+                .toBuffer();
+        } else {
+            resizedBuffer = await sharp(buffer)
+                .jpeg({
+                    quality: 85,
+                    progressive: false
+                })
+                .toBuffer();
+        }
+
+        const resizedMetadata = await sharp(resizedBuffer).metadata();
+        const resizedDimensions = `${resizedMetadata.width} × ${resizedMetadata.height}`;
+        const resizedSize = resizedBuffer.length;
+
+        const resizedDataUrl = `data:image/jpeg;base64,${resizedBuffer.toString('base64')}`;
+
+        console.log('[PDFGenerator] Photo resize:', {
+            originalDimensions,
+            resizedDimensions,
+            originalSize: `${(originalSize / 1024).toFixed(2)} KB`,
+            resizedSize: `${(resizedSize / 1024).toFixed(2)} KB`,
+            reduction: `${((1 - resizedSize / originalSize) * 100).toFixed(1)}%`
+        });
+
+        return resizedDataUrl;
+    } catch (error) {
+        console.error('[PDFGenerator] Photo resize failed:', error.message);
+        return base64DataUrl;
+    }
+}
+
+async function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = [], totalSquareFootage = 0, serviceNotes = '', cleanMaintenanceScheduledFor = '', repairServicesScheduledFor = '', inspectionPhotos = []) {
     // Defensive coding: Ensure job is an object to prevent crashes
     const safeJob = job || {};
     
@@ -271,6 +323,43 @@ function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = []
     // Clean up empty signature container if not signed
     if (!hasSignature) {
         html = html.replace(/<div class="signature-container">[\s\S]*?<\/div>/g, '');
+    }
+
+    // Generate Inspection Photos section HTML
+    let inspectionPhotosHtml = '';
+    if (Array.isArray(inspectionPhotos) && inspectionPhotos.length > 0) {
+        console.log('[PDFGenerator] Processing inspection photos', { photoCount: inspectionPhotos.length });
+
+        const photosHtml = await Promise.all(inspectionPhotos.map(async (photo, index) => {
+            const sectionLabel = photo.section || 'General';
+            const notesHtml = photo.notes && photo.notes.trim()
+                ? `<div style="font-size: 12px; color: #666; margin-top: 8px; line-height: 1.4;">${photo.notes}</div>`
+                : '';
+
+            const resizedSrc = await resizePhotoForPdf(photo.src, 1000);
+
+            return `
+                <div class="photo-item">
+                    <img src="${resizedSrc}" alt="Inspection Photo ${index + 1}" class="photo-img">
+                    <div class="photo-section">${sectionLabel}</div>
+                    ${notesHtml}
+                </div>
+            `;
+        }));
+
+        inspectionPhotosHtml = `
+            <div class="photo-section-container">
+                <h3 style="color: #f21616; font-size: 18px; margin: 0 0 20px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Inspection Photos</h3>
+                <div class="photo-grid">
+                    ${photosHtml.join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Insert inspection photos section at the end, before closing body tag
+    if (inspectionPhotosHtml) {
+        html = html.replace('</body>', `${inspectionPhotosHtml}</body>`);
     }
 
     return html;

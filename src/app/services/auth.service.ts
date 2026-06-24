@@ -60,6 +60,11 @@ export interface EstimateSubmissionPayload {
   secondaryDiscountPercentage: number;
   discountControlValue?: string;
   isEstimateRevision?: boolean;
+  inspectionPhotos?: Array<{
+    src: string;
+    section: string;
+    notes: string;
+  }>;
 }
 
 @Injectable({

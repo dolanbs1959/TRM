@@ -133,6 +133,35 @@
             border-top: 1px solid #eee;
             page-break-inside: avoid;
         }
+        .photo-section-container {
+            page-break-before: always;
+            break-before: page;
+            margin-top: 40px;
+            padding: 20px;
+        }
+        .photo-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .photo-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #fff;
+        }
+        .photo-img {
+            width: 100%;
+            height: auto;
+            max-height: 250px;
+            object-fit: contain;
+            display: block;
+        }
+        .photo-section {
+            font-size: 13px;
+            font-weight: bold;
+            color: #f21616;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>

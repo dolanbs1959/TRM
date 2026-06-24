@@ -671,10 +671,11 @@ async function generateAndDispatchPDF(payload) {
         const serviceNotes = payload.serviceNotes || '';
         const cleanMaintenanceScheduledFor = payload.cleanMaintenanceScheduledFor || '';
         const repairServicesScheduledFor = payload.repairServicesScheduledFor || '';
+        const inspectionPhotos = payload.inspectionPhotos || [];
 
         // Generate HTML using the pdfGenerator
         console.log('[BackgroundWorker] Generating HTML...');
-        const htmlContent = generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage, serviceNotes, cleanMaintenanceScheduledFor, repairServicesScheduledFor);
+        const htmlContent = await generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage, serviceNotes, cleanMaintenanceScheduledFor, repairServicesScheduledFor, inspectionPhotos);
         console.log('[BackgroundWorker] HTML generated, length:', htmlContent.length);
 
         // Launch Puppeteer to generate PDF in memory
@@ -1095,7 +1096,8 @@ async function handleSubmitEstimateData(req, res) {
             totalSquareFootage: inboundBody.totalSquareFootage || 0,
             serviceNotes: serviceNotes || '',
             cleanMaintenanceScheduledFor: cleanMaintenanceScheduledFor || '',
-            repairServicesScheduledFor: repairServicesScheduledFor || ''
+            repairServicesScheduledFor: repairServicesScheduledFor || '',
+            inspectionPhotos: inboundBody.inspectionPhotos || []
         });
         
         console.log('[Estimate] generateAndDispatchPDF called (async, non-blocking)');

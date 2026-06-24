@@ -1265,6 +1265,7 @@ export class EstimatePage implements OnInit, DoCheck {
       cleanMaintenanceScheduledFor: this.cleanMaintenanceScheduledFor || '',
       repairServicesScheduledFor: this.repairServicesScheduledFor || '',
       isEstimateRevision: this.isEstimateRevision,
+      inspectionPhotos: this.cachedInspectionPhotos || [],
     };
     console.log('[EstimatePayload] isEstimateRevision in payload:', this.isEstimateRevision);
   }
