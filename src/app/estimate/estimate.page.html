@@ -71,7 +71,15 @@
         </div>
 
         <div class="estimate-photo-gallery" *ngIf="cachedInspectionPhotos.length > 0">
+          <div class="photo-select-all-row">
+            <ion-checkbox [(ngModel)]="selectAllPhotos" (ionChange)="onSelectAllPhotosChange($event)" color="danger"></ion-checkbox>
+            <span class="select-all-label">Select All Photos for PDF</span>
+          </div>
           <div class="estimate-photo-item" *ngFor="let photo of cachedInspectionPhotos; let i = index">
+            <div class="photo-checkbox-row">
+              <ion-checkbox [checked]="isPhotoSelected(photo.id)" (ionChange)="onPhotoSelectionChange(photo.id, $event)" color="danger"></ion-checkbox>
+              <span class="photo-section-label">{{ photo.section }}</span>
+            </div>
             <button
               type="button"
               class="estimate-photo-trigger"
@@ -81,7 +89,6 @@
               <img [src]="photo.src" alt="Inspection photo" title="Inspection photo" loading="lazy" />
             </button>
             <div class="estimate-photo-meta">
-              <span class="detail-label">{{ photo.section }}</span>
               <p *ngIf="photo.notes">{{ photo.notes }}</p>
             </div>
           </div>

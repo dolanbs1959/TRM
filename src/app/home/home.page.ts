@@ -6,6 +6,13 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
 
+export const EstimateWorkflow = {
+  START: 'start',
+  REVISE: 'revise',
+  RESUME: 'resume',
+} as const;
+export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWorkflow];
+
 @Component({
   selector: 'app-home',
   templateUrl: 'home.page.html',
@@ -1776,6 +1783,30 @@ async ngOnInit() {
     return !!mobile && mobile !== phone;
   }
 
+  isUnsignedEstimateSubmitted(job: any): boolean {
+    const jobRecordId = this.getJobRecordId(job);
+    if (!jobRecordId) {
+      return false;
+    }
+
+    return this.getEstimateDraftReminderFlag(jobRecordId);
+  }
+
+  private getEstimateDraftReminderFlag(jobRecordId: string): boolean {
+    const storageKey = `${HomePage.ESTIMATE_DRAFT_STORAGE_KEY_PREFIX}${jobRecordId.trim()}`;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return false;
+    }
+
+    try {
+      const draft = JSON.parse(raw);
+      return !!draft.unsignedEstimateSubmitted;
+    } catch {
+      return false;
+    }
+  }
+
   isInProgressJob(job: any): boolean {
     const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
     if (status === 'in progress') {
@@ -1790,17 +1821,20 @@ async ngOnInit() {
   }
 
   getViewJobButtonLabel(job: any): string {
-    if (this.isInspectedJob(job)) {
-      const jobRecordId = this.getJobRecordId(job);
-      if (this.draftStateCache[jobRecordId]) {
-        return 'RESUME ESTIMATE';
-      }
-      return 'START ESTIMATE';
+    // Priority 1: Check if draft exists (highest priority)
+    const jobRecordId = this.getJobRecordId(job);
+    if (this.draftStateCache[jobRecordId]) {
+      return 'RESUME ESTIMATE';
     }
 
+    // Priority 2: No draft exists - check job status
     const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
     if (status === 'estimated') {
       return 'REVISE ESTIMATE';
+    }
+
+    if (this.isInspectedJob(job)) {
+      return 'START ESTIMATE';
     }
 
     return this.isInProgressJob(job) ? 'RETURN TO HUB' : 'VIEW JOB';
@@ -1811,8 +1845,8 @@ async ngOnInit() {
       return false;
     }
 
-    // When clocked out, only VIEW JOB is allowed.
-    return this.isInspectedJob(job) || this.isInProgressJob(job);
+    // When clocked out, only VIEW JOB and DIRECTIONS are allowed.
+    return this.getViewJobButtonLabel(job) !== 'VIEW JOB';
   }
 
   viewJob(job: any) {
@@ -1826,19 +1860,22 @@ async ngOnInit() {
       return;
     }
 
-    if (this.isInspectedJob(job)) {
-      this.openEstimate(jobRecordId, job);
+    // Determine workflow from draft state and job status
+    const hasDraft = !!this.draftStateCache[jobRecordId];
+    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
+
+    if (hasDraft) {
+      this.openEstimate(jobRecordId, job, EstimateWorkflow.RESUME);
       return;
     }
 
-    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
+    if (this.isInspectedJob(job)) {
+      this.openEstimate(jobRecordId, job, EstimateWorkflow.START);
+      return;
+    }
+
     if (status === 'estimated') {
-      this.router.navigate(['/estimate', jobRecordId], {
-        state: {
-          job,
-          isEstimateRevision: true
-        }
-      });
+      this.openEstimate(jobRecordId, job, EstimateWorkflow.REVISE);
       return;
     }
 
@@ -1848,49 +1885,76 @@ async ngOnInit() {
     this.openJobDetail(jobRecordId, mode, isPaused);
   }
 
-  private async openEstimate(jobRecordId: string, job: any) {
-    let inspectionCache = this.readInspectionCache(jobRecordId);
-    const isToday = this.isJobForToday(job);
+  private async openEstimate(jobRecordId: string, job: any, workflow: EstimateWorkflow) {
+    // RESUME and REVISE-with-draft never need inspection retrieval.
+    // Only START requires inspection data (local cache or historical retrieval).
+    let inspectionCache: any = null;
+    let isHistoricalRetrieval = false;
 
-    if (!isToday || !inspectionCache) {
-      if (!this.historicalRetrievalCache.has(jobRecordId)) {
-        await this.loadingService.withLoading(
-          'Loading inspection data...',
-          async () => {
-            inspectionCache = await this.authService.getHistoricalInspection(jobRecordId);
-            if (inspectionCache) {
-              console.log('[Home Page][Historical Inspection Received]', {
-                photoCount: inspectionCache.photoBatchData?.rows?.length || 0,
-                firstPhotoFid8Length: inspectionCache.photoBatchData?.rows?.[0]?.fid_8?.length || 0,
-                firstPhotoFid8Preview: inspectionCache.photoBatchData?.rows?.[0]?.fid_8?.substring(0, 100) || ''
-              });
-              // Store in session cache regardless of date to avoid repeated API calls
-              this.historicalRetrievalCache.set(jobRecordId, inspectionCache);
-              // Only persist to localStorage if it's today's inspection (no photos in cache)
-              // Historical inspections with photos are kept in session memory only to avoid quota issues
-              if (isToday) {
-                this.persistInspectionCache(jobRecordId, inspectionCache);
+    if (workflow === EstimateWorkflow.RESUME) {
+      // RESUME does not retrieve or reconstruct. Pass the locally cached inspection
+      // data so EstimatePage can populate cachedInspectionPhotos and map the
+      // selected photo IDs restored from the draft back to their photo objects.
+      // No API call is made - only what is already in local storage is used.
+      inspectionCache = this.readInspectionCache(jobRecordId) || this.historicalRetrievalCache.get(jobRecordId) || null;
+    } else if (workflow === EstimateWorkflow.START) {
+      inspectionCache = this.readInspectionCache(jobRecordId);
+      const isToday = this.isJobForToday(job);
+      isHistoricalRetrieval = !isToday;
+
+      if (!isToday || !inspectionCache) {
+        if (!this.historicalRetrievalCache.has(jobRecordId)) {
+          await this.loadingService.withLoading(
+            'Loading inspection data...',
+            async () => {
+              inspectionCache = await this.authService.getHistoricalInspection(jobRecordId);
+              if (inspectionCache) {
+                console.log('[Home Page][Historical Inspection Received]', {
+                  photoCount: inspectionCache.photoBatchData?.rows?.length || 0,
+                  firstPhotoFid8Length: inspectionCache.photoBatchData?.rows?.[0]?.fid_8?.length || 0,
+                  firstPhotoFid8Preview: inspectionCache.photoBatchData?.rows?.[0]?.fid_8?.substring(0, 100) || ''
+                });
+                this.historicalRetrievalCache.set(jobRecordId, inspectionCache);
+                if (isToday) {
+                  this.persistInspectionCache(jobRecordId, inspectionCache);
+                }
               }
             }
-          }
-        );
-      } else {
-        // Historical inspection already retrieved this session - use session cache
-        inspectionCache = this.historicalRetrievalCache.get(jobRecordId);
-        console.log('[Home Page][Using Session Cache]', {
-          photoCount: inspectionCache?.photoBatchData?.rows?.length || 0,
-          firstPhotoFid8Length: inspectionCache?.photoBatchData?.rows?.[0]?.fid_8?.length || 0
-        });
+          );
+        } else {
+          inspectionCache = this.historicalRetrievalCache.get(jobRecordId);
+          console.log('[Home Page][Using Session Cache]', {
+            photoCount: inspectionCache?.photoBatchData?.rows?.length || 0,
+            firstPhotoFid8Length: inspectionCache?.photoBatchData?.rows?.[0]?.fid_8?.length || 0
+          });
+        }
       }
+    } else if (workflow === EstimateWorkflow.REVISE) {
+      // Historical jobs entering REVISE should reconstruct from QuickBase data,
+      // not from the current-day Inspection Hub or cache.
+      const isToday = this.isJobForToday(job);
+      isHistoricalRetrieval = !isToday;
     }
 
+    const isEstimateRevision = workflow === EstimateWorkflow.REVISE || workflow === EstimateWorkflow.RESUME;
+
+    const routerState = {
+      job,
+      inspectionCache,
+      workflow,
+      isEstimateRevision,
+      isHistoricalRetrieval
+    };
+
     console.log('[Home Page][Navigating to Estimate]', {
+      workflow,
+      isEstimateRevision,
+      isHistoricalRetrieval,
       photoCount: inspectionCache?.photoBatchData?.rows?.length || 0,
-      firstPhotoFid8Length: inspectionCache?.photoBatchData?.rows?.[0]?.fid_8?.length || 0
     });
 
     this.router.navigate(['/estimate', jobRecordId], {
-      state: { job, inspectionCache }
+      state: routerState
     });
   }
 

@@ -73,3 +73,6 @@ Thumbs.db
 .env.local
 .env.*.local
 .firebase/
+
+# Temporary files for AI discussions
+temp_images/

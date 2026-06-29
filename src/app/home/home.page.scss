@@ -289,6 +289,24 @@
 
 .job-header ion-badge{font-size:.62rem;--padding-start:4px;--padding-end:4px}
 
+.job-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.job-footer ion-badge {
+  font-size: 0.62rem;
+  --padding-start: 4px;
+  --padding-end: 4px;
+}
+
+.unsigned-submitted-badge {
+  max-width: 100%;
+  white-space: normal;
+}
+
 .schedule-date-badge {
   --background: var(--trm-green) !important;
   --color: #ffffff !important;
@@ -486,3 +504,4 @@
     color: #fff;
   }
 }
+

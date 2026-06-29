@@ -347,11 +347,47 @@
   gap: 8px;
 }
 
+.photo-select-all-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #f7f7f7;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.select-all-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #333;
+}
+
 .estimate-photo-item {
   background: #ffffff;
   border: 1px solid #e6e6e6;
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .photo-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: #f9f9f9;
+    border-bottom: 1px solid #e6e6e6;
+  }
+
+  .photo-section-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #f21616;
+    text-transform: uppercase;
+  }
 
   .estimate-photo-trigger {
     width: 100%;

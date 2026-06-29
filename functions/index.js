@@ -2726,7 +2726,7 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
 
             // Extract roof record IDs
             const roofRecordIds = serviceOrderRoofs
-                .map(record => record['22']?.value)
+                .map(record => Number(record['22']?.value))
                 .filter(id => Number.isFinite(id));
 
             // Query ROOFS for details
@@ -2734,7 +2734,7 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
             if (roofRecordIds.length > 0) {
                 const roofsWhereClause = roofRecordIds.length === 1
                     ? `{'3'.EX.${roofRecordIds[0]}}`
-                    : `{'3'.EX.${roofRecordIds.join('.OR.')}}`;
+                    : `(${roofRecordIds.map(id => `{'3'.EX.${id}}`).join('OR')})`;
 
                 const roofsResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
                     from: TABLES.ROOFS,

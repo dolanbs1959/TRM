@@ -245,6 +245,9 @@
           <ion-button fill="solid" color="danger" size="small" [disabled]="isViewJobButtonDisabled(job)" (click)="$event.stopPropagation(); viewJob(job)">
             {{ getViewJobButtonLabel(job) }}
           </ion-button>
+          <ion-badge *ngIf="isUnsignedEstimateSubmitted(job)" color="warning" class="unsigned-submitted-badge">
+            Unsigned Estimate Submitted
+          </ion-badge>
         </div>
       </ion-card-content>
     </ion-card>

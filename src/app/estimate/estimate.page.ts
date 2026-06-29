@@ -4,6 +4,7 @@ import { AlertController } from '@ionic/angular';
 import { addIcons } from 'ionicons';
 import { trash } from 'ionicons/icons';
 import { AuthService, OfferedServiceItem } from '../services/auth.service';
+import { EstimateWorkflow } from '../home/home.page';
 import { calculateTax, getTaxRate } from '../services/tax-utility.service';
 
 interface EstimateFieldDefinition {
@@ -18,6 +19,7 @@ interface EstimateFieldRow {
 }
 
 interface CachedInspectionPhoto {
+  id: string;
   src: string;
   section: string;
   notes: string;
@@ -128,10 +130,13 @@ export class EstimatePage implements OnInit, DoCheck {
   private viewerTouchStartX: number | null = null;
   private indexedDbInspectionPhotos: CachedInspectionPhoto[] = [];
   cachedInspectionPhotos: CachedInspectionPhoto[] = [];
+  selectedPhotoIds: Set<string> = new Set<string>();
+  selectAllPhotos = false;
   private msDiscountManuallyEdited = false;
   private lastDraftSnapshot = '';
   private lastPhotoDraftSnapshot = '';
   private skipDraftPersistence = false;
+  private unsignedEstimateSubmitted = false;
   isEstimateRevision = false;
   private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
   private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
@@ -200,19 +205,23 @@ export class EstimatePage implements OnInit, DoCheck {
       job?: any;
       inspectionCache?: any;
       isEstimateRevision?: boolean;
+      isHistoricalRetrieval?: boolean;
+      workflow?: EstimateWorkflow;
     } | undefined;
     const historyState = history.state as {
       job?: any;
       inspectionCache?: any;
       isEstimateRevision?: boolean;
+      isHistoricalRetrieval?: boolean;
+      workflow?: EstimateWorkflow;
     } | undefined;
 
     this.job = navState?.job || historyState?.job || null;
     this.isEstimateRevision = (navState?.isEstimateRevision || historyState?.isEstimateRevision) === true;
-    console.log('[EstimateInit] isEstimateRevision set to:', this.isEstimateRevision, {
-      navState: navState?.isEstimateRevision,
-      historyState: historyState?.isEstimateRevision
-    });
+    const isHistoricalRetrieval = (navState?.isHistoricalRetrieval || historyState?.isHistoricalRetrieval) === true;
+    const workflow: EstimateWorkflow = navState?.workflow || historyState?.workflow || EstimateWorkflow.START;
+
+    console.log('[EstimateInit] workflow:', workflow, { isEstimateRevision: this.isEstimateRevision, isHistoricalRetrieval });
 
     if (!this.job && this.jobId) {
       this.job = { '3': { value: this.jobId } };
@@ -220,10 +229,7 @@ export class EstimatePage implements OnInit, DoCheck {
 
     this.inspectionCache = navState?.inspectionCache || historyState?.inspectionCache || this.readInspectionCache(this.jobId);
 
-    // Cache inspection photos once during initialization
-    this.cachedInspectionPhotos = this.getCachedInspectionPhotos();
-
-    void this.initializeEstimateData();
+    void this.initializeEstimateData(workflow, isHistoricalRetrieval);
   }
 
   ionViewDidEnter() {
@@ -244,7 +250,7 @@ export class EstimatePage implements OnInit, DoCheck {
     return !!(this.getFieldValue(142) || this.getFieldValue(15));
   }
 
-  private async initializeEstimateData() {
+  private async initializeEstimateData(workflow: EstimateWorkflow, isHistoricalRetrieval: boolean) {
     // Prevent draft persistence during initialization
     this.skipDraftPersistence = true;
 
@@ -258,21 +264,52 @@ export class EstimatePage implements OnInit, DoCheck {
     this.applyInspectionCacheToJob(this.inspectionCache);
     this.hydrateSubmissionStateFromJob();
     this.refreshSummaryViewModel();
-    this.hydrateRoofTilesFromCache();
-    void this.loadInspectionPhotosFromIndexedDb();
-    void this.loadOfferedServiceItems();
-    void this.loadInspectionHubRoofs();
+    const catalogLoadPromise = this.loadOfferedServiceItems();
 
-    // If in revision mode, retrieve and reconstruct estimate data from QuickBase
-    if (this.isEstimateRevision) {
-      await this.reconstructEstimateFromQuickBase();
-    } else {
-      // Only hydrate draft if not in revision mode to prevent overwriting reconstructed data
-      await this.hydrateEstimateDraftIfPresent();
+    if (!isHistoricalRetrieval) {
+      this.hydrateRoofTilesFromCache();
+      // Both operations are awaited so that all async initialization state is
+      // fully settled before cachedInspectionPhotos is assigned and the workflow
+      // branch runs. This produces a single deterministic initialization sequence.
+      await this.loadInspectionPhotosFromIndexedDb();
+      await this.loadInspectionHubRoofs();
+
+      // Single authoritative assignment of cachedInspectionPhotos. Both
+      // indexedDbInspectionPhotos and inspectionHubRoofTiles are fully populated
+      // at this point. Draft hydration in the workflow branch below will have a
+      // complete photo collection to work against.
+      this.cachedInspectionPhotos = this.getCachedInspectionPhotos();
     }
 
-    // Initialize lastDraftSnapshot to prevent creating a draft on page load
-    // This ensures ngDoCheck won't persist a draft until the user makes actual changes
+    if (workflow === EstimateWorkflow.RESUME) {
+      // RESUME: always restore from draft. No retrieval. No reconstruction.
+      if (this.hasEstimateDraft()) {
+        console.log('[EstimateInit] RESUME: restoring from draft');
+        await this.hydrateEstimateDraftIfPresent();
+      } else {
+        // Missing draft on RESUME is a workflow error - return user to dashboard
+        console.error('[EstimateInit] RESUME: no draft found - workflow error, returning to dashboard');
+        this.skipDraftPersistence = false;
+        this.router.navigate(['/home']);
+        return;
+      }
+    } else if (workflow === EstimateWorkflow.REVISE) {
+      // REVISE: restore draft if present, else reconstruct once from QuickBase
+      if (this.hasEstimateDraft()) {
+        console.log('[EstimateInit] REVISE: draft exists, restoring from draft');
+        await this.hydrateEstimateDraftIfPresent();
+      } else {
+        console.log('[EstimateInit] REVISE: no draft, reconstructing from QuickBase');
+        await catalogLoadPromise;
+        await this.reconstructEstimateFromQuickBase();
+      }
+    } else {
+      // START: use inspection cache (already provided by HomePage, local or historical)
+      console.log('[EstimateInit] START: using inspection cache, isHistoricalRetrieval:', isHistoricalRetrieval);
+      // No draft restoration, no reconstruction. Inspection cache already applied above.
+    }
+
+    // Initialize lastDraftSnapshot so ngDoCheck only saves after an actual user modification
     this.lastDraftSnapshot = JSON.stringify(this.buildEstimateDraftData());
 
     // Re-enable draft persistence after initialization completes
@@ -324,6 +361,7 @@ export class EstimatePage implements OnInit, DoCheck {
         }
 
         photos.push({
+          id: this.generatePhotoId(dataUrl),
           src: dataUrl,
           section: this.toPhotoSectionLabel(sectionKey),
           notes: String(photo?.notes || '').trim(),
@@ -634,6 +672,11 @@ export class EstimatePage implements OnInit, DoCheck {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private hasEstimateDraft(): boolean {
+    const storageKey = this.getEstimateDraftStorageKey();
+    return !!localStorage.getItem(storageKey);
   }
 
   private normalizeText(value: string): string {
@@ -1265,7 +1308,7 @@ export class EstimatePage implements OnInit, DoCheck {
       cleanMaintenanceScheduledFor: this.cleanMaintenanceScheduledFor || '',
       repairServicesScheduledFor: this.repairServicesScheduledFor || '',
       isEstimateRevision: this.isEstimateRevision,
-      inspectionPhotos: this.cachedInspectionPhotos || [],
+      inspectionPhotos: this.cachedInspectionPhotos.filter(photo => this.selectedPhotoIds.has(photo.id)),
     };
     console.log('[EstimatePayload] isEstimateRevision in payload:', this.isEstimateRevision);
   }
@@ -1325,7 +1368,14 @@ export class EstimatePage implements OnInit, DoCheck {
       }
 
       this.clearSignaturePad();
-      this.clearEstimateDraft();
+      if (submissionMode === 'sold') {
+        // Signed submission: delete the draft and reminder per architecture
+        this.clearEstimateDraft();
+      } else {
+        // Unsigned submission: persist a local reminder within the draft
+        this.unsignedEstimateSubmitted = true;
+        this.persistEstimateDraftIfChanged();
+      }
       this.router.navigate(['/home']);
     } catch (error) {
       console.error('Submit Estimate Error:', error);
@@ -1350,6 +1400,17 @@ export class EstimatePage implements OnInit, DoCheck {
 
   private getInspectionCacheStorageKey(serviceOrderId: string): string {
     return `${EstimatePage.INSPECTION_CACHE_PREFIX}${(serviceOrderId || '').trim()}`;
+  }
+
+  private generatePhotoId(dataUrl: string): string {
+    // Simple hash function for generating stable IDs from dataUrl
+    let hash = 0;
+    for (let i = 0; i < dataUrl.length; i++) {
+      const char = dataUrl.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return `photo-${Math.abs(hash)}`;
   }
 
   private readInspectionCache(serviceOrderId: string): any | null {
@@ -1378,6 +1439,7 @@ export class EstimatePage implements OnInit, DoCheck {
   private buildEstimateDraftData() {
     return {
       serviceOrderId: this.getJobRecordId(),
+      unsignedEstimateSubmitted: this.unsignedEstimateSubmitted,
       activeEstimateItems: this.activeEstimateItems,
       formFields: {
         workOrderedBy: this.workOrderedBy,
@@ -1401,7 +1463,8 @@ export class EstimatePage implements OnInit, DoCheck {
       uiState: {
         serviceSearchTerm: this.serviceSearchTerm,
         selectedRoofSquareFootage: this.selectedRoofSquareFootage,
-        inspectionHubRoofTiles: this.inspectionHubRoofTiles
+        inspectionHubRoofTiles: this.inspectionHubRoofTiles,
+        selectedPhotoIds: Array.from(this.selectedPhotoIds)
       }
     };
   }
@@ -1444,6 +1507,7 @@ export class EstimatePage implements OnInit, DoCheck {
 
     try {
       const parsed = JSON.parse(raw);
+      this.unsignedEstimateSubmitted = parsed?.unsignedEstimateSubmitted ?? false;
       if (parsed?.activeEstimateItems && Array.isArray(parsed.activeEstimateItems)) {
         this.activeEstimateItems = parsed.activeEstimateItems;
       }
@@ -1477,6 +1541,10 @@ export class EstimatePage implements OnInit, DoCheck {
         if (Array.isArray(parsed.uiState.inspectionHubRoofTiles)) {
           this.inspectionHubRoofTiles = parsed.uiState.inspectionHubRoofTiles;
         }
+        if (Array.isArray(parsed.uiState.selectedPhotoIds)) {
+          this.selectedPhotoIds = new Set(parsed.uiState.selectedPhotoIds);
+          this.selectAllPhotos = this.selectedPhotoIds.size > 0 && this.selectedPhotoIds.size === this.cachedInspectionPhotos.length;
+        }
       }
 
       this.lastDraftSnapshot = JSON.stringify(this.buildEstimateDraftData());
@@ -1485,6 +1553,37 @@ export class EstimatePage implements OnInit, DoCheck {
       console.warn('[Estimate] Failed to hydrate local estimate draft. Clearing corrupt draft.', error);
       localStorage.removeItem(storageKey);
       this.lastDraftSnapshot = '';
+    }
+  }
+
+  private async hydrateUiStateFromDraft() {
+    const serviceOrderId = this.getJobRecordId();
+    if (!serviceOrderId) {
+      return;
+    }
+
+    const storageKey = this.getEstimateDraftStorageKey();
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.uiState && typeof parsed.uiState === 'object') {
+        this.serviceSearchTerm = parsed.uiState.serviceSearchTerm || this.serviceSearchTerm;
+        this.selectedRoofSquareFootage = parsed.uiState.selectedRoofSquareFootage ?? this.selectedRoofSquareFootage;
+        if (Array.isArray(parsed.uiState.inspectionHubRoofTiles)) {
+          this.inspectionHubRoofTiles = parsed.uiState.inspectionHubRoofTiles;
+        }
+        if (Array.isArray(parsed.uiState.selectedPhotoIds)) {
+          this.selectedPhotoIds = new Set(parsed.uiState.selectedPhotoIds);
+          this.selectAllPhotos = this.selectedPhotoIds.size > 0 && this.selectedPhotoIds.size === this.cachedInspectionPhotos.length;
+        }
+      }
+      console.log('[Estimate] UI state restored from draft for revision');
+    } catch (error) {
+      console.warn('[Estimate] Failed to hydrate UI state from draft.', error);
     }
   }
 
@@ -1501,7 +1600,7 @@ export class EstimatePage implements OnInit, DoCheck {
   async startOverEstimate() {
     const alert = await this.alertController.create({
       header: 'Start Over?',
-      message: 'This will permanently remove the saved estimate draft and clear all estimate entries.',
+      message: 'This will clear your current selections and reset the editing session. Your saved draft will not be deleted.',
       buttons: [
         {
           text: 'Cancel',
@@ -1522,8 +1621,6 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   private resetEstimateToInitialState() {
-    this.clearEstimateDraft();
-
     this.activeEstimateItems = [];
     this.serviceSearchTerm = '';
     this.selectedRoofSquareFootage = 0;
@@ -1549,8 +1646,10 @@ export class EstimatePage implements OnInit, DoCheck {
 
     this.syncPricingSummary();
 
-    const emptyData = this.buildEstimateDraftData();
-    this.lastDraftSnapshot = JSON.stringify(emptyData);
+    // Update the snapshot to the cleared state. Auto-save will not write anything
+    // until the technician makes an actual edit, at which point the cleared state
+    // naturally becomes the new draft through the existing persistence mechanism.
+    this.lastDraftSnapshot = JSON.stringify(this.buildEstimateDraftData());
   }
 
   private applyInspectionCacheToJob(cache: any) {
@@ -1598,6 +1697,7 @@ export class EstimatePage implements OnInit, DoCheck {
         }
 
         return {
+          id: this.generatePhotoId(dataUrl),
           src: dataUrl,
           section: this.toPhotoSectionLabel(String(row?.fid_6 || '')),
           notes: String(row?.fid_7 || '').trim(),
@@ -1619,6 +1719,33 @@ export class EstimatePage implements OnInit, DoCheck {
     this.selectedPhotoIndex = resolvedIndex >= 0 ? resolvedIndex : 0;
     this.selectedPhoto = photo;
     this.isPhotoViewerOpen = true;
+  }
+
+  isPhotoSelected(photoId: string): boolean {
+    return this.selectedPhotoIds.has(photoId);
+  }
+
+  onSelectAllPhotosChange(event: any) {
+    const isChecked = event.detail.checked;
+    if (isChecked) {
+      this.cachedInspectionPhotos.forEach(photo => {
+        this.selectedPhotoIds.add(photo.id);
+      });
+    } else {
+      this.selectedPhotoIds.clear();
+    }
+  }
+
+  onPhotoSelectionChange(photoId: string, event: any) {
+    const isChecked = event.detail.checked;
+    if (isChecked) {
+      this.selectedPhotoIds.add(photoId);
+    } else {
+      this.selectedPhotoIds.delete(photoId);
+    }
+
+    // Auto-update select all checkbox
+    this.selectAllPhotos = this.selectedPhotoIds.size === this.cachedInspectionPhotos.length;
   }
 
   closePhotoViewer() {
@@ -1719,32 +1846,46 @@ export class EstimatePage implements OnInit, DoCheck {
 
     const { serviceOrder, lineItems, roofs, roofAssociations, photos } = response.data;
 
-    // Reconstruct line items
+    // Reconstruct line items: catalog metadata + QuickBase transactional values
     if (Array.isArray(lineItems) && lineItems.length > 0) {
-      this.activeEstimateItems = lineItems.map(item => ({
-        id: item.offeredServiceItemId,
-        name: item.description,
-        description: item.description,
-        category: '',
-        serviceType: '',
-        unit: 'ea',
-        price: item.price,
-        isPackage: false,
-        packageTier: '',
-        sortOrder: 0,
-        qtyNeeded: item.qtyNeeded,
-        lineSubtotal: item.lineSubtotal,
-        sqFootage: item.sqFootage
-      }));
+      this.activeEstimateItems = lineItems.map((item) => {
+        const offeredServiceItemId = Number.parseInt(String(item.offeredServiceItemId), 10) || 0;
+        const catalogItem = this.catalogItems.find((catalog) => catalog.id === offeredServiceItemId);
+
+        const fallbackItem: EstimateCatalogItem = {
+          id: offeredServiceItemId,
+          name: String(item.description || '').trim(),
+          description: String(item.description || '').trim(),
+          category: '',
+          serviceType: '',
+          unit: 'ea',
+          price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
+          isPackage: false,
+          packageTier: '',
+          sortOrder: 0,
+        };
+
+        const base = catalogItem || fallbackItem;
+
+        return {
+          ...base,
+          qtyNeeded: item.qtyNeeded,
+          lineSubtotal: item.lineSubtotal,
+          sqFootage: item.sqFootage,
+          price: Number.isFinite(Number(item.price)) ? Number(item.price) : base.price,
+        };
+      });
       console.log('[EstimateReconstruction] Reconstructed line items', { count: this.activeEstimateItems.length });
     }
 
     // Reconstruct roof selections
     if (Array.isArray(roofs) && Array.isArray(roofAssociations)) {
-      const associatedRoofIds = new Set(roofAssociations.map(a => a.roofRecordId));
+      const associatedRoofIds = new Set(
+        roofAssociations.map(a => String(a.roofRecordId || '').trim())
+      );
 
       this.inspectionHubRoofTiles = roofs.map(roof => ({
-        id: String(roof.recordId),
+        id: String(roof.recordId || '').trim(),
         name: roof.name,
         material: roof.material,
         pitch: roof.pitch,
@@ -1752,7 +1893,7 @@ export class EstimatePage implements OnInit, DoCheck {
         squareFootageLabel: String(roof.squareFootage),
         type: roof.type,
         status: roof.status,
-        isAdded: associatedRoofIds.has(roof.recordId)
+        isAdded: associatedRoofIds.has(String(roof.recordId || '').trim())
       }));
 
       // Recalculate selected roof square footage
@@ -1771,7 +1912,8 @@ export class EstimatePage implements OnInit, DoCheck {
     if (Array.isArray(photos) && photos.length > 0) {
       this.cachedInspectionPhotos = photos
         .filter(photo => photo.dataUrl && photo.dataUrl.length > 0)
-        .map(photo => ({
+        .map((photo) => ({
+          id: String(photo.recordId || ''),
           src: photo.dataUrl,
           section: photo.photoType || 'General',
           notes: ''

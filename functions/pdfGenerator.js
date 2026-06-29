@@ -348,10 +348,13 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
         }));
 
         inspectionPhotosHtml = `
-            <div class="photo-section-container">
-                <h3 style="color: #f21616; font-size: 18px; margin: 0 0 20px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Inspection Photos</h3>
-                <div class="photo-grid">
-                    ${photosHtml.join('')}
+            <!-- Section 3: Inspection Photos (Forced New Page) -->
+            <div class="section-3">
+                <div class="photo-section-container">
+                    <h3 style="color: #f21616; font-size: 18px; margin: 0 0 20px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Inspection Photos</h3>
+                    <div class="photo-grid">
+                        ${photosHtml.join('')}
+                    </div>
                 </div>
             </div>
         `;
