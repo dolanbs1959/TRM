@@ -4,6 +4,7 @@ import { AlertController } from '@ionic/angular';
 import { addIcons } from 'ionicons';
 import { trash } from 'ionicons/icons';
 import { AuthService, OfferedServiceItem } from '../services/auth.service';
+import { LoadingService } from '../services/loading.service';
 import { EstimateWorkflow } from '../home/home.page';
 import { calculateTax, getTaxRate } from '../services/tax-utility.service';
 
@@ -135,6 +136,7 @@ export class EstimatePage implements OnInit, DoCheck {
   private msDiscountManuallyEdited = false;
   private lastDraftSnapshot = '';
   private lastPhotoDraftSnapshot = '';
+  private lastEstimatePhotoSnapshot = '';
   private skipDraftPersistence = false;
   private unsignedEstimateSubmitted = false;
   isEstimateRevision = false;
@@ -194,7 +196,8 @@ export class EstimatePage implements OnInit, DoCheck {
     private route: ActivatedRoute,
     private router: Router,
     private authService: AuthService,
-    private alertController: AlertController
+    private alertController: AlertController,
+    private loadingService: LoadingService
   ) {
     addIcons({ trash });
   }
@@ -221,13 +224,21 @@ export class EstimatePage implements OnInit, DoCheck {
     const isHistoricalRetrieval = (navState?.isHistoricalRetrieval || historyState?.isHistoricalRetrieval) === true;
     const workflow: EstimateWorkflow = navState?.workflow || historyState?.workflow || EstimateWorkflow.START;
 
-    console.log('[EstimateInit] workflow:', workflow, { isEstimateRevision: this.isEstimateRevision, isHistoricalRetrieval });
-
     if (!this.job && this.jobId) {
       this.job = { '3': { value: this.jobId } };
     }
 
     this.inspectionCache = navState?.inspectionCache || historyState?.inspectionCache || this.readInspectionCache(this.jobId);
+
+    console.log('[EstimateInit] Incoming router state:', {
+      workflow,
+      isEstimateRevision: this.isEstimateRevision,
+      isHistoricalRetrieval,
+      inspectionCacheSource: navState?.inspectionCache ? 'navState' : historyState?.inspectionCache ? 'historyState' : 'readInspectionCache',
+      inspectionCacheKeys: this.inspectionCache ? Object.keys(this.inspectionCache) : null,
+      inspectionCachePhotoCount: this.inspectionCache?.photoBatchData?.rows?.length || 0,
+      inspectionCacheMasterValues: this.inspectionCache?.masterJobRecordValues ? Object.keys(this.inspectionCache.masterJobRecordValues) : null,
+    });
 
     void this.initializeEstimateData(workflow, isHistoricalRetrieval);
   }
@@ -254,6 +265,14 @@ export class EstimatePage implements OnInit, DoCheck {
     // Prevent draft persistence during initialization
     this.skipDraftPersistence = true;
 
+    console.log('[EstimateInit] initializeEstimateData start:', {
+      workflow,
+      isHistoricalRetrieval,
+      inspectionCachePhotoCount: this.inspectionCache?.photoBatchData?.rows?.length || 0,
+      cachedInspectionPhotosBefore: this.cachedInspectionPhotos.length,
+      inspectionHubRoofTilesBefore: this.inspectionHubRoofTiles.length,
+    });
+
     if (this.jobId && !this.hasEstimateLookupFields()) {
       const detailedJob = await this.authService.getJobDetail(this.jobId);
       if (detailedJob) {
@@ -266,19 +285,39 @@ export class EstimatePage implements OnInit, DoCheck {
     this.refreshSummaryViewModel();
     const catalogLoadPromise = this.loadOfferedServiceItems();
 
+    console.log('[EstimateInit] After applyInspectionCacheToJob:', {
+      hasJob: !!this.job,
+      locationId: this.getRelatedLocationId(),
+      inspectionCachePhotoCount: this.inspectionCache?.photoBatchData?.rows?.length || 0,
+    });
+
     if (!isHistoricalRetrieval) {
       this.hydrateRoofTilesFromCache();
+      console.log('[EstimateInit] After hydrateRoofTilesFromCache:', {
+        inspectionHubRoofTilesAfterHydrate: this.inspectionHubRoofTiles.length,
+      });
+
       // Both operations are awaited so that all async initialization state is
       // fully settled before cachedInspectionPhotos is assigned and the workflow
       // branch runs. This produces a single deterministic initialization sequence.
       await this.loadInspectionPhotosFromIndexedDb();
+      console.log('[EstimateInit] After loadInspectionPhotosFromIndexedDb:', {
+        indexedDbInspectionPhotosCount: this.indexedDbInspectionPhotos.length,
+      });
+
       await this.loadInspectionHubRoofs();
+      console.log('[EstimateInit] After loadInspectionHubRoofs:', {
+        inspectionHubRoofTilesAfterLoad: this.inspectionHubRoofTiles.length,
+      });
 
       // Single authoritative assignment of cachedInspectionPhotos. Both
       // indexedDbInspectionPhotos and inspectionHubRoofTiles are fully populated
       // at this point. Draft hydration in the workflow branch below will have a
       // complete photo collection to work against.
       this.cachedInspectionPhotos = this.getCachedInspectionPhotos();
+      console.log('[EstimateInit] After getCachedInspectionPhotos:', {
+        cachedInspectionPhotosCount: this.cachedInspectionPhotos.length,
+      });
     }
 
     if (workflow === EstimateWorkflow.RESUME) {
@@ -305,7 +344,11 @@ export class EstimatePage implements OnInit, DoCheck {
       }
     } else {
       // START: use inspection cache (already provided by HomePage, local or historical)
-      console.log('[EstimateInit] START: using inspection cache, isHistoricalRetrieval:', isHistoricalRetrieval);
+      console.log('[EstimateInit] START branch entered:', {
+        isHistoricalRetrieval,
+        cachedInspectionPhotosCount: this.cachedInspectionPhotos.length,
+        inspectionHubRoofTilesCount: this.inspectionHubRoofTiles.length,
+      });
       // No draft restoration, no reconstruction. Inspection cache already applied above.
     }
 
@@ -337,7 +380,16 @@ export class EstimatePage implements OnInit, DoCheck {
         request.onerror = () => reject(request.error || new Error('IndexedDB photo draft read failed.'));
       });
 
+      console.log('[EstimateInit] loadInspectionPhotosFromIndexedDb raw row:', {
+        serviceOrderId,
+        hasRow: !!row,
+        rowKeys: row ? Object.keys(row) : null,
+        inspectionPhotoStateKeys: row?.inspectionPhotoState ? Object.keys(row.inspectionPhotoState) : null,
+        estimatePhotoStateCount: row?.estimatePhotoState?.length || 0,
+      });
+
       this.indexedDbInspectionPhotos = this.buildCachedPhotosFromSerializedState(row?.inspectionPhotoState);
+      console.log('[EstimateInit] loadInspectionPhotosFromIndexedDb parsed count:', this.indexedDbInspectionPhotos.length);
     } catch (error) {
       console.warn('Failed loading inspection photos from IndexedDB in Estimate page.', error);
       this.indexedDbInspectionPhotos = [];
@@ -404,6 +456,83 @@ export class EstimatePage implements OnInit, DoCheck {
     });
   }
 
+  private async persistEstimatePhotosToIndexedDbIfChanged() {
+    const serviceOrderId = this.getJobRecordId();
+    if (!serviceOrderId || !this.isIndexedDbAvailable()) {
+      return;
+    }
+
+    const snapshot = JSON.stringify(this.cachedInspectionPhotos);
+    if (snapshot === this.lastEstimatePhotoSnapshot) {
+      return;
+    }
+
+    const db = await this.openInspectionDraftDb();
+    if (!db) {
+      return;
+    }
+
+    try {
+      const existing = await new Promise<any>((resolve, reject) => {
+        const tx = db.transaction(EstimatePage.INSPECTION_PHOTO_STORE_NAME, 'readonly');
+        const store = tx.objectStore(EstimatePage.INSPECTION_PHOTO_STORE_NAME);
+        const request = store.get(serviceOrderId);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('IndexedDB estimate photo read failed.'));
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(EstimatePage.INSPECTION_PHOTO_STORE_NAME, 'readwrite');
+        const store = tx.objectStore(EstimatePage.INSPECTION_PHOTO_STORE_NAME);
+        store.put({
+          serviceOrderId,
+          inspectionPhotoState: existing?.inspectionPhotoState || null,
+          estimatePhotoState: this.cachedInspectionPhotos,
+          updatedAt: Date.now()
+        });
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error('IndexedDB estimate photo write failed.'));
+      });
+
+      this.lastEstimatePhotoSnapshot = snapshot;
+    } catch (error) {
+      console.warn('[Estimate] Failed to persist estimate photos in IndexedDB.', error);
+    } finally {
+      db.close();
+    }
+  }
+
+  private async loadEstimatePhotosFromIndexedDb() {
+    const serviceOrderId = this.getJobRecordId();
+    if (!serviceOrderId || !this.isIndexedDbAvailable()) {
+      return;
+    }
+
+    const db = await this.openInspectionDraftDb();
+    if (!db) {
+      return;
+    }
+
+    try {
+      const row = await new Promise<any>((resolve, reject) => {
+        const tx = db.transaction(EstimatePage.INSPECTION_PHOTO_STORE_NAME, 'readonly');
+        const store = tx.objectStore(EstimatePage.INSPECTION_PHOTO_STORE_NAME);
+        const request = store.get(serviceOrderId);
+        request.onsuccess = () => resolve(request.result || null);
+        request.onerror = () => reject(request.error || new Error('IndexedDB estimate photo read failed.'));
+      });
+
+      if (Array.isArray(row?.estimatePhotoState) && this.cachedInspectionPhotos.length === 0) {
+        this.cachedInspectionPhotos = row.estimatePhotoState;
+        this.lastEstimatePhotoSnapshot = JSON.stringify(this.cachedInspectionPhotos);
+      }
+    } catch (error) {
+      console.warn('[Estimate] Failed to load estimate photos from IndexedDB.', error);
+    } finally {
+      db.close();
+    }
+  }
+
   private hydrateSubmissionStateFromJob() {
     const resolvedEmail = this.getFieldValue(142) || this.getFieldValue(57) || this.locationEmail;
     this.locationEmail = resolvedEmail;
@@ -461,6 +590,11 @@ export class EstimatePage implements OnInit, DoCheck {
 
   private hydrateRoofTilesFromCache() {
     const cachedRoofs = Array.isArray(this.inspectionCache?.roofs) ? this.inspectionCache.roofs : [];
+    console.log('[EstimateInit] hydrateRoofTilesFromCache:', {
+      inspectionCacheHasRoofs: Array.isArray(this.inspectionCache?.roofs),
+      cachedRoofCount: cachedRoofs.length,
+    });
+
     if (cachedRoofs.length === 0) {
       this.inspectionHubRoofTiles = [];
       this.selectedRoofSquareFootage = 0;
@@ -473,8 +607,11 @@ export class EstimatePage implements OnInit, DoCheck {
 
   private async loadInspectionHubRoofs() {
     let locationId = this.getRelatedLocationId();
+    console.log('[EstimateInit] loadInspectionHubRoofs start:', { locationId, hasJob: !!this.job });
+
     if (!locationId) {
       const jobRecordId = this.getJobRecordId();
+      console.log('[EstimateInit] loadInspectionHubRoofs no locationId, fetching job detail:', { jobRecordId });
       if (jobRecordId) {
         const detailedJob = await this.authService.getJobDetail(jobRecordId);
         if (detailedJob) {
@@ -482,17 +619,20 @@ export class EstimatePage implements OnInit, DoCheck {
           this.applyInspectionCacheToJob(this.inspectionCache);
           this.refreshSummaryViewModel();
           locationId = this.getRelatedLocationId();
+          console.log('[EstimateInit] loadInspectionHubRoofs after job detail:', { locationId });
         }
       }
     }
 
     if (!locationId) {
+      console.log('[EstimateInit] loadInspectionHubRoofs still no locationId, aborting');
       return;
     }
 
     this.roofsLoading = true;
     try {
       const roofs = await this.authService.getRoofsByLocation(locationId);
+      console.log('[EstimateInit] loadInspectionHubRoofs fetched roofs:', { locationId, roofCount: Array.isArray(roofs) ? roofs.length : 0 });
       if (!Array.isArray(roofs) || roofs.length === 0) {
         return;
       }
@@ -506,6 +646,7 @@ export class EstimatePage implements OnInit, DoCheck {
       this.selectedRoofSquareFootage = this.computeSelectedRoofSquareFootage();
       this.recomputeActiveEstimateItems();
       this.persistRoofsToInspectionCache(roofs);
+      console.log('[EstimateInit] loadInspectionHubRoofs mapped tiles:', { tileCount: this.inspectionHubRoofTiles.length });
     } finally {
       this.roofsLoading = false;
     }
@@ -994,7 +1135,7 @@ export class EstimatePage implements OnInit, DoCheck {
     return this.roundCurrency(this.getCartSubtotal() * 0.05);
   }
 
-  private getMSDiscountValue(): number {
+  getMSDiscountValue(): number {
     if (!this.discountMS) {
       return 0;
     }
@@ -1002,7 +1143,7 @@ export class EstimatePage implements OnInit, DoCheck {
     return Math.min(this.getCartSubtotal(), this.sanitizeCurrencyInput(this.msDiscountAmount));
   }
 
-  private getOtherDiscountValue(): number {
+  getOtherDiscountValue(): number {
     if (!this.discountOther) {
       return 0;
     }
@@ -1076,9 +1217,17 @@ export class EstimatePage implements OnInit, DoCheck {
     context.lineWidth = 2.5;
     context.lineCap = 'round';
     context.lineJoin = 'round';
-    this.signatureHasInk = false;
-    this.signatureStrokeActive = false;
-    this.signatureDataUrl = '';
+
+    if (this.signatureDataUrl) {
+      const image = new Image();
+      image.onload = () => {
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      };
+      image.src = this.signatureDataUrl;
+    } else {
+      this.signatureHasInk = false;
+      this.signatureStrokeActive = false;
+    }
   }
 
   private getSignaturePoint(event: PointerEvent) {
@@ -1298,6 +1447,8 @@ export class EstimatePage implements OnInit, DoCheck {
       totalAmount: this.getCartGrandTotal(),
       secondaryDiscountAmount: this.getCartDiscountTotal(),
       secondaryDiscountPercentage: this.secondaryDiscountPercentage,
+      msDiscountAmount: this.getMSDiscountValue(),
+      otherDiscountAmount: this.getOtherDiscountValue(),
       discountControlValue: this.discountControlValue,
       customerName,
       locationAddress,
@@ -1359,24 +1510,26 @@ export class EstimatePage implements OnInit, DoCheck {
     console.log('[Estimate Submit] All validations passed, preparing payload');
     this.isSubmittingEstimate = true;
     try {
-      const payload = this.buildEstimateSubmissionPayload(submissionMode, locationEmail);
-      console.log('[Estimate Submit] Payload built:', payload);
-      const response = await this.authService.submitEstimateSubmission(payload);
-      console.log('[Estimate Submit] Response received:', response);
-      if (!response?.success) {
-        throw new Error(response?.message || 'Estimate submission failed');
-      }
+      await this.loadingService.withLoading('Submitting estimate...', async () => {
+        const payload = this.buildEstimateSubmissionPayload(submissionMode, locationEmail);
+        console.log('[Estimate Submit] Payload built:', payload);
+        const response = await this.authService.submitEstimateSubmission(payload);
+        console.log('[Estimate Submit] Response received:', response);
+        if (!response?.success) {
+          throw new Error(response?.message || 'Estimate submission failed');
+        }
 
-      this.clearSignaturePad();
-      if (submissionMode === 'sold') {
-        // Signed submission: delete the draft and reminder per architecture
-        this.clearEstimateDraft();
-      } else {
-        // Unsigned submission: persist a local reminder within the draft
-        this.unsignedEstimateSubmitted = true;
-        this.persistEstimateDraftIfChanged();
-      }
-      this.router.navigate(['/home']);
+        this.clearSignaturePad();
+        if (submissionMode === 'sold') {
+          // Signed submission: delete the draft and reminder per architecture
+          this.clearEstimateDraft();
+        } else {
+          // Unsigned submission: persist a local reminder within the draft
+          this.unsignedEstimateSubmitted = true;
+          this.persistEstimateDraftIfChanged();
+        }
+        this.router.navigate(['/home']);
+      });
     } catch (error) {
       console.error('Submit Estimate Error:', error);
       const errorAlert = await this.alertController.create({
@@ -1488,6 +1641,7 @@ export class EstimatePage implements OnInit, DoCheck {
 
       localStorage.setItem(this.getEstimateDraftStorageKey(), serialized);
       this.lastDraftSnapshot = serialized;
+      void this.persistEstimatePhotosToIndexedDbIfChanged();
     } catch (error) {
       console.warn('[Estimate] Failed to persist local estimate draft.', error);
     }
@@ -1508,6 +1662,7 @@ export class EstimatePage implements OnInit, DoCheck {
     try {
       const parsed = JSON.parse(raw);
       this.unsignedEstimateSubmitted = parsed?.unsignedEstimateSubmitted ?? false;
+      await this.loadEstimatePhotosFromIndexedDb();
       if (parsed?.activeEstimateItems && Array.isArray(parsed.activeEstimateItems)) {
         this.activeEstimateItems = parsed.activeEstimateItems;
       }
@@ -1533,6 +1688,7 @@ export class EstimatePage implements OnInit, DoCheck {
 
       if (parsed?.signatureDataUrl) {
         this.signatureDataUrl = parsed.signatureDataUrl;
+        this.signatureHasInk = true;
       }
 
       if (parsed?.uiState && typeof parsed.uiState === 'object') {
@@ -1540,6 +1696,9 @@ export class EstimatePage implements OnInit, DoCheck {
         this.selectedRoofSquareFootage = parsed.uiState.selectedRoofSquareFootage ?? this.selectedRoofSquareFootage;
         if (Array.isArray(parsed.uiState.inspectionHubRoofTiles)) {
           this.inspectionHubRoofTiles = parsed.uiState.inspectionHubRoofTiles;
+        }
+        if (Array.isArray(parsed.uiState.cachedInspectionPhotos)) {
+          this.cachedInspectionPhotos = parsed.uiState.cachedInspectionPhotos;
         }
         if (Array.isArray(parsed.uiState.selectedPhotoIds)) {
           this.selectedPhotoIds = new Set(parsed.uiState.selectedPhotoIds);
@@ -1590,6 +1749,7 @@ export class EstimatePage implements OnInit, DoCheck {
   private clearEstimateDraft() {
     const storageKey = this.getEstimateDraftStorageKey();
     localStorage.removeItem(storageKey);
+    this.clearSignaturePad();
     this.lastDraftSnapshot = '';
     this.skipDraftPersistence = true;
     setTimeout(() => {
@@ -1637,7 +1797,7 @@ export class EstimatePage implements OnInit, DoCheck {
     this.cleanMaintenanceScheduledFor = this.getTodayDateInputValue();
     this.repairServicesScheduledFor = this.getTodayDateInputValue();
     this.signatureDate = this.getTodayDateInputValue();
-    this.signatureDataUrl = '';
+    this.clearSignaturePad();
 
     this.inspectionHubRoofTiles = this.inspectionHubRoofTiles.map((tile) => ({
       ...tile,
@@ -1653,6 +1813,15 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   private applyInspectionCacheToJob(cache: any) {
+    console.log('[EstimateInit] applyInspectionCacheToJob input:', {
+      hasJob: !!this.job,
+      hasCache: !!cache,
+      cacheType: typeof cache,
+      cacheKeys: cache ? Object.keys(cache) : null,
+      masterJobRecordValueKeys: cache?.masterJobRecordValues ? Object.keys(cache.masterJobRecordValues) : null,
+      photoBatchRowCount: cache?.photoBatchData?.rows?.length || 0,
+    });
+
     if (!this.job || !cache || typeof cache !== 'object') {
       return;
     }
@@ -1683,6 +1852,11 @@ export class EstimatePage implements OnInit, DoCheck {
   getCachedInspectionPhotos(): CachedInspectionPhoto[] {
     const rows = this.inspectionCache?.photoBatchData?.rows;
 
+    console.log('[EstimateInit] getCachedInspectionPhotos input:', {
+      inspectionCacheRowCount: rows?.length || 0,
+      indexedDbInspectionPhotosCount: this.indexedDbInspectionPhotos.length,
+    });
+
     const fromCacheRows = Array.isArray(rows)
       ? rows
       .map((row: any) => {
@@ -1705,6 +1879,12 @@ export class EstimatePage implements OnInit, DoCheck {
       })
       .filter((photo: CachedInspectionPhoto | null): photo is CachedInspectionPhoto => !!photo)
       : [];
+
+    console.log('[EstimateInit] getCachedInspectionPhotos result:', {
+      fromCacheRowsCount: fromCacheRows.length,
+      fallbackToIndexedDb: fromCacheRows.length === 0,
+      indexedDbInspectionPhotosCount: this.indexedDbInspectionPhotos.length,
+    });
 
     if (fromCacheRows.length > 0) {
       return fromCacheRows;
@@ -1919,6 +2099,7 @@ export class EstimatePage implements OnInit, DoCheck {
           notes: ''
         }));
       console.log('[EstimateReconstruction] Reconstructed photos', { count: this.cachedInspectionPhotos.length });
+      void this.persistEstimatePhotosToIndexedDbIfChanged();
     }
 
     // Restore service notes and scheduling dates

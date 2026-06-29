@@ -123,6 +123,27 @@
             font-size: 14px;
             color: #333;
         }
+        .signature-block.unsigned-signature {
+            width: auto;
+            max-width: 100%;
+        }
+        .signature-lines {
+            display: flex;
+            gap: 60px;
+            align-items: flex-start;
+            page-break-inside: avoid;
+        }
+        .signature-line {
+            text-align: center;
+            font-size: 14px;
+        }
+        .signature-line .line {
+            margin-bottom: 5px;
+            white-space: nowrap;
+        }
+        .signature-line .label {
+            color: #333;
+        }
         .legal-text {
             font-size: 10px;
             color: #666;
@@ -242,6 +263,14 @@
                     <span>{{SUBTOTAL}}</span>
                 </div>
                 <div class="totals-row">
+                    <span>Military / Senior Discount:</span>
+                    <span>{{MILITARY_SENIOR_DISCOUNT}}</span>
+                </div>
+                <div class="totals-row">
+                    <span>Additional Discount:</span>
+                    <span>{{ADDITIONAL_DISCOUNT}}</span>
+                </div>
+                <div class="totals-row">
                     <span>Tax ({{TAX_RATE_PERCENT}}%):</span>
                     <span>{{TAX_AMOUNT}}</span>
                 </div>
@@ -253,14 +282,7 @@
         </div>
 
         <div class="signature-container">
-            <div class="signature-block">
-                <div class="signature-img-container">
-                    {{SIGNATURE_IMAGE_HTML}}
-                </div>
-                <div class="signature-text">
-                    {{SIGNATURE_TEXT}}
-                </div>
-            </div>
+            {{SIGNATURE_SECTION_HTML}}
         </div>
 
         <div class="legal-text">

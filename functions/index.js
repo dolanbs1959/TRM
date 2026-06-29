@@ -672,10 +672,12 @@ async function generateAndDispatchPDF(payload) {
         const cleanMaintenanceScheduledFor = payload.cleanMaintenanceScheduledFor || '';
         const repairServicesScheduledFor = payload.repairServicesScheduledFor || '';
         const inspectionPhotos = payload.inspectionPhotos || [];
+        const msDiscountAmount = payload.msDiscountAmount || 0;
+        const otherDiscountAmount = payload.otherDiscountAmount || 0;
 
         // Generate HTML using the pdfGenerator
         console.log('[BackgroundWorker] Generating HTML...');
-        const htmlContent = await generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage, serviceNotes, cleanMaintenanceScheduledFor, repairServicesScheduledFor, inspectionPhotos);
+        const htmlContent = await generatePDFHtml(job, lineItems, signatureData, roofStructures, totalSquareFootage, serviceNotes, cleanMaintenanceScheduledFor, repairServicesScheduledFor, inspectionPhotos, msDiscountAmount, otherDiscountAmount);
         console.log('[BackgroundWorker] HTML generated, length:', htmlContent.length);
 
         // Launch Puppeteer to generate PDF in memory
@@ -831,6 +833,8 @@ async function handleSubmitEstimateData(req, res) {
         totalAmount,
         secondaryDiscountAmount,
         secondaryDiscountPercentage,
+        msDiscountAmount,
+        otherDiscountAmount,
         serviceNotes,
         cleanMaintenanceScheduledFor,
         repairServicesScheduledFor,
@@ -869,6 +873,8 @@ async function handleSubmitEstimateData(req, res) {
     const normalizedTotalAmount = parseNumericValue(totalAmount);
     const normalizedSecondaryDiscountAmount = parseNumericValue(secondaryDiscountAmount);
     const normalizedSecondaryDiscountPercentage = parseNumericValue(secondaryDiscountPercentage);
+    const normalizedMSDiscountAmount = parseNumericValue(msDiscountAmount);
+    const normalizedOtherDiscountAmount = parseNumericValue(otherDiscountAmount);
     const estimateRows = normalizeEstimateLineItems(activeEstimateItems, normalizedServiceOrderId);
     const normalizedRoofRecordIds = normalizeRoofRecordIds(roofRecordIds);
     const nextStatus = normalizedSubmissionMode === 'sold' ? 'Sold' : 'Estimated';
@@ -1080,6 +1086,8 @@ async function handleSubmitEstimateData(req, res) {
             subtotal: normalizedSubtotal,
             taxAmount: normalizedTaxAmount,
             totalAmount: normalizedTotalAmount,
+            msDiscountAmount: normalizedMSDiscountAmount,
+            otherDiscountAmount: normalizedOtherDiscountAmount,
             activeEstimateItems: estimateRows.map((row, index) => ({
                 description: activeEstimateItems[index]?.description || 'Item',
                 qtyNeeded: activeEstimateItems[index]?.qtyNeeded || row['16']?.value || 1,

@@ -337,15 +337,51 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
   }
 
   private isJobForToday(job: any): boolean {
-    const serviceDate = job?.['9']?.value;
+    const rawField9 = job?.['9'];
+    const serviceDate = rawField9?.value;
+
+    console.log('[Home Page][isJobForToday] raw input:', {
+      thisToday: this.today,
+      thisTodayToString: this.today?.toString(),
+      thisTodayISO: this.today?.toISOString?.(),
+      rawField9,
+      serviceDate,
+      serviceDateType: typeof serviceDate,
+    });
+
     if (!serviceDate) {
-      return false;
+      // The job is in the current schedule, so if the service date field is empty,
+      // assume it is for today. This matches the schedule context used to select the job.
+      console.log('[Home Page][isJobForToday] result: true (empty serviceDate, using schedule date)');
+      return true;
     }
 
-    const jobDate = new Date(serviceDate);
     const todayDate = new Date(this.today);
+    const serviceDateString = String(serviceDate).trim();
+    const jobDate = new Date(serviceDateString);
 
-    return jobDate.toDateString() === todayDate.toDateString();
+    const result = (
+      jobDate.getFullYear() === todayDate.getFullYear() &&
+      jobDate.getMonth() === todayDate.getMonth() &&
+      jobDate.getDate() === todayDate.getDate()
+    );
+
+    console.log('[Home Page][isJobForToday] comparison:', {
+      serviceDateString,
+      jobDate: jobDate.toString(),
+      jobDateISO: jobDate.toISOString(),
+      todayDate: todayDate.toString(),
+      todayDateISO: todayDate.toISOString(),
+      jobYear: jobDate.getFullYear(),
+      jobMonth: jobDate.getMonth(),
+      jobDay: jobDate.getDate(),
+      todayYear: todayDate.getFullYear(),
+      todayMonth: todayDate.getMonth(),
+      todayDay: todayDate.getDate(),
+      result,
+    });
+
+    return result;
   }
 
   selectJob(job: any) {
@@ -1372,12 +1408,20 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
     const raw = localStorage.getItem(this.getInspectionCacheStorageKey(id));
     if (!raw) {
+      console.log('[Home Page][readInspectionCache] No cache found:', { serviceOrderId: id });
       return null;
     }
 
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      console.log('[Home Page][readInspectionCache] Cache read:', {
+        serviceOrderId: id,
+        cacheKeys: Object.keys(parsed),
+        photoCount: parsed?.photoBatchData?.rows?.length || 0,
+      });
+      return parsed;
     } catch {
+      console.warn('[Home Page][readInspectionCache] Failed to parse cache:', { serviceOrderId: id });
       return null;
     }
   }
@@ -1423,8 +1467,18 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
     const storageKey = this.getInspectionCacheStorageKey(id);
 
+    console.log('[Home Page][persistInspectionCache] Attempting full cache:', {
+      serviceOrderId: id,
+      photoCount: cacheData.photoCount,
+      estimatedSize: JSON.stringify(cacheData).length,
+    });
+
     try {
       localStorage.setItem(storageKey, JSON.stringify(cacheData));
+      console.log('[Home Page][persistInspectionCache] Full cache saved:', {
+        serviceOrderId: id,
+        photoCount: cacheData.photoCount,
+      });
       return;
     } catch (error) {
       if (!this.isStorageQuotaExceededError(error)) {
@@ -1432,7 +1486,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
         return;
       }
 
-      console.warn('Inspection cache exceeded localStorage quota. Retrying with compact cache payload.', {
+      console.warn('[Home Page][persistInspectionCache] Quota exceeded, falling back to compact cache:', {
         serviceOrderId: id,
         photoCount: cacheData.photoCount,
       });
@@ -1440,6 +1494,10 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
     try {
       localStorage.setItem(storageKey, JSON.stringify(compactCacheData));
+      console.log('[Home Page][persistInspectionCache] Compact cache saved:', {
+        serviceOrderId: id,
+        photoCount: 0,
+      });
       return;
     } catch (error) {
       if (!this.isStorageQuotaExceededError(error)) {
@@ -1951,6 +2009,17 @@ async ngOnInit() {
       isEstimateRevision,
       isHistoricalRetrieval,
       photoCount: inspectionCache?.photoBatchData?.rows?.length || 0,
+    });
+
+    console.log('[Home Page][Navigation State]', {
+      jobRecordId,
+      routerState: {
+        workflow: routerState.workflow,
+        isHistoricalRetrieval: routerState.isHistoricalRetrieval,
+        inspectionCacheKeys: routerState.inspectionCache ? Object.keys(routerState.inspectionCache) : null,
+        inspectionCachePhotoCount: routerState.inspectionCache?.photoBatchData?.rows?.length || 0,
+        inspectionCacheMasterValues: routerState.inspectionCache?.masterJobRecordValues ? Object.keys(routerState.inspectionCache.masterJobRecordValues) : null,
+      }
     });
 
     this.router.navigate(['/estimate', jobRecordId], {

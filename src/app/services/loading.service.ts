@@ -1,38 +1,58 @@
 import { Injectable } from '@angular/core';
-import { LoadingController, LoadingOptions } from '@ionic/angular';
+import { LoadingOptions } from '@ionic/angular';
 
 @Injectable({
   providedIn: 'root'
 })
 export class LoadingService {
-  private loadingElement: HTMLIonLoadingElement | null = null;
+  private overlayElement: HTMLElement | null = null;
 
-  constructor(private loadingController: LoadingController) {}
-
-  async show(message: string = 'Loading...', options: LoadingOptions = {}): Promise<void> {
-    // Dismiss any existing loading first to prevent stuck spinners
+  async show(message: string = '', options: LoadingOptions = {}): Promise<void> {
     await this.dismiss();
 
-    const loadingOptions: LoadingOptions = {
-      message,
-      spinner: 'crescent',
-      backdropDismiss: false,
-      ...options
-    };
+    const overlay = document.createElement('div');
+    overlay.className = 'trm-loading-overlay';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.setAttribute('aria-busy', 'true');
 
-    this.loadingElement = await this.loadingController.create(loadingOptions);
-    await this.loadingElement.present();
+    const content = document.createElement('div');
+    content.className = 'trm-loading-content';
+
+    const spinner = document.createElement('div');
+    spinner.className = 'trm-loading-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    content.appendChild(spinner);
+
+    if (message && message.trim()) {
+      const messageEl = document.createElement('div');
+      messageEl.className = 'trm-loading-message';
+      messageEl.textContent = message.trim();
+      content.appendChild(messageEl);
+    }
+
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    this.overlayElement = overlay;
+
+    // Force a reflow so the opacity transition plays
+    overlay.getBoundingClientRect();
+    overlay.classList.add('active');
   }
 
   async dismiss(): Promise<void> {
-    if (this.loadingElement) {
-      try {
-        await this.loadingElement.dismiss();
-      } catch (error) {
-        // Ignore dismiss errors (already dismissed, etc.)
-      } finally {
-        this.loadingElement = null;
-      }
+    if (!this.overlayElement) {
+      return;
+    }
+
+    const overlay = this.overlayElement;
+    this.overlayElement = null;
+
+    overlay.classList.remove('active');
+    await this.waitForTransition(overlay);
+
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
     }
   }
 
@@ -43,10 +63,20 @@ export class LoadingService {
   ): Promise<T> {
     try {
       await this.show(message, options);
-      const result = await operation();
-      return result;
+      return await operation();
     } finally {
       await this.dismiss();
     }
+  }
+
+  private waitForTransition(element: HTMLElement): Promise<void> {
+    return new Promise(resolve => {
+      const handler = () => {
+        element.removeEventListener('transitionend', handler);
+        resolve();
+      };
+      element.addEventListener('transitionend', handler);
+      setTimeout(resolve, 250);
+    });
   }
 }

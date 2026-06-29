@@ -67,7 +67,7 @@ async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
     }
 }
 
-async function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = [], totalSquareFootage = 0, serviceNotes = '', cleanMaintenanceScheduledFor = '', repairServicesScheduledFor = '', inspectionPhotos = []) {
+async function generatePDFHtml(job, lineItems = [], signatureData, roofStructures = [], totalSquareFootage = 0, serviceNotes = '', cleanMaintenanceScheduledFor = '', repairServicesScheduledFor = '', inspectionPhotos = [], msDiscountAmount = 0, otherDiscountAmount = 0) {
     // Defensive coding: Ensure job is an object to prevent crashes
     const safeJob = job || {};
     
@@ -224,9 +224,38 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
         `;
     }
 
-    const taxAmount = calculateTax(subtotal, addressZip);
+    const militarySeniorDiscount = Math.min(subtotal, parseFloat(msDiscountAmount) || 0);
+    const additionalDiscount = Math.min(subtotal - militarySeniorDiscount, parseFloat(otherDiscountAmount) || 0);
+    const taxableSubtotal = Math.max(0, subtotal - militarySeniorDiscount - additionalDiscount);
+    const taxAmount = calculateTax(taxableSubtotal, addressZip);
     const taxRate = getTaxRate(addressZip);
-    const grandTotal = subtotal + taxAmount;
+    const grandTotal = taxableSubtotal + taxAmount;
+
+    const signatureSectionHtml = hasSignature
+        ? `
+        <div class="signature-block">
+            <div class="signature-img-container">
+                <img class="signature-img" src="${digitalSignatureDataUrl}" alt="Signature">
+            </div>
+            <div class="signature-text">
+                Signed by: ${customerName} on ${submissionDate}
+            </div>
+        </div>
+        `
+        : `
+        <div class="signature-block unsigned-signature">
+            <div class="signature-lines">
+                <div class="signature-line">
+                    <div class="line">____________________________________</div>
+                    <div class="label">Signature</div>
+                </div>
+                <div class="signature-line">
+                    <div class="line">______________________</div>
+                    <div class="label">Date</div>
+                </div>
+            </div>
+        </div>
+        `;
 
     let roofStructuresHtml = '';
     if (Array.isArray(roofStructures) && roofStructures.length > 0) {
@@ -308,21 +337,17 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
         '{{SERVICE_NOTES_HTML}}': serviceNotesHtml,
         '{{DATES_OF_SERVICES_HTML}}': datesOfServicesHtml,
         '{{SUBTOTAL}}': `$${subtotal.toFixed(2)}`,
+        '{{MILITARY_SENIOR_DISCOUNT}}': `$${militarySeniorDiscount.toFixed(2)}`,
+        '{{ADDITIONAL_DISCOUNT}}': `$${additionalDiscount.toFixed(2)}`,
         '{{TAX_RATE_PERCENT}}': (taxRate * 100).toFixed(2),
         '{{TAX_AMOUNT}}': `$${taxAmount.toFixed(2)}`,
         '{{GRAND_TOTAL}}': `$${grandTotal.toFixed(2)}`,
-        '{{SIGNATURE_IMAGE_HTML}}': hasSignature ? `<img class="signature-img" src="${digitalSignatureDataUrl}" alt="Signature">` : '',
-        '{{SIGNATURE_TEXT}}': hasSignature ? `Signed by: ${customerName} on ${submissionDate}` : ''
+        '{{SIGNATURE_SECTION_HTML}}': signatureSectionHtml
     };
 
     // Apply replacements
     for (const [key, value] of Object.entries(replacements)) {
         html = html.replace(new RegExp(key, 'g'), value);
-    }
-
-    // Clean up empty signature container if not signed
-    if (!hasSignature) {
-        html = html.replace(/<div class="signature-container">[\s\S]*?<\/div>/g, '');
     }
 
     // Generate Inspection Photos section HTML
