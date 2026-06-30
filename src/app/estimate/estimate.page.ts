@@ -51,10 +51,11 @@ interface EstimateCatalogItem {
   sortOrder: number;
 }
 
-interface ActiveEstimateItem extends EstimateCatalogItem {
-  qtyNeeded: number;
+interface ActiveEstimateItem extends Omit<EstimateCatalogItem, 'price'> {
+  qtyNeeded: number | null;
+  price: number | null;
   lineSubtotal: number;
-  sqFootage?: number;
+  sqFootage: number | null;
 }
 
 interface EstimateSubmissionPayloadItem {
@@ -116,16 +117,16 @@ export class EstimatePage implements OnInit, DoCheck {
   customerReadyToBegin = false;
   discountsAvailable = false;
   discountControlValue = '';
-  secondaryDiscountAmount = 0;
-  secondaryDiscountPercentage = 0;
+  secondaryDiscountAmount: number | null = 0;
+  secondaryDiscountPercentage: number | null = 0;
   isSubmittingEstimate = false;
   cleanMaintenanceScheduledFor = this.getTodayDateInputValue();
   repairServicesScheduledFor = this.getTodayDateInputValue();
   signatureDate = this.getTodayDateInputValue();
   discountMS = false;
   discountOther = false;
-  msDiscountAmount = 0;
-  otherDiscountAmount = 0;
+  msDiscountAmount: number | null = 0;
+  otherDiscountAmount: number | null = 0;
   private signatureStrokeActive = false;
   private signatureHasInk = false;
   private viewerTouchStartX: number | null = null;
@@ -984,7 +985,7 @@ export class EstimatePage implements OnInit, DoCheck {
   }
 
   getCartItemCount(): number {
-    return this.activeEstimateItems.reduce((total, item) => total + item.qtyNeeded, 0);
+    return this.activeEstimateItems.reduce((total, item) => total + (item.qtyNeeded || 0), 0);
   }
 
   getCartSubtotal(): number {
@@ -1008,15 +1009,26 @@ export class EstimatePage implements OnInit, DoCheck {
     return this.roundCurrency(this.getCartTaxableSubtotal() + this.getCartTaxTotal());
   }
 
-  formatCurrency(value: number): string {
+  formatCurrency(value: number | null | undefined): string {
     const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
     return `$${numericValue.toFixed(2)}`;
   }
 
   getCatalogItemCount(item: EstimateCatalogItem): number {
     const existing = this.activeEstimateItems.find((row) => row.id === item.id);
-    return existing ? existing.qtyNeeded : 0;
+    return existing ? (existing.qtyNeeded || 0) : 0;
   }
+
+  getCatalogDisplayText(item: { name?: string; description?: string }): string {
+  const name = (item?.name || '').trim();
+  const description = (item?.description || '').trim();
+
+  if (!description) {
+    return name;
+  }
+
+  return `${name} — ${description}`;
+}
 
   addCatalogItemToEstimate(item: EstimateCatalogItem) {
     if (!item || !item.name) {
@@ -1028,7 +1040,7 @@ export class EstimatePage implements OnInit, DoCheck {
       const existing = this.activeEstimateItems[existingIndex];
       const updated: ActiveEstimateItem = {
         ...existing,
-        qtyNeeded: existing.qtyNeeded + 1,
+        qtyNeeded: (existing.qtyNeeded || 0) + 1,
       };
       this.recomputeItemPricing(updated);
       this.activeEstimateItems[existingIndex] = updated;
@@ -1040,6 +1052,7 @@ export class EstimatePage implements OnInit, DoCheck {
       ...item,
       qtyNeeded: 1,
       lineSubtotal: item.price,
+      sqFootage: null,
     };
     this.recomputeItemPricing(nextItem);
 
@@ -1060,6 +1073,26 @@ export class EstimatePage implements OnInit, DoCheck {
   onActiveItemChanged(item: ActiveEstimateItem) {
     this.recomputeItemPricing(item);
     this.syncPricingSummary();
+  }
+
+  async selectAll(event: Event) {
+    const target = event.target as HTMLIonInputElement | HTMLIonTextareaElement;
+    try {
+      const input = await target.getInputElement();
+      input.select();
+    } catch {
+      // Selection is not supported on all mobile keyboards; ignore silently.
+    }
+  }
+
+  async blurInput(event: Event) {
+    const target = event.target as HTMLIonInputElement;
+    try {
+      const input = await target.getInputElement();
+      input.blur();
+    } catch {
+      // Ignore blur failures for unsupported cases.
+    }
   }
 
   onMSDiscountToggle(checked: boolean) {
@@ -1088,6 +1121,14 @@ export class EstimatePage implements OnInit, DoCheck {
 
   onOtherDiscountAmountChange(value: number | string | null | undefined) {
     this.otherDiscountAmount = this.sanitizeCurrencyInput(value);
+  }
+
+  onSecondaryDiscountAmountChange(value: number | string | null | undefined) {
+    this.secondaryDiscountAmount = this.sanitizeCurrencyInput(value);
+  }
+
+  onSecondaryDiscountPercentageChange(value: number | string | null | undefined) {
+    this.secondaryDiscountPercentage = this.sanitizeCurrencyInput(value);
   }
 
   get hasCatalogItems(): boolean {
@@ -1388,7 +1429,9 @@ export class EstimatePage implements OnInit, DoCheck {
   private getEstimateSubmissionItems(): EstimateSubmissionPayloadItem[] {
     return this.activeEstimateItems.map((item) => ({
       id: Number.parseInt(String(item.id), 10) || 0,
-      description: String(item.description || item.name || '').trim(),
+      description: item.description
+        ? `${item.name} — ${item.description}`
+        : item.name,
       unit: String(item.unit || '').trim(),
       qtyNeeded: Math.max(1, Number(item.qtyNeeded) || 1),
       sqFootage: Number(item.sqFootage || this.selectedRoofSquareFootage || 0) || 0,
@@ -1446,7 +1489,7 @@ export class EstimatePage implements OnInit, DoCheck {
       taxAmount: this.getCartTaxTotal(),
       totalAmount: this.getCartGrandTotal(),
       secondaryDiscountAmount: this.getCartDiscountTotal(),
-      secondaryDiscountPercentage: this.secondaryDiscountPercentage,
+      secondaryDiscountPercentage: this.sanitizeCurrencyInput(this.secondaryDiscountPercentage),
       msDiscountAmount: this.getMSDiscountValue(),
       otherDiscountAmount: this.getOtherDiscountValue(),
       discountControlValue: this.discountControlValue,

@@ -153,10 +153,13 @@
               <div class="catalog-item" *ngFor="let item of section.items" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
                 <div class="catalog-copy">
                   <div class="catalog-name-row">
-                    <h4>{{ item.name }}</h4>
+                    <h3>
+                      <strong>{{ item.name }}</strong>
+                      <span *ngIf="item.description"> — {{ item.description }}</span>
+                    </h3>
                     <ion-badge color="warning" *ngIf="item.packageTier">{{ item.packageTier }}</ion-badge>
                   </div>
-                  <p *ngIf="item.description">{{ item.description }}</p>
+                  <!-- <p *ngIf="item.description">{{ item.description }}</p> -->
                   <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
                 </div>
                 <ion-button size="small" fill="outline" color="primary" (click)="addCatalogItemToEstimate(item)">
@@ -176,8 +179,11 @@
           <div class="catalog-stack">
             <div class="catalog-item" *ngFor="let item of tipTopRoofCareClubItems" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
               <div class="catalog-copy">
-                <h4>{{ item.name }}</h4>
-                <p *ngIf="item.description">{{ item.description }}</p>
+                <h3>
+                  <strong>{{ item.name }}</strong>
+                  <span *ngIf="item.description"> — {{ item.description }}</span>
+                </h3>
+                <!-- <p *ngIf="item.description">{{ item.description }}</p> -->
                 <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
               </div>
               <ion-button size="small" fill="outline" color="success" (click)="addCatalogItemToEstimate(item)">
@@ -204,9 +210,12 @@
               <div slot="content" class="repair-group-content">
                 <div class="catalog-item" *ngFor="let item of group.items" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
                   <div class="catalog-copy">
-                    <h4>{{ item.name }}</h4>
+                    <h3>
+                      <strong>{{ item.name }}</strong>
+                      <span *ngIf="item.description"> — {{ item.description }}</span>
+                    </h3>
                     <p *ngIf="item.serviceType">Type: {{ item.serviceType }}</p>
-                    <p *ngIf="item.description">{{ item.description }}</p>
+                    <!-- <p *ngIf="item.description">{{ item.description }}</p> -->
                     <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
                   </div>
                   <ion-button size="small" fill="outline" color="danger" (click)="addCatalogItemToEstimate(item)">
@@ -239,11 +248,14 @@
             <div class="catalog-item" *ngFor="let item of filteredCatalogItems" [class.catalog-item-added]="getCatalogItemCount(item) > 0">
               <div class="catalog-copy">
                 <div class="catalog-name-row">
-                  <h4>{{ item.name }}</h4>
+                  <h3>
+                    <strong>{{ item.name }}</strong>
+                    <span *ngIf="item.description"> — {{ item.description }}</span>
+                  </h3>
                   <ion-badge color="tertiary" *ngIf="item.isPackage">Package</ion-badge>
                 </div>
                 <p *ngIf="item.serviceType">Type: {{ item.serviceType }}</p>
-                <p *ngIf="item.description">{{ item.description }}</p>
+                <!-- <p *ngIf="item.description">{{ item.description }}</p> -->
                 <span class="catalog-price">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
               </div>
               <ion-button size="small" fill="outline" color="danger" (click)="addCatalogItemToEstimate(item)">
@@ -261,7 +273,10 @@
         <ion-card-content>
           <div class="active-item" *ngFor="let item of activeEstimateItems">
             <div class="active-item-header">
-              <span class="detail-label">{{ item.name }}</span>
+              <span class="detail-label">
+                <strong>{{ item.name }}</strong>
+                <span *ngIf="item.description"> — {{ item.description }}</span>
+              </span>
               <div class="active-item-header-right">
                 <span class="detail-value">{{ formatCurrency(item.price) }} <span *ngIf="item.unit">/ {{ item.unit }}</span></span>
                 <ion-button size="small" fill="clear" color="danger" (click)="removeCatalogItemFromEstimate(item)">
@@ -277,8 +292,11 @@
                   type="number"
                   min="1"
                   placeholder="Qty"
-                  [ngModel]="item.qtyNeeded || null"
-                  (ngModelChange)="item.qtyNeeded = $event; onActiveItemChanged(item)"
+                  [(ngModel)]="item.qtyNeeded"
+                  (ionBlur)="onActiveItemChanged(item)"
+                  (keydown.enter)="onActiveItemChanged(item); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
 
@@ -289,8 +307,11 @@
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  [ngModel]="item.price || null"
-                  (ngModelChange)="item.price = $event; onActiveItemChanged(item)"
+                  [(ngModel)]="item.price"
+                  (ionBlur)="onActiveItemChanged(item)"
+                  (keydown.enter)="onActiveItemChanged(item); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
 
@@ -301,8 +322,11 @@
                   min="0"
                   step="0.01"
                   placeholder="0"
-                  [ngModel]="item.sqFootage || null"
-                  (ngModelChange)="item.sqFootage = $event; onActiveItemChanged(item)"
+                  [(ngModel)]="item.sqFootage"
+                  (ionBlur)="onActiveItemChanged(item)"
+                  (keydown.enter)="onActiveItemChanged(item); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
 
@@ -326,6 +350,8 @@
             rows="5"
             placeholder="Add service notes, exclusions, and customer-facing remarks"
             [(ngModel)]="serviceNotes"
+            (ionFocus)="selectAll($event)"
+            (dblclick)="selectAll($event)"
           ></ion-textarea>
         </ion-card-content>
       </ion-card>
@@ -370,8 +396,11 @@
                   step="0.01"
                   placeholder="0.00"
                   [disabled]="!discountMS"
-                  [ngModel]="msDiscountAmount || null"
-                  (ngModelChange)="onMSDiscountAmountChange($event)"
+                  [(ngModel)]="msDiscountAmount"
+                  (ionBlur)="onMSDiscountAmountChange(msDiscountAmount)"
+                  (keydown.enter)="onMSDiscountAmountChange(msDiscountAmount); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
 
@@ -391,8 +420,11 @@
                   step="0.01"
                   placeholder="0.00"
                   [disabled]="!discountOther"
-                  [ngModel]="otherDiscountAmount || null"
-                  (ngModelChange)="onOtherDiscountAmountChange($event)"
+                  [(ngModel)]="otherDiscountAmount"
+                  (ionBlur)="onOtherDiscountAmountChange(otherDiscountAmount)"
+                  (keydown.enter)="onOtherDiscountAmountChange(otherDiscountAmount); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
 
@@ -431,7 +463,12 @@
             <div class="secondary-discount-grid">
               <label>
                 <span class="detail-label">FID 138</span>
-                <ion-input [(ngModel)]="discountControlValue" placeholder="Control value"></ion-input>
+                <ion-input
+                  [(ngModel)]="discountControlValue"
+                  placeholder="Control value"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
+                ></ion-input>
               </label>
               <label>
                 <span class="detail-label">Secondary Discount Amount</span>
@@ -440,8 +477,11 @@
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  [ngModel]="secondaryDiscountAmount || null"
-                  (ngModelChange)="secondaryDiscountAmount = $event"
+                  [(ngModel)]="secondaryDiscountAmount"
+                  (ionBlur)="onSecondaryDiscountAmountChange(secondaryDiscountAmount)"
+                  (keydown.enter)="onSecondaryDiscountAmountChange(secondaryDiscountAmount); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
               <label>
@@ -451,8 +491,11 @@
                   min="0"
                   step="0.01"
                   placeholder="0.00"
-                  [ngModel]="secondaryDiscountPercentage || null"
-                  (ngModelChange)="secondaryDiscountPercentage = $event"
+                  [(ngModel)]="secondaryDiscountPercentage"
+                  (ionBlur)="onSecondaryDiscountPercentageChange(secondaryDiscountPercentage)"
+                  (keydown.enter)="onSecondaryDiscountPercentageChange(secondaryDiscountPercentage); blurInput($event)"
+                  (ionFocus)="selectAll($event)"
+                  (dblclick)="selectAll($event)"
                 ></ion-input>
               </label>
             </div>
@@ -469,7 +512,13 @@
           <div class="signature-grid">
             <label>
               <span class="detail-label">Work Ordered By</span>
-              <ion-input class="signature-line-input" [(ngModel)]="workOrderedBy" placeholder="Type customer name/signature"></ion-input>
+              <ion-input
+                class="signature-line-input"
+                [(ngModel)]="workOrderedBy"
+                placeholder="Type customer name/signature"
+                (ionFocus)="selectAll($event)"
+                (dblclick)="selectAll($event)"
+              ></ion-input>
             </label>
             <label>
               <span class="detail-label">Date</span>

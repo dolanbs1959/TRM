@@ -518,7 +518,6 @@
 .catalog-item {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 10px;
   background: #fff;
   border: 1px solid #e4e1dc;
@@ -532,6 +531,7 @@
 }
 
 .catalog-copy {
+  flex: 1 1 auto;
   min-width: 0;
 
   h4 {
@@ -582,9 +582,9 @@
 }
 
 .active-item-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
   gap: 8px;
 }
 
@@ -788,6 +788,7 @@
 
   .detail-label {
     color: #b3b3b3;
+    min-width: 0;
   }
 
   .detail-value {
