@@ -4,6 +4,7 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, RoofOptionCacheData, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
+import { environment } from '../../environments/environment';
 
 type InspectionPhotoSectionKey =
   | 'penetrations'
@@ -378,7 +379,29 @@ export class JobDetailPage implements OnInit, DoCheck {
     const streetLine = [streetNumber, streetName].filter(Boolean).join(' ');
     return [streetLine, city, state].filter(Boolean).join(', ');
   }
+      openInGoogleMaps() {
+      const address = this.getCustomerAddressLine();
+      if (!address) {
+        return;
+      }
 
+      window.open(
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`,
+        '_blank'
+      );
+    }
+    getSatelliteImageUrl(): string {
+      const address = this.getCustomerAddressLine();
+
+      if (!address) {
+        return '';
+      }
+
+      return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(address)}&zoom=20&size=640x640&scale=2&maptype=satellite&key=${environment.googleMapsApiKey}`;
+    }
+    getLocationName() {
+      return (this.job?.['90']?.value || '').toString().trim();
+    }
   cycleGroundInspectionItemState(item: { state: 0 | 1 | 2 }) {
     if (this.isHubInputLocked()) {
       return;

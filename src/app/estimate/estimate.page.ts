@@ -1,4 +1,4 @@
-import { Component, DoCheck, ElementRef, OnInit, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, DoCheck, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AlertController } from '@ionic/angular';
 import { addIcons } from 'ionicons';
@@ -86,7 +86,7 @@ interface EstimatePackageSection {
   styleUrls: ['./estimate.page.scss'],
   standalone: false,
 })
-export class EstimatePage implements OnInit, DoCheck {
+export class EstimatePage implements OnInit, AfterViewInit, DoCheck, OnDestroy {
   @ViewChild('signatureCanvas') signatureCanvasRef?: ElementRef<HTMLCanvasElement>;
 
   job: any = null;
@@ -147,6 +147,18 @@ export class EstimatePage implements OnInit, DoCheck {
   private static readonly INSPECTION_PHOTO_STORE_NAME = 'inspectionPhotoDrafts';
   private static readonly ESTIMATE_DRAFT_STORAGE_KEY_PREFIX = 'trm_estimate_draft_';
   private static readonly PACKAGE_SECTION_ORDER = ['Budget', 'Value', 'Basic Maintenance'];
+  private readonly sectionNavIds = [
+    'estimate-packages-section',
+    'estimate-tiptop-section',
+    'estimate-repairs-section',
+    'estimate-active-section',
+  ];
+  private readonly activeSectionNavIndex = this.sectionNavIds.length - 1;
+  private sectionNavObserver: IntersectionObserver | null = null;
+  private sectionNavMutationObserver: MutationObserver | null = null;
+  currentNavIndex = 0;
+  isAtActiveSection = false;
+
   readonly servicePledgeText = 'It is our pledge to render careful, professional cleaning services using reasonable care to obtain satisfactory results. We do not guarantee all leaks or cracks in any type of roof material will be discovered. Factors of installation and/or deterioration that are disguised or covered cannot be predicted in the hands of even the most careful workman. Gutters that are rusted and/or brittle can potentially leak or break during a cleaning process. We do guarantee that we will be careful to clean the roof in a manner that will reduce the risk of any of these instances.';
   readonly datesOfServiceText = 'All dates subject to change based on weather and other unforeseen circumstances. You will be notified as soon as possible if services need to be rescheduled. There is no exact time of arrival for these dates.';
   readonly authorizationText = 'By signing this you are acknowledging that you are authorizing The Roof Medic to perform all services that are indicated on this form and are agreeing to pay the prices quoted on this form for those services (plus sales tax, minus any discounts noted on this form) within 15 days of all services being completed (unless otherwise stated on this form). Late Fees will begin accumulating at a rate of 1.5% per month on any unpaid balance after the due date. You also agree to review the Pre-Cleaning Service Recommendations sheet provided and understand that you are responsible for any property preparations listed on that sheet as well as any rescheduling and/or cancellation fees and requirements noted on that sheet. In the event of legal action to collect sums due under this contract, The Roof Medic will be entitled to reasonable attorney fees and cost in addition to the contact amount. We may withdraw this proposal if not accepted in 30 days.';
@@ -242,6 +254,122 @@ export class EstimatePage implements OnInit, DoCheck {
     });
 
     void this.initializeEstimateData(workflow, isHistoricalRetrieval);
+  }
+
+  get hasNavigableEstimateSections(): boolean {
+    return this.getExistingNavSections().length > 1;
+  }
+
+  private getExistingNavSections(): HTMLElement[] {
+    return this.sectionNavIds
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el);
+  }
+
+  async ngAfterViewInit() {
+    await this.setupSectionNavObserver();
+  }
+
+  ngOnDestroy() {
+    this.disconnectSectionNavObserver();
+  }
+
+  private async setupSectionNavObserver() {
+    this.disconnectSectionNavObserver();
+
+    const content = document.querySelector('ion-content.estimate-page') as HTMLIonContentElement | null;
+    if (!content) {
+      return;
+    }
+
+    const root = await content.getScrollElement();
+    const sections = this.getExistingNavSections();
+    if (sections.length === 0) {
+      return;
+    }
+
+    this.sectionNavObserver = new IntersectionObserver(
+      (entries) => this.handleSectionNavIntersection(entries),
+      {
+        root,
+        threshold: [0, 0.25, 0.5, 0.75, 1],
+      }
+    );
+
+    for (const section of sections) {
+      this.sectionNavObserver.observe(section);
+    }
+
+    this.sectionNavMutationObserver = new MutationObserver(() => {
+      void this.setupSectionNavObserver();
+    });
+    this.sectionNavMutationObserver.observe(content, { childList: true, subtree: true });
+  }
+
+  private handleSectionNavIntersection(entries: IntersectionObserverEntry[]) {
+    let bestIndex = this.currentNavIndex;
+    let bestRatio = 0;
+
+    for (const entry of entries) {
+      const index = this.sectionNavIds.indexOf(entry.target.id);
+      if (index < 0) {
+        continue;
+      }
+      if (entry.isIntersecting && entry.intersectionRatio > bestRatio) {
+        bestRatio = entry.intersectionRatio;
+        bestIndex = index;
+      }
+    }
+
+    if (bestRatio > 0) {
+      this.currentNavIndex = bestIndex;
+      this.isAtActiveSection = this.currentNavIndex === this.activeSectionNavIndex;
+    }
+  }
+
+  navigateNextSection() {
+    const sections = this.getExistingNavSections();
+    if (sections.length === 0) {
+      return;
+    }
+
+    const existingIds = sections.map((s) => s.id);
+
+    let targetIndex: number;
+    if (this.currentNavIndex === this.activeSectionNavIndex) {
+      // At Active Estimate Items: return to the first section.
+      targetIndex = 0;
+    } else {
+      // Move to the next existing section in DOM order.
+      targetIndex = this.currentNavIndex + 1;
+      while (targetIndex < this.sectionNavIds.length && !existingIds.includes(this.sectionNavIds[targetIndex])) {
+        targetIndex++;
+      }
+      // Wrap back to the first section if no later section exists.
+      if (targetIndex >= this.sectionNavIds.length) {
+        targetIndex = 0;
+      }
+    }
+
+    const targetId = this.sectionNavIds[targetIndex];
+    const target = document.getElementById(targetId);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    this.currentNavIndex = targetIndex;
+    this.isAtActiveSection = this.currentNavIndex === this.activeSectionNavIndex;
+  }
+
+  private disconnectSectionNavObserver() {
+    if (this.sectionNavObserver) {
+      this.sectionNavObserver.disconnect();
+      this.sectionNavObserver = null;
+    }
+    if (this.sectionNavMutationObserver) {
+      this.sectionNavMutationObserver.disconnect();
+      this.sectionNavMutationObserver = null;
+    }
   }
 
   ionViewDidEnter() {

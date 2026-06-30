@@ -140,7 +140,7 @@
       </ion-card-content>
     </ion-card>
 
-    <section class="estimate-items-section packages-section">
+    <section id="estimate-packages-section" class="estimate-items-section packages-section">
       <h3 class="estimate-items-title">Full Service Roof Clean Packages</h3>
       <ion-card class="estimate-card" *ngIf="!isCatalogLoading; else packagesLoading">
         <ion-card-content>
@@ -172,7 +172,7 @@
       </ion-card>
     </section>
 
-    <section class="estimate-items-section tiptop-section" *ngIf="tipTopRoofCareClubItems.length > 0">
+    <section id="estimate-tiptop-section" class="estimate-items-section tiptop-section" *ngIf="tipTopRoofCareClubItems.length > 0">
       <h3 class="estimate-items-title">Tip-Top Roof Care Club (Premium Future Roof Care Services)</h3>
       <ion-card class="estimate-card">
         <ion-card-content>
@@ -195,7 +195,7 @@
       </ion-card>
     </section>
 
-    <section class="estimate-items-section repairs-section">
+    <section id="estimate-repairs-section" class="estimate-items-section repairs-section">
       <h3 class="estimate-items-title">Additional Services and Repairs</h3>
       <ion-card class="estimate-card" *ngIf="!isCatalogLoading">
         <ion-card-content>
@@ -266,7 +266,7 @@
         </ion-card-content>
       </ion-card>
 
-      <ion-card class="estimate-card" *ngIf="activeEstimateItems.length > 0">
+      <ion-card id="estimate-active-section" class="estimate-card" *ngIf="activeEstimateItems.length > 0">
         <ion-card-header>
           <ion-card-title>Active Estimate Items</ion-card-title>
         </ion-card-header>
@@ -592,6 +592,22 @@
       </ion-card>
     </ng-template>
   </section>
+
+  <ion-fab
+    *ngIf="hasNavigableEstimateSections"
+    vertical="bottom"
+    horizontal="end"
+    slot="fixed"
+    class="estimate-section-nav-fab"
+  >
+    <ion-fab-button
+      (click)="navigateNextSection()"
+      color="danger"
+      [attr.aria-label]="isAtActiveSection ? 'Back to top' : 'Next section'"
+    >
+      <ion-icon [name]="isAtActiveSection ? 'chevron-up' : 'chevron-down'"></ion-icon>
+    </ion-fab-button>
+  </ion-fab>
 </ion-content>
 
 <ion-modal [isOpen]="isPhotoViewerOpen" (didDismiss)="closePhotoViewer()">

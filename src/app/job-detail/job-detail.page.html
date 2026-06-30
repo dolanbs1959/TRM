@@ -93,7 +93,7 @@
     <!-- INSPECTION HUB — visible for inspection jobs in all modes  -->
     <!-- ========================================================== -->
     <div *ngIf="isInspection()" class="payload-body">
-      <h3>Inspection Hub</h3>
+      <h3>Inspection Hub - Location: <strong>{{ getFieldValue(16) }}</strong></h3>
 
       <ion-note color="warning" *ngIf="isPausedWorkflow" class="inspection-lock-note">
         Job is paused. Inputs are locked until you resume from the dashboard controls.
@@ -218,6 +218,7 @@
         </button>
       </section>
 
+  <div *ngIf="!isReadOnlyMode()">
       <section class="inspection-form-section">
         <h4 class="inspection-form-title">Inspection Form</h4>
 
@@ -489,7 +490,23 @@
           </div>
         </div>
       </section>
+  </div>
 
+  <div *ngIf="isReadOnlyMode()">
+  <img
+    [src]="getSatelliteImageUrl()"
+    alt="Satellite View"
+    style="width: 100%; height: 300px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd;">
+
+    <div style="margin-top: 12px;">
+    <ion-button
+      expand="block"
+      fill="outline"
+      (click)="openInGoogleMaps()">
+      Open in Google Maps
+    </ion-button>
+    </div>
+  </div>
       <div class="inspection-notes-card">
         <label>Inspection Notes / Comments</label>
         <textarea
@@ -591,37 +608,37 @@
       <div class="roof-modal-body">
         <ion-item>
           <ion-label position="stacked">Roof Areas</ion-label>
-          <ion-select [(ngModel)]="addForm.label" placeholder="Select roof area">
+          <ion-select [(ngModel)]="addForm.label" placeholder="Select roof area" interface="action-sheet">
             <ion-select-option *ngFor="let opt of roofAreaOptions" [value]="opt">{{ opt }}</ion-select-option>
           </ion-select>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Material</ion-label>
-          <ion-select [(ngModel)]="addForm.material" placeholder="Select material">
+          <ion-select [(ngModel)]="addForm.material" placeholder="Select material" interface="action-sheet">
             <ion-select-option *ngFor="let opt of materialOptions" [value]="opt">{{ opt }}</ion-select-option>
           </ion-select>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Pitch</ion-label>
-          <ion-select [(ngModel)]="addForm.pitch" placeholder="Select pitch">
+          <ion-select [(ngModel)]="addForm.pitch" placeholder="Select pitch" interface="action-sheet">
             <ion-select-option *ngFor="let opt of pitchOptions" [value]="opt">{{ opt }}</ion-select-option>
           </ion-select>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Roof Type</ion-label>
-          <ion-select [(ngModel)]="addForm.roofType" placeholder="Select roof type">
+          <ion-select [(ngModel)]="addForm.roofType" placeholder="Select roof type" interface="action-sheet">
             <ion-select-option *ngFor="let opt of roofTypeOptions" [value]="opt">{{ opt }}</ion-select-option>
           </ion-select>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Brand</ion-label>
-          <ion-select [(ngModel)]="addForm.brand" placeholder="Select brand">
+          <ion-select [(ngModel)]="addForm.brand" placeholder="Select brand" interface="action-sheet">
             <ion-select-option *ngFor="let opt of roofBrandOptions" [value]="opt">{{ opt }}</ion-select-option>
           </ion-select>
         </ion-item>
         <ion-item>
           <ion-label position="stacked">Color</ion-label>
-          <ion-select [(ngModel)]="addForm.color" placeholder="Select color">
+          <ion-select [(ngModel)]="addForm.color" placeholder="Select color" interface="action-sheet">
             <ion-select-option *ngFor="let opt of roofColorOptions" [value]="opt">{{ opt }}</ion-select-option>
           </ion-select>
         </ion-item>

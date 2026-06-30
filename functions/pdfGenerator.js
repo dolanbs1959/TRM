@@ -85,7 +85,12 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
     const submissionDate = new Date().toLocaleDateString();
     const digitalSignatureDataUrl = signatureData || '';
     const hasSignature = !!digitalSignatureDataUrl;
+    function formatUsDate(value) {
+        if (!value) return '';
 
+        const [year, month, day] = String(value).split('-');
+        return (year && month && day) ? `${month}-${day}-${year}` : value;
+    }
     let subtotal = 0;
     
     // Safety check for lineItems and separate into two groups
@@ -285,7 +290,7 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
         // Preserve line breaks by converting newlines to <br> tags
         const formattedNotes = serviceNotes.replace(/\n/g, '<br>');
         serviceNotesHtml = `
-            <div style="margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
+            <div style="margin-top: 0.5in; margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
                 <h3 style="color: #f21616; font-size: 18px; margin: 0 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Service Notes</h3>
                 <p style="font-size: 13px; color: #555; margin: 0 0 15px 0; line-height: 1.6;">${servicePledgeText}</p>
                 <div style="font-size: 14px; color: #333; line-height: 1.6; white-space: pre-wrap;">${formattedNotes}</div>
@@ -294,7 +299,7 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
     } else {
         // Only display explanatory text if no user notes
         serviceNotesHtml = `
-            <div style="margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
+            <div style="margin-top: 0.5in; margin-bottom: 30px; padding: 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
                 <h3 style="color: #f21616; font-size: 18px; margin: 0 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Service Notes</h3>
                 <p style="font-size: 13px; color: #555; margin: 0; line-height: 1.6;">${servicePledgeText}</p>
             </div>
@@ -311,11 +316,11 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                 <div>
                     <div style="font-size: 14px; color: #333; font-weight: bold; margin-bottom: 8px;">Clean / Maintenance Services Scheduled For</div>
-                    <div style="font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px;">${cleanMaintenanceScheduledFor || '________________________'}</div>
+                    <div style="font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px;">${formatUsDate(cleanMaintenanceScheduledFor) || '________________________'}</div>
                 </div>
                 <div>
                     <div style="font-size: 14px; color: #333; font-weight: bold; margin-bottom: 8px;">Repair Services Scheduled For</div>
-                    <div style="font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px;">${repairServicesScheduledFor || '________________________'}</div>
+                    <div style="font-size: 16px; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 8px;">${formatUsDate(repairServicesScheduledFor) || '________________________'}</div>
                 </div>
             </div>
         </div>

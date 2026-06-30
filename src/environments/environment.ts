@@ -4,8 +4,8 @@
 
 export const environment = {
   production: false,
-    apiUrl: 'http://localhost:5001/trm-mobile-7aa17/us-central1/apiV2'
-  // apiUrl: '/apiV2'
+    apiUrl: 'http://localhost:5001/trm-mobile-7aa17/us-central1/apiV2',
+    googleMapsApiKey: 'AIzaSyAB49e5HdYI3PO-sb9WS9ca8akwds5Jw_w'
 };
 
 /*
