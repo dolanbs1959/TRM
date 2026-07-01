@@ -1144,10 +1144,18 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
         ? await this.buildWorkflowLogPayload(workflowEventType, `Status set to ${nextStatus}`)
         : undefined;
 
+      const technicianContext = workflowEventType === 'Arrival'
+        ? {
+            technicianName: `${this.tech?.firstName || ''} ${this.tech?.lastName || ''}`.trim(),
+            technicianPhotoUrl: this.tech?.photoUrl || '',
+          }
+        : undefined;
+
       const didUpdate = await this.authService.updateServiceOrderStatus(
         selectedRecordId,
         nextStatus,
-        workflowLog
+        workflowLog,
+        technicianContext
       );
       if (!didUpdate) {
         console.error(`Failed to update job status to ${nextStatus}.`);
@@ -1667,7 +1675,8 @@ async ngOnInit() {
         firstName: userData[6]?.value,
         lastName: userData[7]?.value,
         phone: userData[9]?.value,
-        role: (userData?.role || userData?.['role']?.value || '').toString().trim()
+        role: (userData?.role || userData?.['role']?.value || '').toString().trim(),
+        photoUrl: userData[66]?.value?.url || ''
       };
 
 // --- Live Backend Timecard Restoration Guard ---

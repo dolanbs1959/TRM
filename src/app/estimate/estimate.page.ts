@@ -1621,6 +1621,7 @@ export class EstimatePage implements OnInit, AfterViewInit, DoCheck, OnDestroy {
       msDiscountAmount: this.getMSDiscountValue(),
       otherDiscountAmount: this.getOtherDiscountValue(),
       discountControlValue: this.discountControlValue,
+      customerFirstName,
       customerName,
       locationAddress,
       customerPhone,

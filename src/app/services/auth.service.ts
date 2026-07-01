@@ -524,7 +524,7 @@ async getJobDetail(recordId: string) {
     return !!response?.success;
   }
 
-  async updateServiceOrderStatus(recordId: string, _status: string, workflowLog?: WorkflowLogPayload) {
+  async updateServiceOrderStatus(recordId: string, _status: string, workflowLog?: WorkflowLogPayload, technicianContext?: { technicianName: string; technicianPhotoUrl: string }) {
     const url = `${this.apiBaseUrl}/service-order/update-workflow`;
     const response: any = await this.http.post(url, {
       recordId,
@@ -535,6 +535,8 @@ async getJobDetail(recordId: string) {
       workflowGpsCoordinates: workflowLog?.gpsCoordinates,
       workflowNotes: workflowLog?.notes || '',
       relatedEmployeeId: workflowLog?.relatedEmployeeId,
+      technicianName: technicianContext?.technicianName || '',
+      technicianPhotoUrl: technicianContext?.technicianPhotoUrl || '',
     }).toPromise();
 
     return !!response?.success;

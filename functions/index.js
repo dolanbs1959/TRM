@@ -8,8 +8,12 @@ const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium').default;
 const { generatePDFHtml } = require('./pdfGenerator');
 const { defineSecret } = require('firebase-functions/params');
+const RingCentralSDK = require('@ringcentral/sdk').SDK;
 
 const googleMapsApiKey = defineSecret('GOOGLE_MAPS_API_KEY');
+const rcClientId = defineSecret('RC_CLIENT_ID');
+const rcClientSecret = defineSecret('RC_CLIENT_SECRET');
+const rcJwt = defineSecret('RC_JWT');
 
 const app = express();
     app.use((req, res, next) => {
@@ -727,11 +731,67 @@ async function generateAndDispatchPDF(payload) {
         if (payload.locationEmail) {
             console.log('[BackgroundWorker] Preparing email to:', payload.locationEmail);
             console.log('[BackgroundWorker] Queuing PDF handover to transactional email service...');
+            const isSold = payload.submissionMode === 'sold';
+
+            const formatEmailDate = (value) => {
+                const raw = String(value || '').trim();
+                if (!raw) return 'TBD';
+                const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                return match ? `${match[2]}-${match[3]}-${match[1]}` : raw;
+            };
+
+            const emailSubject = isSold
+                ? 'Thank You for Choosing The Roof Medic'
+                : 'Your Roof Medic Estimate is Ready';
+
+            const emailHtml = isSold
+                ? `
+                    <p>Dear ${payload.customerFirstName || payload.customerName},</p>
+
+                    <p>Thank you for choosing The Roof Medic. We appreciate your business.</p>
+
+                    <p>Attached is a copy of your signed estimate for your records.</p>
+
+                    <p>Your scheduled services are:</p>
+
+                    <p><strong>Roof Cleaning &amp; Maintenance:</strong> ${formatEmailDate(payload.cleanMaintenanceScheduledFor)}</p>
+
+                    <p><strong>Repair Services:</strong> ${formatEmailDate(payload.repairServicesScheduledFor)}</p>
+
+                    <p>If the scheduled dates need to change, our office will contact you promptly.</p>
+
+                    <p>If you have any questions before your scheduled service, or if you need to reschedule, simply reply to this email or contact our office.</p>
+
+                    <p>We look forward to serving you.</p>
+
+                    <p>Sincerely,</p>
+
+                    <p><strong>The Roof Medic</strong><br>
+                    253-862-4412</p>
+                    `
+                : `
+                    <p>Dear ${payload.customerFirstName || payload.customerName},</p>
+
+                    <p>Thank you for choosing The Roof Medic to inspect your roof.</p>
+
+                    <p>Attached is your detailed estimate outlining our recommended services and pricing. Please take a few moments to review it at your convenience.</p>
+
+                    <p>If you have any questions about the recommendations or would like to discuss your options, we're here to help. Simply reply to this email or contact our office.</p>
+
+                    <p>We appreciate the opportunity to earn your business and look forward to serving you.</p>
+
+                    <p>Sincerely,</p>
+
+                    <p><strong>The Roof Medic</strong><br>
+                    253-862-4412<br>
+                    contact@yourroofmedic.com</p>
+                    `;
+
             const mailOptions = {
                 from: '"The Roof Medic Estimates" <' + process.env.EMAIL_USER + '>',
                 to: payload.locationEmail,
-                subject: `Your Roof Medic Estimate Details for Service Order #${payload.serviceOrderId}`,
-                text: "Please find your itemized roof service estimate attached as a PDF.",
+                subject: emailSubject,
+                html: emailHtml,
                 attachments: [
                     {
                         filename: filename,
@@ -1098,6 +1158,8 @@ async function handleSubmitEstimateData(req, res) {
                 uom: activeEstimateItems[index]?.uom || 'ea',
                 sqFootage: activeEstimateItems[index]?.sqFootage || row['23']?.value || 0
             })),
+            submissionMode: normalizedSubmissionMode,
+            customerFirstName: inboundBody.customerFirstName || '',
             customerName: inboundBody.customerName || 'Valued Customer',
             locationAddress: inboundBody.locationAddress || 'N/A',
             customerPhone: inboundBody.customerPhone || 'N/A',
@@ -1486,7 +1548,7 @@ app.post('/login', async (req, res) => {
         const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
             from: TABLES.EMPLOYEES,
             // 42 = Accumulated Pay Period Hours, 39 = Available PTO, 17 = Role
-            select: [3, 6, 7, 9, 17, 39, 42, 58],
+            select: [3, 6, 7, 9, 17, 39, 42, 58, 66],
             where: `{'9'.EX.'${phone}'}AND{'58'.EX.'${pin}'}`
         }, {
             headers: { 
@@ -2044,7 +2106,9 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
         workflowGpsCoordinates,
         workflowNotes,
         relatedEmployeeId,
-        techId
+        techId,
+        technicianName,
+        technicianPhotoUrl
     } = req.body || {};
 
     const effectiveServiceOrderId = serviceOrderId || recordId;
@@ -2229,6 +2293,130 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
                 relatedServiceOrder: normalizedServiceOrderId,
                 relatedEmployee: normalizedTechId
             });
+
+            // --- ARRIVAL EMAIL (fire-and-forget) ---
+            if (normalizedAction === 'ARRIVED') {
+                (async () => {
+                    try {
+                        console.log('[ArrivalEmail] Querying service order for customer info...', { serviceOrderId: normalizedServiceOrderId });
+                        const soResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                            from: TABLES.SERVICE_ORDERS,
+                            select: [3, 93, 142],
+                            where: `{'3'.EX.'${normalizedServiceOrderId}'}`
+                        }, {
+                            headers: buildQuickbaseHeaders()
+                        });
+
+                        const soRecord = soResponse?.data?.data?.[0] || null;
+                        const customerFirstName = String(soRecord?.['93']?.value || '').trim();
+                        const customerEmail = String(soRecord?.['142']?.value || '').trim();
+
+                        if (!customerEmail) {
+                            console.warn('[ArrivalEmail] No customer email on service order, skipping.', { serviceOrderId: normalizedServiceOrderId });
+                            return;
+                        }
+
+                        const safeTechnicianName = String(technicianName || '').trim() || 'Your Technician';
+
+                        // Download employee photo from QuickBase Files API (same pattern as inspection photos)
+                        let techPhotoHtml = '';
+                        const emailAttachments = [];
+                        if (Number.isFinite(normalizedTechId)) {
+                            try {
+                                // Query employee record to verify FID 66 has a file
+                                const empResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                                    from: TABLES.EMPLOYEES,
+                                    select: [3, 66],
+                                    where: `{'3'.EX.'${normalizedTechId}'}`
+                                }, {
+                                    headers: buildQuickbaseHeaders()
+                                });
+
+                                const empRecord = empResponse?.data?.data?.[0] || null;
+                                const fileRef = empRecord?.['66']?.value;
+
+                                if (fileRef && fileRef.url) {
+                                    const fileUrl = `${QB_API_ENDPOINT}/files/${TABLES.EMPLOYEES}/${normalizedTechId}/66/1`;
+                                    console.log('[ArrivalEmail] Downloading employee photo...', { fileUrl, techId: normalizedTechId });
+                                    const fileResponse = await axios.get(fileUrl, {
+                                        headers: buildQuickbaseHeaders(),
+                                        responseType: 'arraybuffer'
+                                    });
+
+                                    const buffer = Buffer.from(fileResponse.data);
+                                    const base64String = buffer.toString('utf-8').trim();
+
+                                    const fileName = fileRef.versions?.[0]?.fileName || '';
+                                    const extension = fileName.split('.').pop()?.toLowerCase() || '';
+                                    let mimeType = 'image/png';
+                                    if (base64String.startsWith('/9j/') || extension === 'jpg' || extension === 'jpeg') {
+                                        mimeType = 'image/jpeg';
+                                    }
+
+                                    emailAttachments.push({
+                                        filename: fileName || 'technician-photo.jpg',
+                                        content: base64String,
+                                        encoding: 'base64',
+                                        cid: 'technicianPhoto'
+                                    });
+
+                                    techPhotoHtml = `<div style="text-align: center; margin-bottom: 10px;"><img src="cid:technicianPhoto" alt="${safeTechnicianName}" style="width: 120px; height: 120px; border-radius: 50%; object-fit: cover;" /></div>`;
+                                    console.log('[ArrivalEmail] Employee photo attached as CID inline image');
+                                } else {
+                                    console.warn('[ArrivalEmail] No photo file on employee record, skipping photo.', { techId: normalizedTechId });
+                                }
+                            } catch (photoErr) {
+                                console.error('[ArrivalEmail] Failed to download employee photo:', photoErr.message);
+                            }
+                        }
+
+                        const arrivalTransporter = nodemailer.createTransport({
+                            host: 'smtp.ionos.com',
+                            port: 465,
+                            secure: true,
+                            auth: {
+                                user: process.env.EMAIL_USER,
+                                pass: process.env.EMAIL_PASS
+                            }
+                        });
+
+                        const arrivalMailOptions = {
+                            from: '"The Roof Medic" <' + process.env.EMAIL_USER + '>',
+                            to: customerEmail,
+                            subject: 'Your Roof Medic Technician Has Arrived',
+                            html: `
+                                <p>Dear ${customerFirstName || 'Valued Customer'},</p>
+
+                                <p>Your Roof Medic technician has arrived and is beginning today's scheduled service.</p>
+
+                                <p><strong>Meet Your Technician</strong></p>
+
+                                ${techPhotoHtml}
+
+                                <p style="text-align: center; font-size: 16px; font-weight: bold;">${safeTechnicianName}</p>
+
+                                <p>Our goal is to provide exceptional service while treating your home with the same care and respect we'd give our own.</p>
+
+                                <p>If you have any questions during today's visit, simply reply to this email or contact our office.</p>
+
+                                <p>Thank you for choosing The Roof Medic. We appreciate the opportunity to serve you.</p>
+
+                                <p>Sincerely,</p>
+
+                                <p><strong>The Roof Medic</strong><br>
+                                253-862-4412<br>
+                                contact@yourroofmedic.com</p>
+                            `,
+                            attachments: emailAttachments
+                        };
+
+                        await arrivalTransporter.sendMail(arrivalMailOptions);
+                        console.log('[ArrivalEmail] Email dispatched successfully to', customerEmail);
+                    } catch (emailErr) {
+                        console.error('[ArrivalEmail] Failed to send arrival email:', emailErr.message);
+                    }
+                })();
+            }
 
             if (shouldForceInspectionParentStatusPatch) {
                 await axios.post(`${QB_API_ENDPOINT}/records`, {
@@ -3660,6 +3848,98 @@ app.get('/inspection/historical/:serviceOrderId', async (req, res) => {
     }
 });
 
+// --- RINGCENTRAL AUTH VERIFICATION ENDPOINT ---
+app.get('/ringcentral/verify-auth', async (req, res) => {
+    console.log('[RingCentral][VerifyAuth] Auth + SMS test requested');
+    try {
+        const clientId = rcClientId.value();
+        const clientSecret = rcClientSecret.value();
+        const jwt = rcJwt.value();
+
+        if (!clientId || !clientSecret || !jwt) {
+            console.error('[RingCentral][VerifyAuth] One or more RC secrets are missing');
+            return res.status(500).json({
+                success: false,
+                message: 'One or more RingCentral secrets are not configured (RC_CLIENT_ID, RC_CLIENT_SECRET, RC_JWT)'
+            });
+        }
+
+        const rcsdk = new RingCentralSDK({
+            server: 'https://platform.ringcentral.com',
+            clientId,
+            clientSecret
+        });
+        const platform = rcsdk.platform();
+
+        await platform.login({ jwt });
+
+        const authData = platform.auth().data();
+        console.log('[RingCentral][VerifyAuth] Authentication successful', {
+            tokenType: authData.token_type,
+            expiresIn: authData.expires_in,
+            scope: authData.scope
+        });
+
+        // Discover a phone number on this extension that has the SmsSender feature
+        const phoneNumberResp = await platform.get('/restapi/v1.0/account/~/extension/~/phone-number');
+        const phoneNumberJson = await phoneNumberResp.json();
+        const smsCapableNumber = (phoneNumberJson.records || []).find(
+            (record) => Array.isArray(record.features) && record.features.includes('SmsSender')
+        );
+
+        if (!smsCapableNumber) {
+            console.error('[RingCentral][VerifyAuth] No SMS-capable phone number found on this extension');
+            return res.status(500).json({
+                success: false,
+                message: 'Authentication succeeded but no phone number with SmsSender feature was found on this extension'
+            });
+        }
+
+        const fromNumber = smsCapableNumber.phoneNumber;
+        console.log('[RingCentral][VerifyAuth] Sending test SMS', { from: fromNumber, to: '+12063052553' });
+
+        const smsResp = await platform.post('/restapi/v1.0/account/~/extension/~/sms', {
+            from: { phoneNumber: fromNumber },
+            to: [{ phoneNumber: '+12063052553' }],
+            text: 'This is a test SMS from the TRM Mobile application.'
+        });
+        const smsJson = await smsResp.json();
+
+        console.log('[RingCentral][VerifyAuth] SMS accepted', {
+            messageId: smsJson.id,
+            messageStatus: smsJson.messageStatus,
+            from: fromNumber
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'RingCentral authentication and SMS dispatch successful',
+            smsMessageId: smsJson.id,
+            smsMessageStatus: smsJson.messageStatus,
+            fromNumber,
+            tokenType: authData.token_type,
+            scope: authData.scope
+        });
+    } catch (err) {
+        console.error('[RingCentral][VerifyAuth] Failed', {
+            message: err.message,
+            stack: err.stack
+        });
+        let errorDetail = err.message;
+        try {
+            const apiError = err.response ? await err.response.json() : null;
+            if (apiError) {
+                errorDetail = apiError;
+            }
+        } catch (_) {}
+        return res.status(500).json({
+            success: false,
+            message: 'RingCentral operation failed',
+            error: errorDetail
+        });
+    }
+});
+
 // --- DEPLOYMENT VERIFICATION ENDPOINT ---
 app.get('/verify-deploy', (req, res) => {
     res.status(200).send('DEPLOYMENT_ACTIVE_2026_06_12_10AM');
@@ -3669,7 +3949,7 @@ exports.apiV2 = onRequest(
     {
         memory: '1GiB',
         timeoutSeconds: 120,
-        secrets: [googleMapsApiKey]
+        secrets: [googleMapsApiKey, rcClientId, rcClientSecret, rcJwt]
     },
     app
 );
