@@ -7,6 +7,9 @@ const nodemailer = require('nodemailer');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium').default;
 const { generatePDFHtml } = require('./pdfGenerator');
+const { defineSecret } = require('firebase-functions/params');
+
+const googleMapsApiKey = defineSecret('GOOGLE_MAPS_API_KEY');
 
 const app = express();
     app.use((req, res, next) => {
@@ -1443,6 +1446,36 @@ async function queryRoofAreaChoices() {
 //     lastCallTimestamp = now;
 //     next();
 // });
+
+app.get('/satellite-image', async (req, res) => {
+    try {
+        const address = String(req.query.address || '').trim();
+
+        if (!address) {
+            return res.status(400).send('Missing address');
+        }
+
+        const url =
+            `https://maps.googleapis.com/maps/api/staticmap` +
+            `?center=${encodeURIComponent(address)}` +
+            `&zoom=19` +
+            `&size=640x640` +
+            `&scale=2` +
+            `&maptype=satellite` +
+            `&key=${googleMapsApiKey.value()}`;
+
+        const response = await axios.get(url, {
+            responseType: 'arraybuffer'
+        });
+
+        res.set('Content-Type', response.headers['content-type']);
+        res.send(response.data);
+
+    } catch (err) {
+        console.error('Satellite image error:', err.message);
+        res.status(500).send('Unable to retrieve map.');
+    }
+});
 
 // --- LOGIN HANDSHAKE ---
 app.post('/login', async (req, res) => {
@@ -3635,7 +3668,8 @@ app.get('/verify-deploy', (req, res) => {
 exports.apiV2 = onRequest(
     {
         memory: '1GiB',
-        timeoutSeconds: 120
+        timeoutSeconds: 120,
+        secrets: [googleMapsApiKey]
     },
     app
 );

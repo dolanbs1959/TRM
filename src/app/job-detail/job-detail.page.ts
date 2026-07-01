@@ -397,7 +397,7 @@ export class JobDetailPage implements OnInit, DoCheck {
         return '';
       }
 
-      return `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(address)}&zoom=20&size=640x640&scale=2&maptype=satellite&key=${environment.googleMapsApiKey}`;
+      return `${environment.apiUrl}/satellite-image?address=${encodeURIComponent(address)}`;
     }
     getLocationName() {
       return (this.job?.['90']?.value || '').toString().trim();
