@@ -9,6 +9,7 @@ const chromium = require('@sparticuz/chromium').default;
 const { generatePDFHtml } = require('./pdfGenerator');
 const { defineSecret } = require('firebase-functions/params');
 const RingCentralSDK = require('@ringcentral/sdk').SDK;
+const { sendSms } = require('./ringcentral');
 
 const googleMapsApiKey = defineSecret('GOOGLE_MAPS_API_KEY');
 const rcClientId = defineSecret('RC_CLIENT_ID');
@@ -78,7 +79,8 @@ const WORKFLOW_LOG_FIELDS = {
     GPS_COORDINATES: 8,
     NOTES: 9,
     RELATED_SERVICE_ORDER: 10,
-    RELATED_EMPLOYEE: 11
+    RELATED_EMPLOYEE: 11,
+    SMS_STATUS: 15
 };
 
 const ASSIGNED_TECH_FIELDS = {
@@ -1342,6 +1344,89 @@ async function createWorkflowLogRecord({
     }
 }
 
+async function getEtaMinutes(originCoords, { destLat, destLng, destAddress } = {}) {
+    const origin = String(originCoords || '').trim();
+
+    if (!origin || origin === 'Unavailable') {
+        return { etaMinutes: null, diagnostic: 'Technician GPS coordinates unavailable.' };
+    }
+
+    const [originLat, originLng] = origin.split(',').map(Number);
+    if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
+        return { etaMinutes: null, diagnostic: `GPS coordinates are not valid lat/lon: "${origin}".` };
+    }
+
+    const parsedDestLat = Number(destLat);
+    const parsedDestLng = Number(destLng);
+    const useCoords = Number.isFinite(parsedDestLat) && Number.isFinite(parsedDestLng)
+        && !(parsedDestLat === 0 && parsedDestLng === 0);
+
+    const resolvedDestAddress = String(destAddress || '').trim();
+    if (!useCoords && !resolvedDestAddress) {
+        return { etaMinutes: null, diagnostic: 'Destination coordinates and address are both unavailable.' };
+    }
+
+    const destinationBody = useCoords
+        ? { location: { latLng: { latitude: parsedDestLat, longitude: parsedDestLng } } }
+        : { address: resolvedDestAddress };
+
+    const diagnosticSource = useCoords ? 'stored coordinates' : `address "${resolvedDestAddress}"`;
+
+    try {
+        const routesResponse = await axios.post(
+            'https://routes.googleapis.com/directions/v2:computeRoutes',
+            {
+                origin: { location: { latLng: { latitude: originLat, longitude: originLng } } },
+                destination: destinationBody,
+                travelMode: 'DRIVE',
+                routingPreference: 'TRAFFIC_AWARE'
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': googleMapsApiKey.value(),
+                    'X-Goog-FieldMask': 'routes.duration'
+                },
+                timeout: 8000
+            }
+        );
+
+        const durationSeconds = routesResponse?.data?.routes?.[0]?.duration;
+        if (!durationSeconds) {
+            const body = JSON.stringify(routesResponse?.data || {});
+            return { etaMinutes: null, diagnostic: `Routes API returned no duration using ${diagnosticSource}. Response: ${body.slice(0, 200)}` };
+        }
+
+        const seconds = Number.parseInt(String(durationSeconds).replace(/[^0-9]/g, ''), 10);
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+            return { etaMinutes: null, diagnostic: `Routes API returned unparseable duration value: "${durationSeconds}".` };
+        }
+
+        const minutes = Math.round(seconds / 60);
+        return { etaMinutes: minutes, diagnostic: null };
+    } catch (err) {
+        const status = err?.response?.status;
+        const body = JSON.stringify(err?.response?.data || {});
+        const detail = status ? `Routes API returned ${status} using ${diagnosticSource}. ${body.slice(0, 200)}` : err.message;
+        return { etaMinutes: null, diagnostic: detail };
+    }
+}
+
+async function patchWorkflowLog(workflowLogRecordId, fields) {
+    if (!Number.isFinite(workflowLogRecordId) || workflowLogRecordId <= 0) {
+        console.warn('[WorkflowLog][Patch] Skipping patch — record ID unavailable', { workflowLogRecordId });
+        return;
+    }
+
+    const row = Object.assign({ 3: { value: workflowLogRecordId } }, fields);
+    const response = await writeQuickbaseRecords(TABLES.WORKFLOW_LOGS, [row], [3]);
+    console.log('[WorkflowLog][Patch] Record patched', {
+        workflowLogRecordId,
+        fields: Object.keys(fields),
+        responseStatus: response?.status
+    });
+}
+
 async function resolveLookupRecordId(tableId, labelFid, rawLabel, entityName) {
     const label = String(rawLabel || '').trim();
     if (!label) {
@@ -1686,7 +1771,7 @@ app.post('/get-schedule', async (req, res) => {
 
         const debugBody = {
             from: TABLES.SERVICE_ORDERS,
-            select: [3, 6, 7, 9, 10, 11, 12, 15, 16, 26, 40, 41, 44, 46, 70, 71, 90, 92, 93, 94, 95, 96, 105, 106, 107, 108, 110, 142],
+            select: [3, 6, 7, 9, 10, 11, 12, 15, 16, 26, 40, 41, 44, 46, 70, 71, 90, 92, 93, 94, 95, 96, 105, 106, 107, 108, 110, 142, 157, 158],
             where: serviceOrderWhere
         };
         // console.log('Literal Quickbase API Request Payload Body Object:', JSON.stringify(debugBody, null, 2));
@@ -2108,7 +2193,13 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
         relatedEmployeeId,
         techId,
         technicianName,
-        technicianPhotoUrl
+        technicianPhotoUrl,
+        customerFirstName,
+        customerMobile,
+        technicianFirstName,
+        jobAddress,
+        jobLat,
+        jobLng
     } = req.body || {};
 
     const effectiveServiceOrderId = serviceOrderId || recordId;
@@ -2285,7 +2376,7 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
                 }
             }
 
-            await createWorkflowLogRecord({
+            const workflowLogResult = await createWorkflowLogRecord({
                 eventType: workflowEventType,
                 eventTimestamp: new Date().toISOString(),
                 gpsCoordinates: workflowGpsCoordinates,
@@ -2293,6 +2384,137 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
                 relatedServiceOrder: normalizedServiceOrderId,
                 relatedEmployee: normalizedTechId
             });
+
+            // --- DISPATCH SMS (fire-and-forget) ---
+            if (normalizedAction === 'DISPATCH') {
+                const workflowLogRecordId = Number.parseInt(workflowLogResult?.data?.[0]?.['3']?.value, 10);
+                const originalNotes = String(workflowNotes || '').trim();
+
+                (async () => {
+                    try {
+                        const resolvedCustomerMobile = String(customerMobile || '').trim();
+                        const resolvedCustomerFirstName = String(customerFirstName || '').trim() || 'Valued Customer';
+
+                        if (!resolvedCustomerMobile) {
+                            console.warn('[DispatchSMS] No customer mobile provided, skipping SMS.', { serviceOrderId: normalizedServiceOrderId });
+                            await patchWorkflowLog(workflowLogRecordId, {
+                                [WORKFLOW_LOG_FIELDS.SMS_STATUS]: { value: 'Skipped' },
+                                [WORKFLOW_LOG_FIELDS.NOTES]: { value: [originalNotes, 'SMS skipped. No customer mobile number.'].filter(Boolean).join(' ').trim() }
+                            });
+                            return;
+                        }
+
+                        const resolvedTechFirstName = String(technicianFirstName || '').trim() || 'Your technician';
+
+                        // --- ETA calculation (non-blocking) ---
+                        const { etaMinutes, diagnostic: etaDiagnostic } = await getEtaMinutes(
+                            workflowGpsCoordinates,
+                            { destLat: jobLat, destLng: jobLng, destAddress: String(jobAddress || '').trim() }
+                        );
+
+                        const etaPhrase = Number.isFinite(etaMinutes) && etaMinutes > 0
+                            ? ` and should arrive in approximately ${etaMinutes} minute${etaMinutes === 1 ? '' : 's'}`
+                            : '';
+
+                        const smsText = `Hi ${resolvedCustomerFirstName}, we're letting you know that ${resolvedTechFirstName} with The Roof Medic is on the way${etaPhrase}. We look forward to serving you today! If you have any questions, please call 253-862-4412.`;
+
+                        const credentials = {
+                            clientId: rcClientId.value(),
+                            clientSecret: rcClientSecret.value(),
+                            jwt: rcJwt.value()
+                        };
+
+                        const result = await sendSms(credentials, resolvedCustomerMobile, smsText);
+
+                        console.log('[DispatchSMS] SMS sent successfully', {
+                            serviceOrderId: normalizedServiceOrderId,
+                            to: resolvedCustomerMobile,
+                            etaMinutes,
+                            messageId: result.messageId,
+                            messageStatus: result.messageStatus
+                        });
+
+                        const etaLogNote = etaMinutes !== null
+                            ? `ETA calculated: ${etaMinutes} minute${etaMinutes === 1 ? '' : 's'}.`
+                            : `ETA unavailable: ${etaDiagnostic}`;
+
+                        await patchWorkflowLog(workflowLogRecordId, {
+                            [WORKFLOW_LOG_FIELDS.SMS_STATUS]: { value: 'Sent' },
+                            [WORKFLOW_LOG_FIELDS.NOTES]: { value: [originalNotes, 'SMS sent successfully.', etaLogNote, `RingCentral Message ID: ${result.messageId}.`].filter(Boolean).join(' ').trim() }
+                        });
+                    } catch (smsErr) {
+                        console.error('[DispatchSMS] Failed to send SMS, dispatch workflow unaffected', {
+                            serviceOrderId: normalizedServiceOrderId,
+                            message: smsErr.message
+                        });
+                        try {
+                            await patchWorkflowLog(workflowLogRecordId, {
+                                [WORKFLOW_LOG_FIELDS.SMS_STATUS]: { value: 'Failed' },
+                                [WORKFLOW_LOG_FIELDS.NOTES]: { value: [originalNotes, `SMS failed. ${smsErr.message}`].filter(Boolean).join(' ').trim() }
+                            });
+                        } catch (patchErr) {
+                            console.error('[DispatchSMS] Also failed to patch workflow log with SMS failure', { message: patchErr.message });
+                        }
+                    }
+                })();
+            }
+
+            // --- ARRIVE SMS (fire-and-forget) ---
+            if (normalizedAction === 'ARRIVED') {
+                const arriveWorkflowLogRecordId = Number.parseInt(workflowLogResult?.data?.[0]?.['3']?.value, 10);
+                const arriveOriginalNotes = String(workflowNotes || '').trim();
+
+                (async () => {
+                    try {
+                        const resolvedCustomerMobile = String(customerMobile || '').trim();
+                        const resolvedCustomerFirstName = String(customerFirstName || '').trim() || 'Valued Customer';
+
+                        if (!resolvedCustomerMobile) {
+                            console.warn('[ArrivalSMS] No customer mobile provided, skipping SMS.', { serviceOrderId: normalizedServiceOrderId });
+                            await patchWorkflowLog(arriveWorkflowLogRecordId, {
+                                [WORKFLOW_LOG_FIELDS.SMS_STATUS]: { value: 'Skipped' },
+                                [WORKFLOW_LOG_FIELDS.NOTES]: { value: [arriveOriginalNotes, 'SMS skipped. No customer mobile number.'].filter(Boolean).join(' ').trim() }
+                            });
+                            return;
+                        }
+
+                        const resolvedTechFirstName = String(technicianFirstName || '').trim() || 'Your technician';
+                        const smsText = `Hi ${resolvedCustomerFirstName}, we're letting you know that ${resolvedTechFirstName} with The Roof Medic has arrived for your scheduled appointment and is ready to begin. If you have any questions, please call 253-862-4412.`;
+
+                        const credentials = {
+                            clientId: rcClientId.value(),
+                            clientSecret: rcClientSecret.value(),
+                            jwt: rcJwt.value()
+                        };
+
+                        const result = await sendSms(credentials, resolvedCustomerMobile, smsText);
+
+                        console.log('[ArrivalSMS] SMS sent successfully', {
+                            serviceOrderId: normalizedServiceOrderId,
+                            to: resolvedCustomerMobile,
+                            messageId: result.messageId
+                        });
+
+                        await patchWorkflowLog(arriveWorkflowLogRecordId, {
+                            [WORKFLOW_LOG_FIELDS.SMS_STATUS]: { value: 'Sent' },
+                            [WORKFLOW_LOG_FIELDS.NOTES]: { value: [arriveOriginalNotes, `SMS sent successfully. RingCentral Message ID: ${result.messageId}.`].filter(Boolean).join(' ').trim() }
+                        });
+                    } catch (smsErr) {
+                        console.error('[ArrivalSMS] Failed to send SMS, arrive workflow unaffected', {
+                            serviceOrderId: normalizedServiceOrderId,
+                            message: smsErr.message
+                        });
+                        try {
+                            await patchWorkflowLog(arriveWorkflowLogRecordId, {
+                                [WORKFLOW_LOG_FIELDS.SMS_STATUS]: { value: 'Failed' },
+                                [WORKFLOW_LOG_FIELDS.NOTES]: { value: [arriveOriginalNotes, `SMS failed. ${smsErr.message}`].filter(Boolean).join(' ').trim() }
+                            });
+                        } catch (patchErr) {
+                            console.error('[ArrivalSMS] Also failed to patch workflow log with SMS failure', { message: patchErr.message });
+                        }
+                    }
+                })();
+            }
 
             // --- ARRIVAL EMAIL (fire-and-forget) ---
             if (normalizedAction === 'ARRIVED') {
@@ -3936,6 +4158,104 @@ app.get('/ringcentral/verify-auth', async (req, res) => {
             success: false,
             message: 'RingCentral operation failed',
             error: errorDetail
+        });
+    }
+});
+
+// --- GEOCODE CUSTOMER LOCATION ENDPOINT ---
+app.post('/geocode-customer-location', async (req, res) => {
+    const { recordId, street, street2, city, state, zip } = req.body || {};
+
+    if (!recordId || !street || !city || !state || !zip) {
+        return res.status(400).json({
+            success: false,
+            message: 'Missing required fields: recordId, street, city, state, zip'
+        });
+    }
+
+    const addressParts = [street];
+    if (street2 && String(street2).trim()) {
+        addressParts.push(String(street2).trim());
+    }
+    addressParts.push(city, state, zip);
+    const fullAddress = addressParts.join(', ');
+
+    console.log('[Geocode] Geocoding address', { recordId, fullAddress });
+
+    let lat, lng;
+    try {
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json` +
+            `?address=${encodeURIComponent(fullAddress)}` +
+            `&key=${googleMapsApiKey.value()}`;
+
+        const geocodeResp = await axios.get(geocodeUrl, { timeout: 8000 });
+        const results = geocodeResp.data?.results;
+
+        if (!Array.isArray(results) || results.length === 0 || geocodeResp.data?.status !== 'OK') {
+            console.warn('[Geocode] No results returned', {
+                recordId,
+                fullAddress,
+                status: geocodeResp.data?.status
+            });
+            return res.status(200).json({
+                success: false,
+                message: `Geocoding returned no results (status: ${geocodeResp.data?.status})`,
+                address: fullAddress
+            });
+        }
+
+        const location = results[0].geometry.location;
+        lat = location.lat;
+        lng = location.lng;
+        console.log('[Geocode] Coordinates resolved', { recordId, lat, lng });
+    } catch (err) {
+        console.error('[Geocode] Google Geocoding API call failed', {
+            recordId,
+            message: err.message
+        });
+        return res.status(500).json({
+            success: false,
+            message: 'Geocoding API request failed',
+            error: err.message
+        });
+    }
+
+    const locationsTable = TABLES.LOCATIONS;
+    if (!locationsTable) {
+        console.error('[Geocode] LOCATIONS table ID is not configured');
+        return res.status(500).json({
+            success: false,
+            message: 'Server configuration error: LOCATIONS table ID is not set'
+        });
+    }
+
+    try {
+        await writeQuickbaseRecords(locationsTable, [
+            {
+                '3':   { value: Number.parseInt(recordId, 10) },
+                '157': { value: lat },
+                '158': { value: lng }
+            }
+        ], [3, 157, 158]);
+
+        console.log('[Geocode] Customer Location record updated', { recordId, lat, lng });
+        return res.status(200).json({
+            success: true,
+            message: 'Coordinates updated successfully',
+            recordId: Number.parseInt(recordId, 10),
+            latitude: lat,
+            longitude: lng,
+            address: fullAddress
+        });
+    } catch (err) {
+        console.error('[Geocode] Quickbase record update failed', {
+            recordId,
+            message: err.message
+        });
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to update Quickbase record',
+            error: err.message
         });
     }
 });

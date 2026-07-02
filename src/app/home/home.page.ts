@@ -5,6 +5,7 @@ import { AlertController } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
+import { GeoLocationService } from '../services/geo-location.service';
 
 export const EstimateWorkflow = {
   START: 'start',
@@ -76,7 +77,8 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     private router: Router,
     private alertController: AlertController,
     private changeDetectorRef: ChangeDetectorRef,
-    private loadingService: LoadingService
+    private loadingService: LoadingService,
+    private geoLocationService: GeoLocationService
   ) {}
 
   async getLocalWeather() {
@@ -574,6 +576,42 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     }
 
     if (currentIndex === 1) {
+      // --- ARRIVE GEOFENCE ---
+      const ARRIVE_GEOFENCE_METERS = this.geoLocationService.feetToMeters(500);
+      let precapturedArriveCoords: string | undefined;
+
+      try {
+        precapturedArriveCoords = await this.getCurrentCoordinates();
+        const techCoords = this.geoLocationService.parseCoords(precapturedArriveCoords);
+        const jobCoords = this.geoLocationService.getJobCoords(selectedJob);
+
+        if (techCoords && jobCoords) {
+          const distanceMeters = this.geoLocationService.haversineMeters(
+            techCoords.lat, techCoords.lng, jobCoords.lat, jobCoords.lng
+          );
+
+          if (distanceMeters > ARRIVE_GEOFENCE_METERS) {
+            const distanceLabel = this.geoLocationService.formatDistance(distanceMeters);
+            const confirmed = await new Promise<boolean>((resolve) => {
+              this.alertController.create({
+                header: 'Confirm Arrival',
+                message: `You appear to be approximately ${distanceLabel} from the job location.\n\nIf you have already arrived, GPS may be inaccurate. Otherwise, tap Cancel and continue driving.`,
+                buttons: [
+                  { text: 'Cancel', role: 'cancel', handler: () => resolve(false) },
+                  { text: 'Arrive Anyway', handler: () => resolve(true) }
+                ]
+              }).then(alert => alert.present());
+            });
+
+            if (!confirmed) {
+              return;
+            }
+          }
+        }
+      } catch (geoErr) {
+        console.warn('[ArriveGeofence] GPS capture failed, skipping geofence check:', geoErr);
+      }
+
       await this.loadingService.withLoading(
         'Recording Arrival...',
         async () => {
@@ -585,7 +623,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
             }
           }
 
-          const didUpdate = await this.updateSelectedJobStatus('In Progress', 'Arrival');
+          const didUpdate = await this.updateSelectedJobStatus('In Progress', 'Arrival', precapturedArriveCoords);
           if (!didUpdate) {
             return;
           }
@@ -1132,7 +1170,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     );
   }
 
-  private async updateSelectedJobStatus(nextStatus: string, workflowEventType?: string): Promise<boolean> {
+  private async updateSelectedJobStatus(nextStatus: string, workflowEventType?: string, precapturedCoords?: string): Promise<boolean> {
     const selectedJob = this.getSelectedJob();
     const selectedRecordId = this.selectedJobRecordId;
     if (!selectedJob || !selectedRecordId) {
@@ -1141,7 +1179,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
     try {
       const workflowLog = workflowEventType
-        ? await this.buildWorkflowLogPayload(workflowEventType, `Status set to ${nextStatus}`)
+        ? await this.buildWorkflowLogPayload(workflowEventType, `Status set to ${nextStatus}`, precapturedCoords)
         : undefined;
 
       const technicianContext = workflowEventType === 'Arrival'
@@ -1151,11 +1189,34 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
           }
         : undefined;
 
+      const workflowContext = workflowEventType === 'Dispatch'
+        ? {
+            customerFirstName: String(selectedJob?.['93']?.value || '').trim(),
+            customerMobile: this.getMobilePhone(selectedJob),
+            technicianFirstName: String(this.tech?.firstName || '').trim(),
+            jobAddress: [
+              String(selectedJob?.['106']?.value || '').trim(),
+              String(selectedJob?.['107']?.value || '').trim(),
+              String(selectedJob?.['92']?.value || '').trim(),
+              String(selectedJob?.['105']?.value || '').trim(),
+            ].filter(Boolean).join(', '),
+            jobLat: Number(selectedJob?.['157']?.value) || null,
+            jobLng: Number(selectedJob?.['158']?.value) || null,
+          }
+        : workflowEventType === 'Arrival'
+        ? {
+            customerFirstName: String(selectedJob?.['93']?.value || '').trim(),
+            customerMobile: this.getMobilePhone(selectedJob),
+            technicianFirstName: String(this.tech?.firstName || '').trim(),
+          }
+        : undefined;
+
       const didUpdate = await this.authService.updateServiceOrderStatus(
         selectedRecordId,
         nextStatus,
         workflowLog,
-        technicianContext
+        technicianContext,
+        workflowContext
       );
       if (!didUpdate) {
         console.error(`Failed to update job status to ${nextStatus}.`);
@@ -1170,17 +1231,21 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     }
   }
 
-  private async buildWorkflowLogPayload(eventType: string, notes = ''): Promise<WorkflowLogPayload> {
+  private async buildWorkflowLogPayload(eventType: string, notes = '', precapturedCoords?: string): Promise<WorkflowLogPayload> {
     const relatedEmployeeId = Number.parseInt(String(this.tech?.id || ''), 10);
     if (!Number.isFinite(relatedEmployeeId)) {
       throw new Error('Unable to build workflow log: employee id must be numeric.');
     }
 
     let gpsCoordinates = 'Unavailable';
-    try {
-      gpsCoordinates = await this.getCurrentCoordinates();
-    } catch (error) {
-      console.warn('Workflow log geolocation capture failed:', error);
+    if (precapturedCoords) {
+      gpsCoordinates = precapturedCoords;
+    } else {
+      try {
+        gpsCoordinates = await this.getCurrentCoordinates();
+      } catch (error) {
+        console.warn('Workflow log geolocation capture failed:', error);
+      }
     }
 
     return {

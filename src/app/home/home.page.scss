@@ -342,24 +342,31 @@
 
 .job-contact-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
   margin-bottom: 8px;
 }
 
-.job-contact-link {
+.job-contact-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  width: fit-content;
+  gap: 4px;
+
+  .contact-glyph {
+    font-size: 0.95rem;
+    color: #0d5ca6;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+}
+
+.job-contact-link {
   font-size: 0.84rem;
   font-weight: 700;
   color: #0d5ca6;
   text-decoration: none;
-
-  ion-icon {
-    font-size: 0.95rem;
-  }
 }
 
 .inspection-grid {
@@ -485,6 +492,10 @@
 
   .job-location {
     color: #ffffff !important;
+  }
+
+  .job-contact-item .contact-glyph {
+    color: #00e5ff !important;
   }
 
   .job-contact-link {

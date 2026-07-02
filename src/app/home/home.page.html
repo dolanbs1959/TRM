@@ -174,34 +174,21 @@
             </span>
           </p>
 
-          <div class="job-contact-row" *ngIf="getPhoneNumber(job) || getMobilePhone(job)">
-            <a
-              *ngIf="getPhoneNumber(job)"
-              class="job-contact-link"
-              [href]="getDialHref(getPhoneNumber(job))"
-              (click)="$event.stopPropagation()">
-              <ion-icon name="call-outline"></ion-icon>
-              <span>Phone: {{ getPhoneNumber(job) }}</span>
-            </a>
+          <div class="job-contact-row" *ngIf="getPhoneNumber(job) || getMobilePhone(job) || getEmailAddress(job)">
+            <span *ngIf="getPhoneNumber(job)" class="job-contact-item">
+              <span class="contact-glyph">&#128222;</span>
+              <a [href]="getDialHref(getPhoneNumber(job))" class="job-contact-link" (click)="$event.stopPropagation()">{{ getPhoneNumber(job) }}</a>
+            </span>
 
-            <a
-              *ngIf="hasDifferentPhoneNumbers(job)"
-              class="job-contact-link"
-              [href]="getDialHref(getMobilePhone(job))"
-              (click)="$event.stopPropagation()">
-              <ion-icon name="phone-portrait-outline"></ion-icon>
-              <span>Mobile: {{ getMobilePhone(job) }}</span>
-            </a>
-          </div>
+            <span *ngIf="getMobilePhone(job)" class="job-contact-item">
+              <span class="contact-glyph">&#128241;</span>
+              <a [href]="getDialHref(getMobilePhone(job))" class="job-contact-link" (click)="$event.stopPropagation()">{{ getMobilePhone(job) }}</a>
+            </span>
 
-          <div class="job-contact-row" *ngIf="getEmailAddress(job)">
-            <a
-              class="job-contact-link"
-              [href]="getMailHref(getEmailAddress(job))"
-              (click)="$event.stopPropagation()">
-              <ion-icon name="mail-outline"></ion-icon>
-              <span>Email: {{ getEmailAddress(job) }}</span>
-            </a>
+            <span *ngIf="getEmailAddress(job)" class="job-contact-item">
+              <span class="contact-glyph">&#128231;</span>
+              <a [href]="getMailHref(getEmailAddress(job))" class="job-contact-link" (click)="$event.stopPropagation()">{{ getEmailAddress(job) }}</a>
+            </span>
           </div>
 
           <p class="job-notes" *ngIf="job['10']?.value">

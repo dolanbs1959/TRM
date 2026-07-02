@@ -524,7 +524,7 @@ async getJobDetail(recordId: string) {
     return !!response?.success;
   }
 
-  async updateServiceOrderStatus(recordId: string, _status: string, workflowLog?: WorkflowLogPayload, technicianContext?: { technicianName: string; technicianPhotoUrl: string }) {
+  async updateServiceOrderStatus(recordId: string, _status: string, workflowLog?: WorkflowLogPayload, technicianContext?: { technicianName: string; technicianPhotoUrl: string }, workflowContext?: { customerFirstName: string; customerMobile: string; technicianFirstName: string; jobAddress?: string; jobLat?: number | null; jobLng?: number | null }) {
     const url = `${this.apiBaseUrl}/service-order/update-workflow`;
     const response: any = await this.http.post(url, {
       recordId,
@@ -537,6 +537,12 @@ async getJobDetail(recordId: string) {
       relatedEmployeeId: workflowLog?.relatedEmployeeId,
       technicianName: technicianContext?.technicianName || '',
       technicianPhotoUrl: technicianContext?.technicianPhotoUrl || '',
+      customerFirstName: workflowContext?.customerFirstName || '',
+      customerMobile: workflowContext?.customerMobile || '',
+      technicianFirstName: workflowContext?.technicianFirstName || '',
+      jobAddress: workflowContext?.jobAddress || '',
+      jobLat: workflowContext?.jobLat ?? null,
+      jobLng: workflowContext?.jobLng ?? null,
     }).toPromise();
 
     return !!response?.success;
