@@ -6,6 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { AuthService, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
 import { GeoLocationService } from '../services/geo-location.service';
+import { ServiceOrderCollaborationService } from '../services/service-order-collaboration.service';
 
 export const EstimateWorkflow = {
   START: 'start',
@@ -78,7 +79,8 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     private alertController: AlertController,
     private changeDetectorRef: ChangeDetectorRef,
     private loadingService: LoadingService,
-    private geoLocationService: GeoLocationService
+    private geoLocationService: GeoLocationService,
+    private collaborationService: ServiceOrderCollaborationService
   ) {}
 
   async getLocalWeather() {
@@ -628,6 +630,11 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
             return;
           }
           selectedJob._isPaused = false;
+
+          if (!this.isInspectionJob(selectedJob) && this.selectedJobRecordId) {
+            this.collaborationService.createSession(String(this.selectedJobRecordId))
+              .catch(err => console.warn('[SOCollaboration] createSession failed:', err));
+          }
         }
       );
       // return;

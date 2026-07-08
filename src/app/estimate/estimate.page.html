@@ -335,6 +335,16 @@
                 <span class="pricing-value">{{ formatCurrency(item.lineSubtotal) }}</span>
               </div>
             </div>
+
+            <label class="active-item-special-instructions">
+              <span class="detail-label">Special Instructions</span>
+              <ion-textarea
+                autoGrow="true"
+                rows="2"
+                placeholder="Optional instructions for the technician..."
+                [(ngModel)]="item.specialInstructions"
+              ></ion-textarea>
+            </label>
           </div>
         </ion-card-content>
       </ion-card>

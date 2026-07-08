@@ -15,6 +15,7 @@ const googleMapsApiKey = defineSecret('GOOGLE_MAPS_API_KEY');
 const rcClientId = defineSecret('RC_CLIENT_ID');
 const rcClientSecret = defineSecret('RC_CLIENT_SECRET');
 const rcJwt = defineSecret('RC_JWT');
+const pipelineSecret = defineSecret('PIPELINE_SECRET');
 
 const app = express();
     app.use((req, res, next) => {
@@ -607,7 +608,8 @@ function normalizeEstimateLineItems(items, serviceOrderId) {
             [16]: { value: normalizedQty },
             [23]: { value: normalizedSqFootage },
             [18]: { value: normalizedPrice },
-            [24]: { value: normalizedLineSubtotal }
+            [24]: { value: normalizedLineSubtotal },
+            [29]: { value: String(item?.specialInstructions || '').trim() }
         };
     });
 }
@@ -671,7 +673,8 @@ async function generateAndDispatchPDF(payload) {
             unitPrice: item.amount || 0,
             uom: item.uom || 'ea',
             sqFootage: item.sqFootage || 0,
-            description: item.description || 'Item'
+            description: item.description || 'Item',
+            specialInstructions: String(item.specialInstructions || '').trim()
         })) || [];
 
         const signatureData = payload.digitalSignatureDataUrl || null;
@@ -1095,7 +1098,7 @@ async function handleSubmitEstimateData(req, res) {
             }
         }
 
-        const lineItemResponse = await writeQuickbaseRecords(TABLES.ESTIMATE_LINE_ITEMS, estimateRows, [3]);
+        const lineItemResponse = await writeQuickbaseRecords(TABLES.ESTIMATE_LINE_ITEMS, estimateRows, [3, 29]);
         const insertedLineItemCount = Array.isArray(lineItemResponse?.data?.data)
             ? lineItemResponse.data.data.length
             : estimateRows.length;
@@ -1158,7 +1161,8 @@ async function handleSubmitEstimateData(req, res) {
                 qtyNeeded: activeEstimateItems[index]?.qtyNeeded || row['16']?.value || 1,
                 amount: activeEstimateItems[index]?.price || row['14']?.value || 0,
                 uom: activeEstimateItems[index]?.uom || 'ea',
-                sqFootage: activeEstimateItems[index]?.sqFootage || row['23']?.value || 0
+                sqFootage: activeEstimateItems[index]?.sqFootage || row['23']?.value || 0,
+                specialInstructions: String(activeEstimateItems[index]?.specialInstructions || '').trim()
             })),
             submissionMode: normalizedSubmissionMode,
             customerFirstName: inboundBody.customerFirstName || '',
@@ -3152,7 +3156,7 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
             // Query ESTIMATE_LINE_ITEMS
             const lineItemsResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
                 from: TABLES.ESTIMATE_LINE_ITEMS,
-                select: [3, 13, 16, 17, 18, 19, 20, 23, 24],
+                select: [3, 13, 16, 17, 18, 19, 20, 23, 24, 29],
                 where: `{'13'.EX.${normalizedServiceOrderId}}`
             }, {
                 headers: buildQuickbaseHeaders()
@@ -3290,7 +3294,8 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
                     qtyNeeded: item['16']?.value || 1,
                     sqFootage: item['23']?.value || 0,
                     price: item['18']?.value || 0,
-                    lineSubtotal: item['24']?.value || 0
+                    lineSubtotal: item['24']?.value || 0,
+                    specialInstructions: String(item['29']?.value || '').trim()
                 })),
                 roofs: roofs.map(roof => ({
                     recordId: roof['3']?.value,
@@ -4164,7 +4169,12 @@ app.get('/ringcentral/verify-auth', async (req, res) => {
 
 // --- GEOCODE CUSTOMER LOCATION ENDPOINT ---
 app.post('/geocode-customer-location', async (req, res) => {
-    const { recordId, street, street2, city, state, zip } = req.body || {};
+    const { pipelineSecret: providedSecret, recordId, street, street2, city, state, zip } = req.body || {};
+
+    if (!providedSecret || providedSecret !== pipelineSecret.value()) {
+        console.warn('[Geocode] Unauthorized request blocked', { ip: req.ip });
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
 
     if (!recordId || !street || !city || !state || !zip) {
         return res.status(400).json({
@@ -4260,6 +4270,164 @@ app.post('/geocode-customer-location', async (req, res) => {
     }
 });
 
+// --- GET SERVICE ORDER TASKS (with hydrated task photos) ---
+app.post('/service-order/tasks', async (req, res) => {
+    const { serviceOrderId } = req.body || {};
+
+    const normalizedId = String(serviceOrderId || '').trim();
+    if (!normalizedId) {
+        return res.status(400).json({ success: false, message: 'serviceOrderId is required' });
+    }
+
+    const escapedId = normalizedId.replace(/'/g, "\\'");
+
+    try {
+        // 1. Fetch tasks
+        const taskResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: 'bt73wgry8',
+            select: [3, 9, 36, 29, 38, 40, 30, 8, 18],
+            where: `{'9'.EX.'${escapedId}'}`,
+            sortBy: [{ fieldId: 3, order: 'ASC' }]
+        }, {
+            headers: { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` }
+        });
+
+        const records = Array.isArray(taskResponse.data.data) ? taskResponse.data.data : [];
+        const tasks = records.map(r => ({
+            id:                     (r['3']?.value  ?? '').toString(),
+            relatedServiceOrder:    (r['9']?.value  ?? '').toString(),
+            taskName:               (r['36']?.value ?? '').toString().trim(),
+            quantity:               r['29']?.value  ?? null,
+            description:            (r['38']?.value ?? '').toString().trim(),
+            specialInstructions:    (r['40']?.value ?? '').toString().trim(),
+            technicianInstructions: (r['30']?.value ?? '').toString().trim(),
+            taskStatus:             (r['8']?.value  ?? '').toString().trim(),
+            taskOrigin:             (r['18']?.value ?? '').toString().trim(),
+            beforePhotos:           [],
+            afterPhotos:            [],
+        }));
+
+        if (tasks.length === 0) {
+            return res.json({ success: true, data: tasks });
+        }
+
+        // 2. Fetch all task photos for this service order from JOB_PHOTOS
+        //    Section values are stored as "task-before-<taskId>" or "task-after-<taskId>"
+        const photoResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.JOB_PHOTOS,
+            select: [3, 6, 8, 9],
+            where: `{'9'.EX.'${escapedId}'}`
+        }, {
+            headers: { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` }
+        });
+
+        const photoRecords = Array.isArray(photoResponse.data.data) ? photoResponse.data.data : [];
+
+        // Build a download URL map per task
+        // FID 6 = section tag, FID 8 = file attachment (contains url), FID 3 = record ID
+        const taskPhotoMap = {};
+        for (const photo of photoRecords) {
+            const section = String(photo['6']?.value || '').trim();
+            const recordId = String(photo['3']?.value || '').trim();
+            const fileRef = photo['8']?.value;
+
+            const beforeMatch = section.match(/^task-before-(\d+)$/);
+            const afterMatch  = section.match(/^task-after-(\d+)$/);
+            const taskId = beforeMatch?.[1] ?? afterMatch?.[1];
+            if (!taskId || !recordId) continue;
+
+            if (!taskPhotoMap[taskId]) taskPhotoMap[taskId] = { before: [], after: [] };
+
+            let downloadUrl = '';
+            if (fileRef && typeof fileRef === 'object' && fileRef.url) {
+                downloadUrl = fileRef.url;
+            } else {
+                // Construct API download URL for version 1
+                downloadUrl = `${QB_API_ENDPOINT}/files/${TABLES.JOB_PHOTOS}/${recordId}/8/1`;
+            }
+
+            if (beforeMatch) {
+                taskPhotoMap[taskId].before.push({ recordId, url: downloadUrl });
+            } else {
+                taskPhotoMap[taskId].after.push({ recordId, url: downloadUrl });
+            }
+        }
+
+        // 3. Attach photos to each task
+        for (const task of tasks) {
+            const photos = taskPhotoMap[task.id];
+            if (photos) {
+                task.beforePhotos = photos.before;
+                task.afterPhotos  = photos.after;
+            }
+        }
+
+        return res.json({ success: true, data: tasks });
+    } catch (error) {
+        console.error('[ServiceOrderTasks] Query error:', error.response ? error.response.data : error.message);
+        return res.status(500).json({ success: false, message: 'Error retrieving service order tasks' });
+    }
+});
+
+// --- UPLOAD TASK PHOTO ---
+app.post('/service-order/task-photo/upload', async (req, res) => {
+    const { serviceOrderId, taskId, slot, base64 } = req.body || {};
+
+    const normalizedSoId = Number.parseInt(String(serviceOrderId || ''), 10);
+    const normalizedTaskId = String(taskId || '').trim();
+    const normalizedSlot  = String(slot  || '').trim().toLowerCase();
+    const normalizedBase64 = String(base64 || '').trim()
+        .replace(/^data:[^;]+;base64,/i, '')
+        .replace(/\s+/g, '');
+
+    if (!Number.isFinite(normalizedSoId)) {
+        return res.status(400).json({ success: false, message: 'serviceOrderId must be numeric' });
+    }
+    if (!normalizedTaskId) {
+        return res.status(400).json({ success: false, message: 'taskId is required' });
+    }
+    if (normalizedSlot !== 'before' && normalizedSlot !== 'after') {
+        return res.status(400).json({ success: false, message: 'slot must be "before" or "after"' });
+    }
+    if (!normalizedBase64) {
+        return res.status(400).json({ success: false, message: 'base64 photo data is required' });
+    }
+
+    const sectionTag = `task-${normalizedSlot}-${normalizedTaskId}`;
+    const fileName = `task-${normalizedSlot}-${normalizedTaskId}-${Date.now()}.jpg`;
+
+    try {
+        const writeResponse = await axios.post(`${QB_API_ENDPOINT}/records`, {
+            to: TABLES.JOB_PHOTOS,
+            data: [{
+                6: { value: sectionTag },
+                7: { value: '' },
+                8: { value: { fileName, data: normalizedBase64 } },
+                9: { value: normalizedSoId }
+            }],
+            fieldsToReturn: [3, 8]
+        }, {
+            headers: { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` }
+        });
+
+        const createdRecord = writeResponse.data?.data?.[0];
+        const recordId = String(createdRecord?.['3']?.value || '').trim();
+        const fileRef  = createdRecord?.['8']?.value;
+
+        let downloadUrl = '';
+        if (fileRef && typeof fileRef === 'object' && fileRef.url) {
+            downloadUrl = fileRef.url;
+        } else if (recordId) {
+            downloadUrl = `${QB_API_ENDPOINT}/files/${TABLES.JOB_PHOTOS}/${recordId}/8/1`;
+        }
+
+        return res.json({ success: true, recordId, url: downloadUrl });
+    } catch (error) {
+        console.error('[TaskPhotoUpload] Error:', error.response ? error.response.data : error.message);
+        return res.status(500).json({ success: false, message: 'Photo upload failed' });
+    }
+});
+
 // --- DEPLOYMENT VERIFICATION ENDPOINT ---
 app.get('/verify-deploy', (req, res) => {
     res.status(200).send('DEPLOYMENT_ACTIVE_2026_06_12_10AM');
@@ -4269,7 +4437,7 @@ exports.apiV2 = onRequest(
     {
         memory: '1GiB',
         timeoutSeconds: 120,
-        secrets: [googleMapsApiKey, rcClientId, rcClientSecret, rcJwt]
+        secrets: [googleMapsApiKey, rcClientId, rcClientSecret, rcJwt, pipelineSecret]
     },
     app
 );

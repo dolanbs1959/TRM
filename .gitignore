@@ -74,5 +74,8 @@ Thumbs.db
 .env.*.local
 .firebase/
 
+# Firebase web app config — copy firebase.config.ts.example and fill in real values
+src/environments/firebase.config.ts
+
 # Temporary files for AI discussions
 temp_images/

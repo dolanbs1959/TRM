@@ -32,7 +32,7 @@
     </div>
 
     <!-- Read-only detail grid: non-inspection jobs in view mode, OR view mode fallback -->
-    <div class="payload-body" *ngIf="isReadOnlyMode() && !isInspection()">
+    <div class="payload-body" *ngIf="isReadOnlyMode() && !isInspection() && !isServiceOrder()">
       <h3>Job Detail (Read Only)</h3>
       <p>Look, don't touch mode. Use Dispatch/Arrive/Complete on the dashboard to run workflow (Inspected or Invoiced at completion).</p>
 
@@ -517,14 +517,115 @@
       </div>
     </div>
 
-    <!-- Non-inspection work-mode hubs -->
-    <ng-container *ngIf="!isReadOnlyMode() && !isInspection()">
-      <div *ngIf="isWorkOrder()" class="payload-body">
-        <h3>Work Order Hub</h3>
-        <p>Work order payload component will render here.</p>
+    <!-- ========================================================== -->
+    <!-- SERVICE ORDER HUB — Service Tasks for service-order jobs -->
+    <!-- ========================================================== -->
+    <div *ngIf="isServiceOrder()" class="payload-body service-order-hub">
+      <h3>Service Tasks</h3>
+
+      <div *ngIf="serviceTasksLoading" class="task-loading">
+        <ion-spinner name="crescent"></ion-spinner>
       </div>
 
-      <div *ngIf="!isWorkOrder()" class="payload-body">
+      <p *ngIf="!serviceTasksLoading && serviceTasks.length === 0" class="task-empty-state">
+        No service tasks have been assigned.
+      </p>
+
+      <ion-accordion-group *ngIf="!serviceTasksLoading && serviceTasks.length > 0" class="service-task-list" [multiple]="false">
+        <ion-accordion *ngFor="let task of serviceTasks" [value]="task.id">
+          <ion-item slot="header" class="task-header">
+            <ion-label>{{ task.taskName }}</ion-label>
+            <span *ngIf="task.quantity != null" class="task-header-qty" slot="end">Qty: {{ task.quantity }}</span>
+          </ion-item>
+          <div slot="content" class="task-content">
+            <div *ngIf="task.description" class="task-section">
+              <span class="task-section-label">Task Description</span>
+              <p class="task-placeholder-text">{{ task.description }}</p>
+            </div>
+            <div *ngIf="task.specialInstructions" class="task-section">
+              <span class="task-section-label">Special Instructions</span>
+              <p class="task-placeholder-text">{{ task.specialInstructions }}</p>
+            </div>
+            <div *ngIf="task.technicianInstructions" class="task-section">
+              <span class="task-section-label">Technician Instructions</span>
+              <p class="task-placeholder-text">{{ task.technicianInstructions }}</p>
+            </div>
+            <div class="task-photo-section">
+              <div class="task-photo-slot">
+                <div class="task-photo-slot-header">
+                  <ion-icon
+                    name="camera-outline"
+                    class="inspection-photo-icon-trigger"
+                    [class.inspection-photo-icon-trigger--disabled]="isCapturingPhoto"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Add before photo"
+                    (click)="beginTaskPhotoCapture(task.id, 'before', $event)"
+                    (keydown.enter)="beginTaskPhotoCapture(task.id, 'before', $event)"
+                    (keydown.space)="beginTaskPhotoCapture(task.id, 'before', $event)">
+                  </ion-icon>
+                  <span class="task-section-label">Before Photos</span>
+                </div>
+                <div class="task-photo-thumbnails" *ngIf="getTaskPhotoAttachments(task.id, 'before').length > 0">
+                  <ng-container *ngFor="let photo of getTaskPhotoAttachments(task.id, 'before')">
+                    <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="task-photo-thumb" alt="Before photo" />
+                    <div *ngIf="!photo.dataUrl" class="task-photo-thumb task-photo-thumb--remote" title="{{ photo.fileName }}">
+                      <ion-icon name="image-outline"></ion-icon>
+                    </div>
+                  </ng-container>
+                </div>
+              </div>
+              <div class="task-photo-slot">
+                <div class="task-photo-slot-header">
+                  <ion-icon
+                    name="camera-outline"
+                    class="inspection-photo-icon-trigger"
+                    [class.inspection-photo-icon-trigger--disabled]="isCapturingPhoto"
+                    role="button"
+                    tabindex="0"
+                    aria-label="Add after photo"
+                    (click)="beginTaskPhotoCapture(task.id, 'after', $event)"
+                    (keydown.enter)="beginTaskPhotoCapture(task.id, 'after', $event)"
+                    (keydown.space)="beginTaskPhotoCapture(task.id, 'after', $event)">
+                  </ion-icon>
+                  <span class="task-section-label">After Photos</span>
+                </div>
+                <div class="task-photo-thumbnails" *ngIf="getTaskPhotoAttachments(task.id, 'after').length > 0">
+                  <ng-container *ngFor="let photo of getTaskPhotoAttachments(task.id, 'after')">
+                    <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="task-photo-thumb" alt="After photo" />
+                    <div *ngIf="!photo.dataUrl" class="task-photo-thumb task-photo-thumb--remote" title="{{ photo.fileName }}">
+                      <ion-icon name="image-outline"></ion-icon>
+                    </div>
+                  </ng-container>
+                </div>
+              </div>
+            </div>
+            <div class="task-section task-notes-section">
+              <span class="task-section-label">Task Notes</span>
+              <ion-textarea
+                [ngModel]="taskNotes[task.id]"
+                (ionInput)="onTaskNoteChange(task.id, $any($event.target).value)"
+                [autoGrow]="true"
+                [rows]="2"
+                placeholder="Optional notes about this task..."
+                class="task-notes-textarea">
+              </ion-textarea>
+            </div>
+            <ion-button
+              expand="block"
+              [color]="isTaskFinished(task.id) ? 'medium' : 'success'"
+              [disabled]="isTaskFinished(task.id)"
+              (click)="markTaskFinished(task.id)">
+              {{ isTaskFinished(task.id) ? '✓ Task Finished' : 'Task Finished' }}
+            </ion-button>
+          </div>
+        </ion-accordion>
+      </ion-accordion-group>
+    </div>
+
+    <!-- Non-inspection work-mode fallback for unsupported stages -->
+    <ng-container *ngIf="!isReadOnlyMode() && !isInspection()">
+      <div *ngIf="!isServiceOrder()" class="payload-body">
         <h3>Unsupported Stage</h3>
         <p>This job stage does not have a payload view yet.</p>
       </div>

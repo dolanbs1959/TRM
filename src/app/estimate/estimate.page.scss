@@ -643,6 +643,17 @@
   border: 1px solid #dedede;
 }
 
+.active-item-special-instructions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  ion-textarea {
+    --min-height: 2.5rem;
+    font-size: 0.9rem;
+  }
+}
+
 .supporting-copy {
   margin: 0 0 12px;
   font-size: 0.82rem;

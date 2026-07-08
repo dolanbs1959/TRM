@@ -115,7 +115,8 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
             uom,
             sqFootage,
             total,
-            description: item.description || 'N/A'
+            description: item.description || 'N/A',
+            specialInstructions: String(item.specialInstructions || '').trim()
         };
         
         if (isPerSquareUnit(uom)) {
@@ -127,6 +128,9 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
     
     // Generate Area-Based Services table HTML
     const areaBasedItemsHtml = areaBasedItems.map(item => {
+        const specialInstructionsRow = item.specialInstructions
+            ? `<tr><td colspan="4" style="padding: 4px 15px 8px 15px; font-size: 12px; color: #555; border-bottom: 1px solid #ddd;"><strong>Special Instructions:</strong> ${item.specialInstructions}</td></tr>`
+            : '';
         const rows = `
             <tr>
                 <td>${item.description}</td>
@@ -139,12 +143,16 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
                     ${item.qty} × $${item.price.toFixed(2)} × ${item.sqFootage} sq ft = $${item.total.toFixed(2)}
                 </td>
             </tr>
+            ${specialInstructionsRow}
         `;
         return rows;
     }).join('');
     
     // Generate Other Services table HTML
     const otherItemsHtml = otherItems.map(item => {
+        const specialInstructionsRow = item.specialInstructions
+            ? `<tr><td colspan="4" style="padding: 4px 15px 8px 15px; font-size: 12px; color: #555; border-bottom: 1px solid #ddd;"><strong>Special Instructions:</strong> ${item.specialInstructions}</td></tr>`
+            : '';
         return `
             <tr>
                 <td>${item.qty}</td>
@@ -152,6 +160,7 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
                 <td>$${item.price.toFixed(2)}${item.uom ? ` / ${item.uom}` : ''}</td>
                 <td>$${item.total.toFixed(2)}</td>
             </tr>
+            ${specialInstructionsRow}
         `;
     }).join('');
     

@@ -56,6 +56,7 @@ interface ActiveEstimateItem extends Omit<EstimateCatalogItem, 'price'> {
   price: number | null;
   lineSubtotal: number;
   sqFootage: number | null;
+  specialInstructions?: string;
 }
 
 interface EstimateSubmissionPayloadItem {
@@ -68,6 +69,7 @@ interface EstimateSubmissionPayloadItem {
   lineSubtotal: number;
   amount?: number;
   uom?: string;
+  specialInstructions?: string;
 }
 
 interface EstimateCategoryGroup {
@@ -1567,6 +1569,7 @@ export class EstimatePage implements OnInit, AfterViewInit, DoCheck, OnDestroy {
       lineSubtotal: Number(item.lineSubtotal) || 0,
       amount: Number(item.lineSubtotal) || 0,
       uom: String(item.unit || '').trim(),
+      specialInstructions: String(item.specialInstructions || '').trim(),
     }));
   }
 
@@ -2225,6 +2228,7 @@ export class EstimatePage implements OnInit, AfterViewInit, DoCheck, OnDestroy {
           lineSubtotal: item.lineSubtotal,
           sqFootage: item.sqFootage,
           price: Number.isFinite(Number(item.price)) ? Number(item.price) : base.price,
+          specialInstructions: String(item.specialInstructions || '').trim() || undefined,
         };
       });
       console.log('[EstimateReconstruction] Reconstructed line items', { count: this.activeEstimateItems.length });

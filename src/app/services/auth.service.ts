@@ -36,6 +36,25 @@ export interface OfferedServiceItem {
   raw?: any;
 }
 
+export interface TaskPhoto {
+  recordId: string;
+  url: string;
+}
+
+export interface ServiceOrderTask {
+  id: string;
+  relatedServiceOrder: string;
+  taskName: string;
+  quantity: number | null;
+  description: string;
+  specialInstructions: string;
+  technicianInstructions: string;
+  taskStatus: string;
+  taskOrigin: string;
+  beforePhotos: TaskPhoto[];
+  afterPhotos: TaskPhoto[];
+}
+
 export interface EstimateSubmissionPayload {
   serviceOrderId: string;
   locationRecordId: string;
@@ -52,6 +71,7 @@ export interface EstimateSubmissionPayload {
     sqFootage: number;
     price: number;
     lineSubtotal: number;
+    specialInstructions?: string;
   }>;
   subtotal: number;
   taxAmount: number;
@@ -672,6 +692,34 @@ async checkActiveTimecardSession(employeeId: any, dateStr: string) {
     } catch (err) {
       console.error('Failed to communicate with timecard active proxy endpoint:', err);
       return { shiftContext: { isClockedIn: false } };
+    }
+  }
+
+  async uploadTaskPhoto(serviceOrderId: string, taskId: string, slot: 'before' | 'after', base64: string): Promise<TaskPhoto | null> {
+    const url = `${this.apiBaseUrl}/service-order/task-photo/upload`;
+    try {
+      const response: any = await this.http.post(url, { serviceOrderId, taskId, slot, base64 }).toPromise();
+      if (!response?.success) {
+        return null;
+      }
+      return { recordId: String(response.recordId || ''), url: String(response.url || '') };
+    } catch (error) {
+      console.error('Upload Task Photo Error:', error);
+      return null;
+    }
+  }
+
+  async getServiceOrderTasks(serviceOrderId: string): Promise<ServiceOrderTask[]> {
+    const url = `${this.apiBaseUrl}/service-order/tasks`;
+    try {
+      const response: any = await this.http.post(url, { serviceOrderId }).toPromise();
+      if (!response?.success || !Array.isArray(response?.data)) {
+        return [];
+      }
+      return response.data as ServiceOrderTask[];
+    } catch (error) {
+      console.error('Fetch Service Order Tasks Error:', error);
+      return [];
     }
   }
 

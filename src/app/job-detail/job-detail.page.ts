@@ -2,8 +2,9 @@ import { Component, DoCheck, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { firstValueFrom } from 'rxjs';
-import { AuthService, RoofOptionCacheData, WorkflowLogPayload } from '../services/auth.service';
+import { AuthService, RoofOptionCacheData, ServiceOrderTask, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
+import { ServiceOrderCollaborationService } from '../services/service-order-collaboration.service';
 import { environment } from '../../environments/environment';
 
 type InspectionPhotoSectionKey =
@@ -24,7 +25,9 @@ interface InspectionPhotoAttachment {
 }
 
 interface PendingInspectionPhoto {
-  sectionKey: InspectionPhotoSectionKey;
+  sectionKey: InspectionPhotoSectionKey | null;
+  taskId: string | null;
+  taskSlot: 'before' | 'after' | null;
   dataUrl: string;
   blob: Blob;
   notes: string;
@@ -67,6 +70,13 @@ export class JobDetailPage implements OnInit, DoCheck {
   pageMode: 'view' | 'work' = 'view';
   isPausedWorkflow = false;
   inspectionHubSegment: 'checklist' | 'notes' = 'checklist';
+
+  // Service Order Tasks state
+  serviceTasks: ServiceOrderTask[] = [];
+  serviceTasksLoading = false;
+  taskPhotoState: Record<string, InspectionPhotoAttachment[]> = {};
+  finishedTaskIds: Set<string> = new Set();
+  taskNotes: Record<string, string> = {};
 
   // Roof structures state
   roofs: any[] = [];
@@ -140,7 +150,8 @@ export class JobDetailPage implements OnInit, DoCheck {
     private route: ActivatedRoute,
     private router: Router,
     private authService: AuthService,
-    private loadingService: LoadingService
+    private loadingService: LoadingService,
+    private collaborationService: ServiceOrderCollaborationService
   ) {}
 
   private get serviceOrderId(): string {
@@ -226,6 +237,114 @@ export class JobDetailPage implements OnInit, DoCheck {
       await this.loadRoofReferenceData();
       await this.loadRoofs();
       this.persistInspectionDraftIfChanged();
+    }
+
+    if (this.isServiceOrder()) {
+      await this.loadServiceOrderTasks();
+    }
+  }
+
+  onTaskNoteChange(taskId: string, value: string) {
+    this.taskNotes[taskId] = value;
+    this.collaborationService.updateTaskNote(this.serviceOrderId, taskId, value)
+      .catch(err => console.warn('[TaskNotes] Firestore write failed:', err));
+  }
+
+  markTaskFinished(taskId: string) {
+    this.finishedTaskIds.add(taskId);
+    this.collaborationService.updateTaskFinished(this.serviceOrderId, taskId, true)
+      .catch(err => console.warn('[TaskFinished] Firestore write failed:', err));
+  }
+
+  isTaskFinished(taskId: string): boolean {
+    return this.finishedTaskIds.has(taskId);
+  }
+
+  async loadServiceOrderTasks() {
+    this.serviceTasksLoading = true;
+    this.serviceTasks = await this.authService.getServiceOrderTasks(this.serviceOrderId);
+    // Restore finished task state from Firestore session
+    try {
+      const ids = await this.collaborationService.getSessionFinishedTaskIds(this.serviceOrderId);
+      this.finishedTaskIds = new Set(ids);
+    } catch {
+      this.finishedTaskIds = new Set();
+    }
+    // Restore task notes from Firestore session
+    try {
+      this.taskNotes = await this.collaborationService.getSessionTaskNotes(this.serviceOrderId);
+    } catch {
+      this.taskNotes = {};
+    }
+    // Hydrate taskPhotoState from Firestore session — use Storage URL as dataUrl for cross-device display
+    this.taskPhotoState = {};
+    try {
+      const firestorePhotos = await this.collaborationService.getSessionTaskPhotos(this.serviceOrderId);
+      for (const [slotKey, photoMetas] of Object.entries(firestorePhotos)) {
+        this.taskPhotoState[slotKey] = photoMetas.map(m => ({
+          fileName: m.fileName,
+          dataUrl: m.storageUrl || '',
+          blob: new Blob([]),
+          notes: m.notes,
+          capturedAt: m.capturedAt,
+        }));
+      }
+    } catch {
+      this.taskPhotoState = {};
+    }
+    this.serviceTasksLoading = false;
+  }
+
+  getTaskPhotoAttachments(taskId: string, slot: 'before' | 'after'): InspectionPhotoAttachment[] {
+    return this.taskPhotoState[`${slot}-${taskId}`] || [];
+  }
+
+  async beginTaskPhotoCapture(taskId: string, slot: 'before' | 'after', event?: Event) {
+    console.log('[DIAG] beginTaskPhotoCapture() called', { taskId, slot });
+    event?.preventDefault();
+    event?.stopPropagation();
+
+    if (this.isCapturingPhoto) {
+      return;
+    }
+
+    try {
+      this.isCapturingPhoto = true;
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        width: 1920,
+        height: 1920,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+      });
+
+      if (!photo?.dataUrl) {
+        console.log('[DIAG] beginTaskPhotoCapture() — no dataUrl returned from camera');
+        return;
+      }
+
+      const optimizedDataUrl = await this.optimizePhotoDataUrl(photo.dataUrl);
+      const photoBlob = await this.dataUrlToBlob(optimizedDataUrl);
+      console.log('[DIAG] beginTaskPhotoCapture() — pendingPhotoPreview set', { taskId, slot, blobSize: photoBlob?.size });
+      this.pendingPhotoPreview = {
+        sectionKey: null,
+        taskId,
+        taskSlot: slot,
+        dataUrl: optimizedDataUrl,
+        blob: photoBlob,
+        notes: '',
+      };
+      this.isPhotoPreviewOpen = true;
+    } catch (error: any) {
+      const message = (error?.message || '').toString().toLowerCase();
+      if (message.includes('cancel')) {
+        console.log('[DIAG] beginTaskPhotoCapture() — user cancelled camera');
+        return;
+      }
+      console.warn('[DIAG] beginTaskPhotoCapture() catch:', error);
+    } finally {
+      this.isCapturingPhoto = false;
     }
   }
 
@@ -338,9 +457,9 @@ export class JobDetailPage implements OnInit, DoCheck {
     return this.getStage() === 'inspection';
   }
 
-  isWorkOrder() {
-    const stage = this.getStage();
-    return stage === 'service order' || stage === 'work order';
+  /** True only when the job stage is explicitly "service order". */
+  isServiceOrder() {
+    return this.getStage() === 'service order';
   }
 
   isReadOnlyMode() {
@@ -698,6 +817,8 @@ export class JobDetailPage implements OnInit, DoCheck {
       const photoBlob = await this.dataUrlToBlob(optimizedDataUrl);
       this.pendingPhotoPreview = {
         sectionKey,
+        taskId: null,
+        taskSlot: null,
         dataUrl: optimizedDataUrl,
         blob: photoBlob,
         notes: '',
@@ -771,8 +892,13 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   async retakePendingPhoto() {
-    const sectionKey = this.pendingPhotoPreview?.sectionKey;
+    const { sectionKey, taskId, taskSlot } = this.pendingPhotoPreview || {};
     this.closePhotoPreview();
+
+    if (taskId && taskSlot) {
+      await this.beginTaskPhotoCapture(taskId, taskSlot);
+      return;
+    }
 
     if (!sectionKey) {
       return;
@@ -781,12 +907,63 @@ export class JobDetailPage implements OnInit, DoCheck {
     await this.beginSectionPhotoCapture(sectionKey);
   }
 
-  acceptPendingPhoto() {
+  async acceptPendingPhoto() {
+    console.log('[DIAG] acceptPendingPhoto() entry — pendingPhotoPreview:', this.pendingPhotoPreview);
     if (!this.pendingPhotoPreview) {
+      console.log('[DIAG] acceptPendingPhoto() — early return: pendingPhotoPreview is null');
       return;
     }
 
-    const { sectionKey, dataUrl, blob, notes } = this.pendingPhotoPreview;
+    const { sectionKey, taskId, taskSlot, dataUrl, blob, notes } = this.pendingPhotoPreview;
+    console.log('[DIAG] acceptPendingPhoto() — destructured:', { sectionKey, taskId, taskSlot, blobSize: (blob as any)?.size, notesLen: notes?.length });
+
+    console.log('[DIAG] acceptPendingPhoto() — before task branch check: taskId=', taskId, 'taskSlot=', taskSlot);
+    if (taskId && taskSlot) {
+      console.log('[DIAG] acceptPendingPhoto() — ENTERED task branch');
+      console.log('[DIAG] serviceOrderId:', this.serviceOrderId);
+      console.log('[DIAG] blob constructor:', blob?.constructor?.name, 'size:', (blob as any)?.size);
+      const slotKey = `${taskSlot}-${taskId}`;
+      if (!this.taskPhotoState[slotKey]) {
+        this.taskPhotoState[slotKey] = [];
+      }
+      const nextIndex = this.taskPhotoState[slotKey].length + 1;
+      const fileName = `task-${taskSlot}-${taskId}_pic_${nextIndex}.jpg`;
+      const capturedAt = Date.now();
+      const trimmedNotes = (notes || '').trim();
+      this.taskPhotoState[slotKey].push({
+        fileName,
+        dataUrl,
+        blob,
+        notes: trimmedNotes,
+        capturedAt,
+      });
+      this.closePhotoPreview();
+      console.log('[DIAG] acceptPendingPhoto() — immediately before uploadTaskPhoto()', { serviceOrderId: this.serviceOrderId, taskId, taskSlot, fileName, blobSize: (blob as any)?.size });
+      this.collaborationService.uploadTaskPhoto(
+        this.serviceOrderId, taskId, taskSlot, fileName, blob
+      ).then(storageUrl => {
+        console.log('[DIAG] acceptPendingPhoto() — immediately after uploadTaskPhoto() returned. storageUrl:', storageUrl);
+        const entry = this.taskPhotoState[slotKey]?.find(p => p.fileName === fileName);
+        if (entry) {
+          entry.dataUrl = storageUrl;
+        }
+        console.log('[DIAG] acceptPendingPhoto() — immediately before addTaskPhoto()');
+        return this.collaborationService.addTaskPhoto(
+          this.serviceOrderId, taskId, taskSlot,
+          { fileName, notes: trimmedNotes, capturedAt, storageUrl }
+        );
+      }).then(() => {
+        console.log('[DIAG] acceptPendingPhoto() — immediately after addTaskPhoto() returned. Firestore updated.');
+      }).catch(err => {
+        console.warn('[DIAG] acceptPendingPhoto() — CATCH in upload/Firestore chain:', err);
+      });
+      return;
+    }
+
+    // Inspection photo path — unchanged
+    if (!sectionKey) {
+      return;
+    }
     const nextFileIndex = this.inspectionPhotoState[sectionKey].length + 1;
     const fileName = `${sectionKey}_pic_${nextFileIndex}.jpg`;
 
