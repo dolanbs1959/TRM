@@ -1729,7 +1729,7 @@ app.post('/get-schedule', async (req, res) => {
 
         const assignmentQueryBody = {
             from: TABLES.ASSIGNED_TECHNICIANS,
-            select: [9, 11],
+            select: [8, 9, 11],
             where: assignmentWhere
         };
         // console.log('Assigned Technicians Query Payload:', JSON.stringify(assignmentQueryBody, null, 2));
@@ -1742,9 +1742,17 @@ app.post('/get-schedule', async (req, res) => {
         });
 
         const assignmentRecords = Array.isArray(assignmentResponse?.data?.data) ? assignmentResponse.data.data : [];
+        const assignmentStatusByServiceOrderId = new Map();
         const relatedServiceOrderIds = Array.from(new Set(
             assignmentRecords
-                .map((record) => parseStrictNumericId(getFieldValue(record, 9)))
+                .map((record) => {
+                    const soId = parseStrictNumericId(getFieldValue(record, ASSIGNED_TECH_FIELDS.RELATED_SERVICE_ORDER));
+                    const status = getFieldValue(record, ASSIGNED_TECH_FIELDS.ASSIGNMENT_STATUS);
+                    if (Number.isFinite(soId)) {
+                        assignmentStatusByServiceOrderId.set(String(soId), String(status || '').trim());
+                    }
+                    return soId;
+                })
                 .filter((recordId) => Number.isFinite(recordId))
         ));
 
@@ -1820,13 +1828,32 @@ app.post('/get-schedule', async (req, res) => {
             .filter((record) => matchesScheduleDate(record, date))
             .sort((left, right) => getStopNumber(left) - getStopNumber(right));
 
+        const recordsWithAssignmentStatus = filteredRecords.map((record) => {
+            const soId = getFieldValue(record, 3);
+            const assignmentKey = soId ? String(soId) : null;
+            const hasAssignment = assignmentKey && assignmentStatusByServiceOrderId.has(assignmentKey);
+            const techAssignmentStatus = hasAssignment
+                ? assignmentStatusByServiceOrderId.get(assignmentKey)
+                : undefined;
+            return {
+                ...record,
+                _techAssignmentStatus: techAssignmentStatus,
+            };
+        });
+
+        console.log('[DIAG][get-schedule] returned records:', recordsWithAssignmentStatus.map((record) => ({
+            serviceOrderId: getFieldValue(record, 3),
+            parentStatus: getFieldValue(record, SERVICE_ORDER_STATUS_SYNC_FIELDS.PARENT_STATUS),
+            _techAssignmentStatus: record._techAssignmentStatus,
+        })));
+
         // console.log('[Schedule][PipelineSummary]', {
         //     techId: normalizedTechId,
         //     selectedDate: date,
         //     keptRecords: filteredRecords.length
         // });
 
-        res.json(filteredRecords);
+        res.json(recordsWithAssignmentStatus);
     } catch (error) {
     //     console.error("Schedule Query Error:", error.response ? error.response.data : error.message);
     //     console.error('[Schedule][QuickbaseErrorDetails]', {

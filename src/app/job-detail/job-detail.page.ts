@@ -74,9 +74,11 @@ export class JobDetailPage implements OnInit, DoCheck {
   // Service Order Tasks state
   serviceTasks: ServiceOrderTask[] = [];
   serviceTasksLoading = false;
+  isRefreshingCollaboration = false;
   taskPhotoState: Record<string, InspectionPhotoAttachment[]> = {};
   finishedTaskIds: Set<string> = new Set();
   taskNotes: Record<string, string> = {};
+  viewingPhoto: InspectionPhotoAttachment | null = null;
 
   // Roof structures state
   roofs: any[] = [];
@@ -263,6 +265,11 @@ export class JobDetailPage implements OnInit, DoCheck {
   async loadServiceOrderTasks() {
     this.serviceTasksLoading = true;
     this.serviceTasks = await this.authService.getServiceOrderTasks(this.serviceOrderId);
+    await this.loadServiceOrderCollaborationData();
+    this.serviceTasksLoading = false;
+  }
+
+  private async loadServiceOrderCollaborationData() {
     // Restore finished task state from Firestore session
     try {
       const ids = await this.collaborationService.getSessionFinishedTaskIds(this.serviceOrderId);
@@ -292,11 +299,32 @@ export class JobDetailPage implements OnInit, DoCheck {
     } catch {
       this.taskPhotoState = {};
     }
-    this.serviceTasksLoading = false;
+  }
+
+  async refreshCollaborationData() {
+    if (!this.isServiceOrder() || !this.serviceOrderId) {
+      return;
+    }
+    this.isRefreshingCollaboration = true;
+    try {
+      await this.loadServiceOrderCollaborationData();
+    } catch (err) {
+      console.warn('[Collaboration] Refresh failed:', err);
+    } finally {
+      this.isRefreshingCollaboration = false;
+    }
   }
 
   getTaskPhotoAttachments(taskId: string, slot: 'before' | 'after'): InspectionPhotoAttachment[] {
     return this.taskPhotoState[`${slot}-${taskId}`] || [];
+  }
+
+  openPhotoViewer(photo: InspectionPhotoAttachment) {
+    this.viewingPhoto = photo;
+  }
+
+  closePhotoViewer() {
+    this.viewingPhoto = null;
   }
 
   async beginTaskPhotoCapture(taskId: string, slot: 'before' | 'after', event?: Event) {

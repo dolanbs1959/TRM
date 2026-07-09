@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { IonApp, IonRouterOutlet } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { camera, cameraOutline } from 'ionicons/icons';
+import { camera, cameraOutline, closeOutline, refreshOutline } from 'ionicons/icons';
 import { SwUpdate } from '@angular/service-worker';
 import { AlertController } from '@ionic/angular';
 import { Router, NavigationEnd } from '@angular/router';
@@ -22,7 +22,7 @@ export class AppComponent {
     private alertController: AlertController,
     private router: Router
   ) {
-    addIcons({ camera, cameraOutline });
+    addIcons({ camera, cameraOutline, closeOutline, refreshOutline });
     this.checkForUpdates();
     this.trackUserActivity();
   }

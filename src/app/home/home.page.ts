@@ -469,7 +469,15 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       return 'SELECT JOB';
     }
 
-    return this.jobActionStates[selectedJob._jobActionIndex || 0];
+    const label = this.jobActionStates[selectedJob._jobActionIndex || 0];
+    console.log('[DIAG][getSelectedJobActionLabel]', {
+      serviceOrderId: this.selectedJobRecordId,
+      parentStatus: selectedJob?.status || selectedJob?.['11']?.value,
+      _techAssignmentStatus: selectedJob?._techAssignmentStatus,
+      _jobActionIndex: selectedJob._jobActionIndex,
+      label,
+    });
+    return label;
   }
 
   getSelectedJobActionColor() {
@@ -1400,16 +1408,30 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       for (const job of this.serviceOrders) {
         const id = this.getJobRecordId(job);
         if (id && jobIndexes[id] !== undefined) {
+          // When the backend has an assignment record for this technician, the
+          // assignment status is the source of truth (even if it is blank, which
+          // means DISPATCH). Only fall back to localStorage when no assignment
+          // record exists at all.
+          if (job?._techAssignmentStatus != null) {
+            continue;
+          }
+
           const savedValue = jobIndexes[id];
+          const beforeIndex = job._jobActionIndex;
           if (typeof savedValue === 'number') {
             // Backward compatibility with older persisted format.
             job._jobActionIndex = savedValue;
             job._isPaused = false;
-            continue;
+          } else {
+            job._jobActionIndex = savedValue?.actionIndex || 0;
+            job._isPaused = !!savedValue?.isPaused;
           }
-
-          job._jobActionIndex = savedValue?.actionIndex || 0;
-          job._isPaused = !!savedValue?.isPaused;
+          console.log('[DIAG][restoreJobActionIndexes]', {
+            serviceOrderId: id,
+            beforeIndex,
+            afterIndex: job._jobActionIndex,
+            savedValue,
+          });
         }
       }
     } catch {}
@@ -1417,21 +1439,45 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
   private computeJobActionIndexFromStatus(job: any): number {
     try {
-      const raw = (job?.status || job?.['11']?.value || '').toString().trim().toLowerCase();
-      const compact = raw.replace(/[-_\s]+/g, '');
-      if (!raw) return 0;
-
-      if (raw.includes('in progress') || raw === 'in progress' || compact === 'inprogress') {
-        return 2; // COMPLETE button
+      // Prefer the logged-in technician's own assignment status over the parent SO status.
+      // The backend returns undefined when no assignment record exists, so we only
+      // fall back to the parent status in that legacy/single-tech case. A blank
+      // assignment status (existing record with no status) means DISPATCH.
+      const assignmentStatus = job?._techAssignmentStatus;
+      let computed = 0;
+      if (assignmentStatus != null) {
+        const normalized = String(assignmentStatus).trim().toLowerCase();
+        if (normalized === 'arrived') {
+          computed = 2; // COMPLETE button
+        } else if (normalized === 'dispatched') {
+          computed = 1; // ARRIVE button
+        } else {
+          // Blank / Completed / Return Required / other terminal states -> index 0
+          computed = 0;
+        }
+      } else {
+        const raw = (job?.status || job?.['11']?.value || '').toString().trim().toLowerCase();
+        const compact = raw.replace(/[-_\s]+/g, '');
+        if (!raw) {
+          computed = 0;
+        } else if (raw.includes('in progress') || raw === 'in progress' || compact === 'inprogress') {
+          computed = 2; // COMPLETE button
+        } else if (raw.includes('en route') || raw === 'enroute' || raw === 'en route' || compact === 'enroute') {
+          computed = 1; // ARRIVE button
+        } else {
+          // For statuses that represent completed/inspected/estimated/sold, keep index at 0
+          // and rely on isJobComplete to prevent action.
+          computed = 0;
+        }
       }
 
-      if (raw.includes('en route') || raw === 'enroute' || raw === 'en route' || compact === 'enroute') {
-        return 1; // ARRIVE button
-      }
-
-      // For statuses that represent completed/inspected/estimated/sold, keep index at 0
-      // and rely on isJobComplete to prevent action.
-      return 0;
+      console.log('[DIAG][computeJobActionIndexFromStatus]', {
+        serviceOrderId: job?.['3']?.value ?? job?.id,
+        parentStatus: job?.status || job?.['11']?.value,
+        _techAssignmentStatus: job?._techAssignmentStatus,
+        computedIndex: computed,
+      });
+      return computed;
     } catch {
       return 0;
     }
