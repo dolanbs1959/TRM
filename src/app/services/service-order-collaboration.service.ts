@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, Firestore } from 'firebase/firestore';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, FirebaseStorage } from 'firebase/storage';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject, FirebaseStorage } from 'firebase/storage';
 import { environment } from '../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
@@ -119,6 +119,39 @@ export class ServiceOrderCollaborationService {
       [`tasks.${taskId}.photos.${slot}`]: updated,
       lastUpdated: new Date().toISOString(),
     });
+  }
+
+  async deleteTaskPhoto(
+    serviceOrderId: string,
+    taskId: string,
+    slot: 'before' | 'after',
+    fileName: string
+  ): Promise<void> {
+    const ref = doc(this.db, 'serviceOrders', serviceOrderId);
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    // Remove Firestore metadata
+    const existing = snapshot.data()?.['tasks']?.[taskId]?.['photos']?.[slot] ?? [];
+    const updated = Array.isArray(existing)
+      ? existing.filter((p: any) => p?.fileName !== fileName)
+      : [];
+    await updateDoc(ref, {
+      [`tasks.${taskId}.photos.${slot}`]: updated,
+      lastUpdated: new Date().toISOString(),
+    });
+
+    // Remove Firebase Storage object
+    const path = `service-orders/${serviceOrderId}/tasks/${taskId}/${slot}/${fileName}`;
+    const fileRef = storageRef(this.storage, path);
+    try {
+      await deleteObject(fileRef);
+    } catch (err) {
+      console.warn('[SOCollaboration] Failed to delete storage object:', err);
+      // Continue; Firestore is the source of truth for the UI.
+    }
   }
 
   async getSessionTaskPhotos(

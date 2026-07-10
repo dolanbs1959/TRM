@@ -30,7 +30,7 @@
       <div class="payload-header">Stage: {{ job['40']?.value || 'Unknown' }}</div>
       <div class="mode-actions">
         <ion-button
-          *ngIf="isServiceOrder()"
+          *ngIf="isServiceOrderHub() || isWrapUpView()"
           fill="clear"
           size="small"
           class="refresh-collaboration-btn"
@@ -38,6 +38,22 @@
           [disabled]="isRefreshingCollaboration">
           <ion-spinner *ngIf="isRefreshingCollaboration" name="crescent" slot="icon-only"></ion-spinner>
           <ion-icon *ngIf="!isRefreshingCollaboration" name="refresh-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+        <ion-button
+          *ngIf="isWrapUpView()"
+          size="small"
+          fill="outline"
+          color="light"
+          (click)="enterWorkMode()">
+          Service Hub
+        </ion-button>
+        <ion-button
+          *ngIf="isServiceOrderHub() && canAccessWrapUp()"
+          size="small"
+          fill="outline"
+          color="light"
+          (click)="enterWrapUpMode()">
+          Wrap-Up
         </ion-button>
         <ion-badge color="medium">{{ getModeLabel() }}</ion-badge>
       </div>
@@ -530,9 +546,264 @@
     </div>
 
     <!-- ========================================================== -->
+    <!-- LEAD TECH WRAP-UP HUB — Service Order wrap-up mode -->
+    <!-- ========================================================== -->
+    <div *ngIf="isWrapUpView()" class="payload-body wrap-up-hub">
+      <div class="wrap-up-title-row">
+        <h3>Lead Tech Wrap-Up</h3>
+      </div>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Crew Summary</h4>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Lead Technician</span>
+            <input type="text" [(ngModel)]="wrapUpForm.leadTechnician" class="wrap-up-input" placeholder="Lead technician name" />
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Crew Members</span>
+            <input type="text" [(ngModel)]="wrapUpForm.crewMembers" class="wrap-up-input" placeholder="Assigned technicians" />
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Arrival / Completion</h4>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Arrival Time</span>
+            <input type="time" [(ngModel)]="wrapUpForm.arrivalTime" class="wrap-up-input" />
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Completion Time</span>
+            <input type="time" [(ngModel)]="wrapUpForm.completionTime" class="wrap-up-input" />
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Service & Property Preparation</h4>
+        <label class="wrap-up-checkbox">
+          <input type="checkbox" [(ngModel)]="wrapUpForm.prepWalkthroughDone" />
+          <span>Pre-service walkthrough / preparation completed</span>
+        </label>
+        <div class="wrap-up-textarea-wrap">
+          <label>Preparation Notes</label>
+          <textarea [(ngModel)]="wrapUpForm.prepNotes" rows="3" placeholder="Property prep notes..."></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Moved / Tarped Items</h4>
+        <div class="wrap-up-textarea-wrap">
+          <label>Items Moved</label>
+          <textarea [(ngModel)]="wrapUpForm.itemsMoved" rows="2" placeholder="Furniture, planters, etc."></textarea>
+        </div>
+        <div class="wrap-up-textarea-wrap">
+          <label>Items Tarped / Protected</label>
+          <textarea [(ngModel)]="wrapUpForm.itemsTarped" rows="2" placeholder="Tarped areas or protected surfaces"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Basic Service Check</h4>
+        <label class="wrap-up-checkbox">
+          <input type="checkbox" [(ngModel)]="wrapUpForm.serviceCheckComplete" />
+          <span>Basic service check completed</span>
+        </label>
+        <div class="wrap-up-textarea-wrap">
+          <label>Service Check Notes</label>
+          <textarea [(ngModel)]="wrapUpForm.serviceCheckNotes" rows="3" placeholder="Service check observations"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Service Completion & Property Clean-Up</h4>
+        <label class="wrap-up-checkbox">
+          <input type="checkbox" [(ngModel)]="wrapUpForm.cleanupComplete" />
+          <span>Property clean-up completed</span>
+        </label>
+        <div class="wrap-up-textarea-wrap">
+          <label>Clean-Up Notes</label>
+          <textarea [(ngModel)]="wrapUpForm.cleanupNotes" rows="3" placeholder="Clean-up status / debris removal"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Ordered Services Completed</h4>
+        <p class="wrap-up-helper" *ngIf="serviceTasks.length > 0">
+          {{ getFinishedTaskCount() }} of {{ serviceTasks.length }} tasks marked finished
+        </p>
+        <p class="wrap-up-helper" *ngIf="serviceTasks.length === 0">No service tasks assigned.</p>
+        <div class="wrap-up-task-list" *ngIf="serviceTasks.length > 0">
+          <ng-container *ngFor="let task of serviceTasks">
+            <div class="wrap-up-task-row" [class.wrap-up-task-row--finished]="isTaskFinished(task.id)">
+              <ion-icon [name]="isTaskFinished(task.id) ? 'checkmark-circle' : 'ellipse-outline'"></ion-icon>
+              <span class="wrap-up-task-name">{{ task.taskName }}</span>
+              <span *ngIf="task.quantity != null" class="wrap-up-task-qty">Qty: {{ task.quantity }}</span>
+            </div>
+            <div class="wrap-up-task-note" *ngIf="taskNotes[task.id]?.trim()">
+              <span class="wrap-up-task-note-label">Notes:</span>
+              <span class="wrap-up-task-note-text">{{ taskNotes[task.id] }}</span>
+            </div>
+          </ng-container>
+        </div>
+        <div class="wrap-up-textarea-wrap">
+          <label>Services Completed Notes</label>
+          <textarea [(ngModel)]="wrapUpForm.servicesCompletedNotes" rows="3" placeholder="Notes on completed services"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Customer Service Information</h4>
+        <label class="wrap-up-checkbox">
+          <input type="checkbox" [(ngModel)]="wrapUpForm.customerPresent" />
+          <span>Customer was present</span>
+        </label>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-label">Customer Name</span>
+            <input type="text" [(ngModel)]="wrapUpForm.customerName" class="wrap-up-input" placeholder="Customer name" />
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">Customer Contact</span>
+            <input type="text" [(ngModel)]="wrapUpForm.customerContact" class="wrap-up-input" placeholder="Phone or email" />
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Customer Confirmation / Approval</h4>
+        <label class="wrap-up-checkbox">
+          <input type="checkbox" [(ngModel)]="wrapUpForm.customerApproved" />
+          <span>Customer confirmed / approved work</span>
+        </label>
+        <div class="detail-item">
+          <span class="detail-label">Approval Method</span>
+          <input type="text" [(ngModel)]="wrapUpForm.approvalMethod" class="wrap-up-input" placeholder="e.g., verbal, signature, text" />
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Customer Notes</h4>
+        <div class="wrap-up-textarea-wrap">
+          <textarea [(ngModel)]="wrapUpForm.customerNotes" rows="4" placeholder="Customer-facing notes"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Internal Technician Notes</h4>
+        <div class="wrap-up-textarea-wrap">
+          <textarea [(ngModel)]="wrapUpForm.internalNotes" rows="4" placeholder="Internal notes for the office"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <div class="wrap-up-section-header">
+          <h4 class="wrap-up-section-title">Before Photos</h4>
+          <div class="wrap-up-section-actions" *ngIf="getAllTaskBeforePhotos().length > 0">
+            <ion-button
+              size="small"
+              fill="clear"
+              class="wrap-up-select-btn"
+              (click)="selectAllWrapUpPhotos('before')">
+              Select All
+            </ion-button>
+            <ion-button
+              size="small"
+              fill="clear"
+              class="wrap-up-select-btn"
+              (click)="clearAllWrapUpPhotoSelections('before')">
+              Clear
+            </ion-button>
+            <span class="wrap-up-selected-count">{{ getSelectedWrapUpPhotoCount('before') }} selected</span>
+          </div>
+        </div>
+        <p class="wrap-up-helper" *ngIf="getAllTaskBeforePhotos().length === 0">No before photos captured.</p>
+        <div class="wrap-up-photo-grid" *ngIf="getAllTaskBeforePhotos().length > 0">
+          <ng-container *ngFor="let photo of getAllTaskBeforePhotos()">
+            <div class="wrap-up-photo-thumb-wrap" [class.wrap-up-photo-thumb-wrap--selected]="isWrapUpPhotoSelected(photo)">
+              <input
+                type="checkbox"
+                class="wrap-up-photo-check"
+                [checked]="isWrapUpPhotoSelected(photo)"
+                (click)="toggleWrapUpPhotoSelection(photo, $event)" />
+              <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="wrap-up-photo-thumb" [title]="photo.notes || 'Before photo'" alt="Before photo" (click)="openPhotoViewer(photo)" />
+              <div *ngIf="!photo.dataUrl" class="wrap-up-photo-thumb wrap-up-photo-thumb--remote" (click)="openPhotoViewer(photo)">
+                <ion-icon name="image-outline"></ion-icon>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <div class="wrap-up-section-header">
+          <h4 class="wrap-up-section-title">After Photos</h4>
+          <div class="wrap-up-section-actions" *ngIf="getAllTaskAfterPhotos().length > 0">
+            <ion-button
+              size="small"
+              fill="clear"
+              class="wrap-up-select-btn"
+              (click)="selectAllWrapUpPhotos('after')">
+              Select All
+            </ion-button>
+            <ion-button
+              size="small"
+              fill="clear"
+              class="wrap-up-select-btn"
+              (click)="clearAllWrapUpPhotoSelections('after')">
+              Clear
+            </ion-button>
+            <span class="wrap-up-selected-count">{{ getSelectedWrapUpPhotoCount('after') }} selected</span>
+          </div>
+        </div>
+        <p class="wrap-up-helper" *ngIf="getAllTaskAfterPhotos().length === 0">No after photos captured.</p>
+        <div class="wrap-up-photo-grid" *ngIf="getAllTaskAfterPhotos().length > 0">
+          <ng-container *ngFor="let photo of getAllTaskAfterPhotos()">
+            <div class="wrap-up-photo-thumb-wrap" [class.wrap-up-photo-thumb-wrap--selected]="isWrapUpPhotoSelected(photo)">
+              <input
+                type="checkbox"
+                class="wrap-up-photo-check"
+                [checked]="isWrapUpPhotoSelected(photo)"
+                (click)="toggleWrapUpPhotoSelection(photo, $event)" />
+              <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="wrap-up-photo-thumb" [title]="photo.notes || 'After photo'" alt="After photo" (click)="openPhotoViewer(photo)" />
+              <div *ngIf="!photo.dataUrl" class="wrap-up-photo-thumb wrap-up-photo-thumb--remote" (click)="openPhotoViewer(photo)">
+                <ion-icon name="image-outline"></ion-icon>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+      </section>
+
+      <div class="wrap-up-action-bar">
+        <ion-button expand="block" fill="outline" color="medium" (click)="onSaveWrapUpDraft()">Save Draft</ion-button>
+        <ion-button
+          expand="block"
+          color="danger"
+          [disabled]="!isSubmitWrapUpEnabled()"
+          (click)="onSubmitWrapUpServiceOrder()">
+          Submit Service Order
+        </ion-button>
+      </div>
+
+      <div *ngIf="serviceOrderAssignmentsLoading" class="wrap-up-status-row">
+        <ion-spinner name="crescent"></ion-spinner>
+        <span>Loading technician assignments...</span>
+      </div>
+
+      <div *ngIf="!serviceOrderAssignmentsLoading && serviceOrderAssignments.length > 0" class="wrap-up-status-row">
+        <ion-icon [name]="isAllTechnicianAssignmentsCompleted() ? 'checkmark-circle' : 'alert-circle'" [color]="isAllTechnicianAssignmentsCompleted() ? 'success' : 'warning'"></ion-icon>
+        <span>
+          {{ isAllTechnicianAssignmentsCompleted() ? 'All assigned technicians have completed their work.' : 'Waiting for all assigned technicians to complete their work.' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- ========================================================== -->
     <!-- SERVICE ORDER HUB — Service Tasks for service-order jobs -->
     <!-- ========================================================== -->
-    <div *ngIf="isServiceOrder()" class="payload-body service-order-hub">
+    <div *ngIf="isServiceOrderHub()" class="payload-body service-order-hub">
       <h3>Service Tasks</h3>
 
       <div *ngIf="serviceTasksLoading" class="task-loading">
@@ -568,21 +839,32 @@
                   <ion-icon
                     name="camera-outline"
                     class="inspection-photo-icon-trigger"
-                    [class.inspection-photo-icon-trigger--disabled]="isCapturingPhoto"
-                    role="button"
-                    tabindex="0"
-                    aria-label="Add before photo"
-                    (click)="beginTaskPhotoCapture(task.id, 'before', $event)"
-                    (keydown.enter)="beginTaskPhotoCapture(task.id, 'before', $event)"
-                    (keydown.space)="beginTaskPhotoCapture(task.id, 'before', $event)">
+                    [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+                    [attr.role]="isHubInputLocked() ? null : 'button'"
+                    [attr.tabindex]="isHubInputLocked() ? null : '0'"
+                    [attr.aria-label]="isHubInputLocked() ? null : 'Add before photo'"
+                    (click)="!isHubInputLocked() && beginTaskPhotoCapture(task.id, 'before', $event)"
+                    (keydown.enter)="!isHubInputLocked() && beginTaskPhotoCapture(task.id, 'before', $event)"
+                    (keydown.space)="!isHubInputLocked() && beginTaskPhotoCapture(task.id, 'before', $event)">
                   </ion-icon>
                   <span class="task-section-label">Before Photos</span>
                 </div>
                 <div class="task-photo-thumbnails" *ngIf="getTaskPhotoAttachments(task.id, 'before').length > 0">
                   <ng-container *ngFor="let photo of getTaskPhotoAttachments(task.id, 'before')">
-                    <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="task-photo-thumb" [title]="photo.notes || 'Before photo'" alt="Before photo" (click)="openPhotoViewer(photo)" />
-                    <div *ngIf="!photo.dataUrl" class="task-photo-thumb task-photo-thumb--remote" title="{{ photo.notes || photo.fileName }}" (click)="openPhotoViewer(photo)">
-                      <ion-icon name="image-outline"></ion-icon>
+                    <div class="task-photo-thumb-wrap">
+                      <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="task-photo-thumb" [title]="photo.notes || 'Before photo'" alt="Before photo" (click)="openPhotoViewer(photo)" />
+                      <div *ngIf="!photo.dataUrl" class="task-photo-thumb task-photo-thumb--remote" title="{{ photo.notes || photo.fileName }}" (click)="openPhotoViewer(photo)">
+                        <ion-icon name="image-outline"></ion-icon>
+                      </div>
+                      <ion-button
+                        *ngIf="!isHubInputLocked()"
+                        fill="clear"
+                        size="small"
+                        class="task-photo-delete-btn"
+                        color="danger"
+                        (click)="deleteTaskPhoto(task.id, 'before', photo.fileName); $event.stopPropagation()">
+                        <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+                      </ion-button>
                     </div>
                   </ng-container>
                 </div>
@@ -592,21 +874,32 @@
                   <ion-icon
                     name="camera-outline"
                     class="inspection-photo-icon-trigger"
-                    [class.inspection-photo-icon-trigger--disabled]="isCapturingPhoto"
-                    role="button"
-                    tabindex="0"
-                    aria-label="Add after photo"
-                    (click)="beginTaskPhotoCapture(task.id, 'after', $event)"
-                    (keydown.enter)="beginTaskPhotoCapture(task.id, 'after', $event)"
-                    (keydown.space)="beginTaskPhotoCapture(task.id, 'after', $event)">
+                    [class.inspection-photo-icon-trigger--disabled]="isHubInputLocked() || isCapturingPhoto"
+                    [attr.role]="isHubInputLocked() ? null : 'button'"
+                    [attr.tabindex]="isHubInputLocked() ? null : '0'"
+                    [attr.aria-label]="isHubInputLocked() ? null : 'Add after photo'"
+                    (click)="!isHubInputLocked() && beginTaskPhotoCapture(task.id, 'after', $event)"
+                    (keydown.enter)="!isHubInputLocked() && beginTaskPhotoCapture(task.id, 'after', $event)"
+                    (keydown.space)="!isHubInputLocked() && beginTaskPhotoCapture(task.id, 'after', $event)">
                   </ion-icon>
                   <span class="task-section-label">After Photos</span>
                 </div>
                 <div class="task-photo-thumbnails" *ngIf="getTaskPhotoAttachments(task.id, 'after').length > 0">
                   <ng-container *ngFor="let photo of getTaskPhotoAttachments(task.id, 'after')">
-                    <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="task-photo-thumb" [title]="photo.notes || 'After photo'" alt="After photo" (click)="openPhotoViewer(photo)" />
-                    <div *ngIf="!photo.dataUrl" class="task-photo-thumb task-photo-thumb--remote" title="{{ photo.notes || photo.fileName }}" (click)="openPhotoViewer(photo)">
-                      <ion-icon name="image-outline"></ion-icon>
+                    <div class="task-photo-thumb-wrap">
+                      <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="task-photo-thumb" [title]="photo.notes || 'After photo'" alt="After photo" (click)="openPhotoViewer(photo)" />
+                      <div *ngIf="!photo.dataUrl" class="task-photo-thumb task-photo-thumb--remote" title="{{ photo.notes || photo.fileName }}" (click)="openPhotoViewer(photo)">
+                        <ion-icon name="image-outline"></ion-icon>
+                      </div>
+                      <ion-button
+                        *ngIf="!isHubInputLocked()"
+                        fill="clear"
+                        size="small"
+                        class="task-photo-delete-btn"
+                        color="danger"
+                        (click)="deleteTaskPhoto(task.id, 'after', photo.fileName); $event.stopPropagation()">
+                        <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+                      </ion-button>
                     </div>
                   </ng-container>
                 </div>
@@ -615,8 +908,9 @@
             <div class="task-section task-notes-section">
               <span class="task-section-label">Task Notes</span>
               <ion-textarea
-                [ngModel]="taskNotes[task.id]"
+                [(ngModel)]="taskNotes[task.id]"
                 (ionInput)="onTaskNoteChange(task.id, $any($event.target).value)"
+                [disabled]="isHubInputLocked()"
                 [autoGrow]="true"
                 [rows]="2"
                 placeholder="Optional notes about this task..."
@@ -626,7 +920,7 @@
             <ion-button
               expand="block"
               [color]="isTaskFinished(task.id) ? 'medium' : 'success'"
-              [disabled]="isTaskFinished(task.id)"
+              [disabled]="isHubInputLocked() || isTaskFinished(task.id)"
               (click)="markTaskFinished(task.id)">
               {{ isTaskFinished(task.id) ? '✓ Task Finished' : 'Task Finished' }}
             </ion-button>
@@ -820,6 +1114,11 @@
           <span>{{ viewingPhoto.fileName }}</span>
         </div>
         <div class="photo-viewer-meta">
+          <div class="photo-viewer-badges">
+            <span class="photo-viewer-slot-badge" *ngIf="viewingPhoto.slot">
+              {{ viewingPhoto.slot === 'before' ? 'Before' : 'After' }}
+            </span>
+          </div>
           <span class="photo-viewer-label">Caption</span>
           <p class="photo-viewer-notes">{{ viewingPhoto.notes || 'No caption provided.' }}</p>
           <span class="photo-viewer-timestamp" *ngIf="viewingPhoto.capturedAt">

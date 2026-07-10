@@ -55,6 +55,14 @@ export interface ServiceOrderTask {
   afterPhotos: TaskPhoto[];
 }
 
+export interface ServiceOrderAssignment {
+  recordId: string;
+  serviceOrderId: string;
+  technicianId: string;
+  technicianName: string;
+  assignmentStatus: string;
+}
+
 export interface EstimateSubmissionPayload {
   serviceOrderId: string;
   locationRecordId: string;
@@ -719,6 +727,52 @@ async checkActiveTimecardSession(employeeId: any, dateStr: string) {
       return response.data as ServiceOrderTask[];
     } catch (error) {
       console.error('Fetch Service Order Tasks Error:', error);
+      return [];
+    }
+  }
+
+  async updateServiceOrderTaskStatus(
+    serviceOrderId: string,
+    taskId: string,
+    taskStatus: string
+  ): Promise<boolean> {
+    // Reuse the existing workflow endpoint rather than introducing a separate,
+    // orphaned task-status route. The backend uses workflowEventType 'TaskComplete'
+    // to update the Task table (bt73wgry8, Field ID 8) while keeping the parent
+    // Service Order status unchanged.
+    const user = this.getUser();
+    const employeeId = user?.[3]?.value;
+    const url = `${this.apiBaseUrl}/service-order/update-workflow`;
+    const payload = {
+      recordId: serviceOrderId,
+      serviceOrderId,
+      taskId,
+      taskStatus,
+      workflowEventType: 'TaskComplete',
+      workflowNotes: `Task ${taskId} marked as ${taskStatus}`,
+      techId: employeeId,
+      relatedEmployeeId: employeeId,
+    };
+    console.log('[DIAG][TaskComplete] Workflow payload:', payload);
+    try {
+      const response: any = await this.http.post(url, payload).toPromise();
+      return !!response?.success;
+    } catch (error) {
+      console.error('Update Service Order Task Status Error:', error);
+      return false;
+    }
+  }
+
+  async getServiceOrderAssignments(serviceOrderId: string): Promise<ServiceOrderAssignment[]> {
+    const url = `${this.apiBaseUrl}/service-order/assignments`;
+    try {
+      const response: any = await this.http.post(url, { serviceOrderId }).toPromise();
+      if (!response?.success || !Array.isArray(response?.data)) {
+        return [];
+      }
+      return response.data as ServiceOrderAssignment[];
+    } catch (error) {
+      console.error('Fetch Service Order Assignments Error:', error);
       return [];
     }
   }

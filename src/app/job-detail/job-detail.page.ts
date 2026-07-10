@@ -2,7 +2,7 @@ import { Component, DoCheck, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { firstValueFrom } from 'rxjs';
-import { AuthService, RoofOptionCacheData, ServiceOrderTask, WorkflowLogPayload } from '../services/auth.service';
+import { AuthService, RoofOptionCacheData, ServiceOrderAssignment, ServiceOrderTask, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
 import { ServiceOrderCollaborationService } from '../services/service-order-collaboration.service';
 import { environment } from '../../environments/environment';
@@ -22,6 +22,9 @@ interface InspectionPhotoAttachment {
   blob: Blob;
   notes: string;
   capturedAt: number;
+  slot?: 'before' | 'after';
+  taskId?: string;
+  selected?: boolean;
 }
 
 interface PendingInspectionPhoto {
@@ -58,6 +61,7 @@ interface InspectionSubmissionPayload {
 export class JobDetailPage implements OnInit, DoCheck {
   private static readonly ACTIVE_JOB_ID_STORAGE_KEY = 'trm.activeJobId';
   private static readonly ACTIVE_JOB_MODE_STORAGE_KEY = 'trm.activeJobMode';
+  private static readonly ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY = 'trm.activeJobServiceOrderView';
   private static readonly ACTIVE_JOB_PAUSED_STORAGE_KEY = 'trm.activeJobPaused';
   private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
   private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
@@ -68,17 +72,26 @@ export class JobDetailPage implements OnInit, DoCheck {
   job: any = null;
   activeJobId = '';
   pageMode: 'view' | 'work' = 'view';
+  serviceOrderView: 'hub' | 'wrapup' = 'hub';
   isPausedWorkflow = false;
   inspectionHubSegment: 'checklist' | 'notes' = 'checklist';
+
+  // Lead Tech Wrap-Up constants
+  private static readonly WRAPUP_DRAFT_STORAGE_KEY_PREFIX = 'trm_wrapup_draft_';
 
   // Service Order Tasks state
   serviceTasks: ServiceOrderTask[] = [];
   serviceTasksLoading = false;
   isRefreshingCollaboration = false;
+
+  // Service Order Assignments state (for Lead Tech Wrap-Up submit gate)
+  serviceOrderAssignments: ServiceOrderAssignment[] = [];
+  serviceOrderAssignmentsLoading = false;
   taskPhotoState: Record<string, InspectionPhotoAttachment[]> = {};
   finishedTaskIds: Set<string> = new Set();
   taskNotes: Record<string, string> = {};
   viewingPhoto: InspectionPhotoAttachment | null = null;
+  selectedWrapUpPhotoIds: Set<string> = new Set();
 
   // Roof structures state
   roofs: any[] = [];
@@ -148,6 +161,33 @@ export class JobDetailPage implements OnInit, DoCheck {
     inspectionNotes: '',
   };
 
+  // Lead Tech Wrap-Up state
+  private lastWrapUpDraftSnapshot = '';
+  private skipWrapUpDraftPersistence = false;
+  wrapUpForm = {
+    leadTechnician: '',
+    crewMembers: '',
+    arrivalTime: '',
+    completionTime: '',
+    prepWalkthroughDone: false,
+    prepNotes: '',
+    itemsMoved: '',
+    itemsTarped: '',
+    serviceCheckComplete: false,
+    serviceCheckNotes: '',
+    cleanupComplete: false,
+    cleanupNotes: '',
+    allServicesCompleted: false,
+    servicesCompletedNotes: '',
+    customerPresent: false,
+    customerName: '',
+    customerContact: '',
+    customerApproved: false,
+    approvalMethod: '',
+    customerNotes: '',
+    internalNotes: '',
+  };
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
@@ -176,6 +216,14 @@ export class JobDetailPage implements OnInit, DoCheck {
     );
     this.pageMode = routeMode || storedMode || 'view';
 
+    const routeServiceOrderView = this.normalizeServiceOrderView(
+      this.route.snapshot.queryParamMap.get('view') || ''
+    );
+    const storedServiceOrderView = this.normalizeServiceOrderView(
+      localStorage.getItem(JobDetailPage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY) || ''
+    );
+    this.serviceOrderView = routeServiceOrderView || storedServiceOrderView || 'hub';
+
     const routePaused = this.normalizePaused(this.route.snapshot.queryParamMap.get('paused') || '');
     const storedPaused = this.normalizePaused(
       localStorage.getItem(JobDetailPage.ACTIVE_JOB_PAUSED_STORAGE_KEY) || ''
@@ -191,20 +239,35 @@ export class JobDetailPage implements OnInit, DoCheck {
     localStorage.setItem(JobDetailPage.ACTIVE_JOB_ID_STORAGE_KEY, resolvedJobId);
     localStorage.setItem(JobDetailPage.ACTIVE_JOB_MODE_STORAGE_KEY, this.pageMode);
     localStorage.setItem(
+      JobDetailPage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY,
+      this.serviceOrderView
+    );
+    localStorage.setItem(
       JobDetailPage.ACTIVE_JOB_PAUSED_STORAGE_KEY,
       this.isPausedWorkflow ? '1' : '0'
     );
+
     await this.loadJobDetail();
   }
 
   ngDoCheck() {
     this.persistInspectionDraftIfChanged();
+    this.persistWrapUpDraftIfChanged();
   }
 
   private normalizeMode(value: string): 'view' | 'work' | null {
     const mode = (value || '').toString().trim().toLowerCase();
     if (mode === 'view' || mode === 'work') {
       return mode;
+    }
+
+    return null;
+  }
+
+  private normalizeServiceOrderView(value: string): 'hub' | 'wrapup' | null {
+    const view = (value || '').toString().trim().toLowerCase();
+    if (view === 'hub' || view === 'wrapup') {
+      return view;
     }
 
     return null;
@@ -243,19 +306,46 @@ export class JobDetailPage implements OnInit, DoCheck {
 
     if (this.isServiceOrder()) {
       await this.loadServiceOrderTasks();
+
+      if (this.serviceOrderView === 'wrapup') {
+        if (!this.canAccessWrapUp()) {
+          console.warn('[WrapUp] Access denied after load: redirecting to dashboard.', {
+            serviceOrderId: this.serviceOrderId,
+            isLead: this.isLeadTechnician(),
+          });
+          this.router.navigate(['/home']);
+          return;
+        }
+        this.initializeWrapUpForm();
+        await this.hydrateWrapUpDraftIfPresent();
+        this.persistWrapUpDraftIfChanged();
+        void this.loadServiceOrderAssignments();
+      }
     }
   }
 
   onTaskNoteChange(taskId: string, value: string) {
+    if (this.isHubInputLocked()) {
+      return;
+    }
     this.taskNotes[taskId] = value;
     this.collaborationService.updateTaskNote(this.serviceOrderId, taskId, value)
       .catch(err => console.warn('[TaskNotes] Firestore write failed:', err));
   }
 
   markTaskFinished(taskId: string) {
+    if (this.isHubInputLocked()) {
+      return;
+    }
     this.finishedTaskIds.add(taskId);
     this.collaborationService.updateTaskFinished(this.serviceOrderId, taskId, true)
       .catch(err => console.warn('[TaskFinished] Firestore write failed:', err));
+    void this.authService.updateServiceOrderTaskStatus(this.serviceOrderId, taskId, 'Completed')
+      .then((didUpdate: boolean) => {
+        if (!didUpdate) {
+          console.warn('[TaskFinished] Backend task status update failed.', { taskId });
+        }
+      });
   }
 
   isTaskFinished(taskId: string): boolean {
@@ -269,6 +359,15 @@ export class JobDetailPage implements OnInit, DoCheck {
     this.serviceTasksLoading = false;
   }
 
+  async loadServiceOrderAssignments() {
+    if (!this.serviceOrderId) {
+      return;
+    }
+    this.serviceOrderAssignmentsLoading = true;
+    this.serviceOrderAssignments = await this.authService.getServiceOrderAssignments(this.serviceOrderId);
+    this.serviceOrderAssignmentsLoading = false;
+  }
+
   private async loadServiceOrderCollaborationData() {
     // Restore finished task state from Firestore session
     try {
@@ -279,7 +378,13 @@ export class JobDetailPage implements OnInit, DoCheck {
     }
     // Restore task notes from Firestore session
     try {
-      this.taskNotes = await this.collaborationService.getSessionTaskNotes(this.serviceOrderId);
+      const notesFromFirestore = await this.collaborationService.getSessionTaskNotes(this.serviceOrderId);
+      this.taskNotes = notesFromFirestore;
+      console.log('[Collaboration][Load] Task notes restored from Firestore.', {
+        serviceOrderId: this.serviceOrderId,
+        taskNoteCount: Object.keys(notesFromFirestore).length,
+        taskNotes: notesFromFirestore,
+      });
     } catch {
       this.taskNotes = {};
     }
@@ -288,14 +393,28 @@ export class JobDetailPage implements OnInit, DoCheck {
     try {
       const firestorePhotos = await this.collaborationService.getSessionTaskPhotos(this.serviceOrderId);
       for (const [slotKey, photoMetas] of Object.entries(firestorePhotos)) {
+        // slotKey format: "before-<taskId>" or "after-<taskId>"
+        const [slot, ...taskIdParts] = slotKey.split('-');
+        const taskId = taskIdParts.join('-');
         this.taskPhotoState[slotKey] = photoMetas.map(m => ({
           fileName: m.fileName,
           dataUrl: m.storageUrl || '',
           blob: new Blob([]),
           notes: m.notes,
           capturedAt: m.capturedAt,
+          slot: (slot === 'before' || slot === 'after' ? slot : undefined) as 'before' | 'after' | undefined,
+          taskId,
         }));
       }
+      const photoNoteSamples: Record<string, { fileName: string; notes: string }[]> = {};
+      for (const [key, photos] of Object.entries(this.taskPhotoState).slice(0, 2)) {
+        photoNoteSamples[key] = photos.map(p => ({ fileName: p.fileName, notes: p.notes }));
+      }
+      console.log('[Collaboration][Load] Task photos restored from Firestore.', {
+        serviceOrderId: this.serviceOrderId,
+        slotCount: Object.keys(this.taskPhotoState).length,
+        photoNoteSamples,
+      });
     } catch {
       this.taskPhotoState = {};
     }
@@ -308,6 +427,18 @@ export class JobDetailPage implements OnInit, DoCheck {
     this.isRefreshingCollaboration = true;
     try {
       await this.loadServiceOrderCollaborationData();
+      if (this.serviceOrderView === 'wrapup') {
+        await this.loadServiceOrderAssignments();
+        console.log('[WrapUp][Refresh] Submit eligibility re-evaluated.', {
+          serviceOrderId: this.serviceOrderId,
+          assignments: this.serviceOrderAssignments.map(a => ({
+            id: a.recordId,
+            status: a.assignmentStatus,
+          })),
+          allAssignmentsCompleted: this.isAllTechnicianAssignmentsCompleted(),
+          isSubmitEnabled: this.isSubmitWrapUpEnabled(),
+        });
+      }
     } catch (err) {
       console.warn('[Collaboration] Refresh failed:', err);
     } finally {
@@ -327,12 +458,37 @@ export class JobDetailPage implements OnInit, DoCheck {
     this.viewingPhoto = null;
   }
 
+  async deleteTaskPhoto(taskId: string, slot: 'before' | 'after', fileName: string) {
+    if (this.isHubInputLocked()) {
+      return;
+    }
+
+    const slotKey = `${slot}-${taskId}`;
+    const attachments = this.taskPhotoState[slotKey] || [];
+    const target = attachments.find((p) => p.fileName === fileName);
+    if (!target) {
+      return;
+    }
+
+    // Optimistically remove from local state.
+    this.taskPhotoState[slotKey] = attachments.filter((p) => p.fileName !== fileName);
+
+    try {
+      await this.collaborationService.deleteTaskPhoto(this.serviceOrderId, taskId, slot, fileName);
+      console.log('[TaskPhotos] Deleted shared task photo.', { taskId, slot, fileName });
+    } catch (err) {
+      console.warn('[TaskPhotos] Failed to delete shared task photo. Restoring local state.', err);
+      // Restore the local entry on failure so the user can retry.
+      this.taskPhotoState[slotKey] = [...(this.taskPhotoState[slotKey] || []), target];
+    }
+  }
+
   async beginTaskPhotoCapture(taskId: string, slot: 'before' | 'after', event?: Event) {
     console.log('[DIAG] beginTaskPhotoCapture() called', { taskId, slot });
     event?.preventDefault();
     event?.stopPropagation();
 
-    if (this.isCapturingPhoto) {
+    if (this.isHubInputLocked() || this.isCapturingPhoto) {
       return;
     }
 
@@ -494,6 +650,38 @@ export class JobDetailPage implements OnInit, DoCheck {
     return this.pageMode === 'view';
   }
 
+  isWrapUpView() {
+    return this.serviceOrderView === 'wrapup';
+  }
+
+  isServiceOrderHub() {
+    return this.isServiceOrder() && this.serviceOrderView === 'hub';
+  }
+
+  isLeadTechnician(): boolean {
+    const user = this.authService.getUser();
+    const role = (
+      user?.role ||
+      user?.employeeRole ||
+      user?.['17']?.value ||
+      ''
+    ).toString().trim().toLowerCase();
+    const isLead = role.includes('lead');
+    console.log('[DIAG][JobDetail][isLeadTechnician]', {
+      hasUser: !!user,
+      roleProp: user?.role,
+      employeeRoleProp: user?.employeeRole,
+      field17: user?.['17']?.value,
+      computedRole: role,
+      isLead,
+    });
+    return isLead;
+  }
+
+  canAccessWrapUp(): boolean {
+    return this.isServiceOrder() && this.isLeadTechnician();
+  }
+
   isHubInputLocked() {
     return this.isReadOnlyMode() || this.isPausedWorkflow;
   }
@@ -549,6 +737,247 @@ export class JobDetailPage implements OnInit, DoCheck {
     getLocationName() {
       return (this.job?.['90']?.value || '').toString().trim();
     }
+
+  getCustomerPhone() {
+    return (this.job?.['95']?.value || this.job?.['96']?.value || '').toString().trim();
+  }
+
+  // --- Lead Tech Wrap-Up methods ---
+
+  private getWrapUpDraftStorageKey(): string {
+    return `${JobDetailPage.WRAPUP_DRAFT_STORAGE_KEY_PREFIX}${this.serviceOrderId}`;
+  }
+
+  private initializeWrapUpForm() {
+    this.skipWrapUpDraftPersistence = true;
+    const user = this.authService.getUser();
+    const leadName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
+    this.wrapUpForm = {
+      ...this.wrapUpForm,
+      leadTechnician: leadName || this.wrapUpForm.leadTechnician,
+      customerName: this.getCustomerName() || this.wrapUpForm.customerName,
+      customerContact: this.getCustomerPhone() || this.wrapUpForm.customerContact,
+      completionTime: this.getCurrentTimeInputValue(),
+    };
+    this.skipWrapUpDraftPersistence = false;
+  }
+
+  private getCurrentTimeInputValue(): string {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  }
+
+  getAllTaskBeforePhotos(): InspectionPhotoAttachment[] {
+    const photos: InspectionPhotoAttachment[] = [];
+    for (const task of this.serviceTasks) {
+      photos.push(...this.getTaskPhotoAttachments(task.id, 'before'));
+    }
+    return photos;
+  }
+
+  getAllTaskAfterPhotos(): InspectionPhotoAttachment[] {
+    const photos: InspectionPhotoAttachment[] = [];
+    for (const task of this.serviceTasks) {
+      photos.push(...this.getTaskPhotoAttachments(task.id, 'after'));
+    }
+    return photos;
+  }
+
+  private getWrapUpPhotoSelectionId(photo: InspectionPhotoAttachment): string {
+    return `${photo.slot || 'unknown'}-${photo.taskId || 'unknown'}-${photo.fileName}`;
+  }
+
+  isWrapUpPhotoSelected(photo: InspectionPhotoAttachment): boolean {
+    return this.selectedWrapUpPhotoIds.has(this.getWrapUpPhotoSelectionId(photo));
+  }
+
+  toggleWrapUpPhotoSelection(photo: InspectionPhotoAttachment, event?: Event): void {
+    event?.stopPropagation();
+    const id = this.getWrapUpPhotoSelectionId(photo);
+    if (this.selectedWrapUpPhotoIds.has(id)) {
+      this.selectedWrapUpPhotoIds.delete(id);
+    } else {
+      this.selectedWrapUpPhotoIds.add(id);
+    }
+  }
+
+  selectAllWrapUpPhotos(slot?: 'before' | 'after'): void {
+    const photos = slot === 'before'
+      ? this.getAllTaskBeforePhotos()
+      : slot === 'after'
+        ? this.getAllTaskAfterPhotos()
+        : [...this.getAllTaskBeforePhotos(), ...this.getAllTaskAfterPhotos()];
+    for (const photo of photos) {
+      this.selectedWrapUpPhotoIds.add(this.getWrapUpPhotoSelectionId(photo));
+    }
+  }
+
+  clearAllWrapUpPhotoSelections(slot?: 'before' | 'after'): void {
+    if (!slot) {
+      this.selectedWrapUpPhotoIds.clear();
+      return;
+    }
+    const ids = (slot === 'before' ? this.getAllTaskBeforePhotos() : this.getAllTaskAfterPhotos())
+      .map(p => this.getWrapUpPhotoSelectionId(p));
+    for (const id of ids) {
+      this.selectedWrapUpPhotoIds.delete(id);
+    }
+  }
+
+  getSelectedWrapUpPhotoCount(slot?: 'before' | 'after'): number {
+    const photos = slot === 'before'
+      ? this.getAllTaskBeforePhotos()
+      : slot === 'after'
+        ? this.getAllTaskAfterPhotos()
+        : [...this.getAllTaskBeforePhotos(), ...this.getAllTaskAfterPhotos()];
+    return photos.filter(p => this.isWrapUpPhotoSelected(p)).length;
+  }
+
+  getFinishedTaskCount(): number {
+    return this.serviceTasks.filter(t => this.isTaskFinished(t.id)).length;
+  }
+
+  enterWrapUpMode() {
+    if (!this.canAccessWrapUp()) {
+      return;
+    }
+    this.pageMode = 'work';
+    this.serviceOrderView = 'wrapup';
+    localStorage.setItem(JobDetailPage.ACTIVE_JOB_MODE_STORAGE_KEY, 'work');
+    localStorage.setItem(JobDetailPage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY, 'wrapup');
+    this.initializeWrapUpForm();
+    void this.hydrateWrapUpDraftIfPresent().then(() => {
+      this.persistWrapUpDraftIfChanged();
+    });
+  }
+
+  enterWorkMode() {
+    this.pageMode = 'work';
+    this.serviceOrderView = 'hub';
+    localStorage.setItem(JobDetailPage.ACTIVE_JOB_MODE_STORAGE_KEY, 'work');
+    localStorage.setItem(JobDetailPage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY, 'hub');
+  }
+
+  private buildWrapUpDraftData() {
+    return {
+      serviceOrderId: this.serviceOrderId,
+      wrapUpForm: { ...this.wrapUpForm },
+    };
+  }
+
+  private persistWrapUpDraftIfChanged() {
+    if (this.skipWrapUpDraftPersistence || !this.isWrapUpView() || !this.serviceOrderId) {
+      return;
+    }
+
+    try {
+      const currentData = this.buildWrapUpDraftData();
+      const serialized = JSON.stringify(currentData);
+      if (!serialized || serialized === this.lastWrapUpDraftSnapshot) {
+        return;
+      }
+
+      localStorage.setItem(this.getWrapUpDraftStorageKey(), serialized);
+      this.lastWrapUpDraftSnapshot = serialized;
+    } catch (error) {
+      console.warn('[WrapUp] Failed to persist local wrap-up draft.', error);
+    }
+  }
+
+  private async hydrateWrapUpDraftIfPresent() {
+    if (!this.serviceOrderId) {
+      return;
+    }
+
+    const storageKey = this.getWrapUpDraftStorageKey();
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.wrapUpForm && typeof parsed.wrapUpForm === 'object') {
+        this.wrapUpForm = {
+          ...this.wrapUpForm,
+          ...parsed.wrapUpForm,
+        };
+      }
+
+      this.lastWrapUpDraftSnapshot = JSON.stringify(this.buildWrapUpDraftData());
+      console.log('[WrapUp] Hydrated local wrap-up draft from storage.', {
+        storageKey,
+        serviceOrderId: this.serviceOrderId,
+      });
+    } catch (error) {
+      console.warn('[WrapUp] Failed to hydrate local wrap-up draft. Clearing corrupt draft.', error);
+      localStorage.removeItem(storageKey);
+      this.lastWrapUpDraftSnapshot = '';
+    }
+  }
+
+  private clearWrapUpDraft() {
+    if (!this.serviceOrderId) {
+      return;
+    }
+
+    localStorage.removeItem(this.getWrapUpDraftStorageKey());
+    this.lastWrapUpDraftSnapshot = '';
+  }
+
+  isAllTechnicianAssignmentsCompleted(): boolean {
+    if (this.serviceOrderAssignments.length === 0) {
+      return false;
+    }
+    return this.serviceOrderAssignments.every((assignment) => {
+      const status = (assignment.assignmentStatus || '').toString().trim().toLowerCase();
+      return status === 'completed';
+    });
+  }
+
+  isWrapUpFormValid(): boolean {
+    // Core required fields for the Lead Tech Wrap-Up submission gate.
+    // Expand this checklist as business rules are defined.
+    return (
+      (this.wrapUpForm.leadTechnician || '').toString().trim().length > 0 &&
+      (this.wrapUpForm.arrivalTime || '').toString().trim().length > 0 &&
+      (this.wrapUpForm.completionTime || '').toString().trim().length > 0 &&
+      this.wrapUpForm.prepWalkthroughDone &&
+      this.wrapUpForm.serviceCheckComplete &&
+      this.wrapUpForm.cleanupComplete &&
+      this.wrapUpForm.allServicesCompleted &&
+      this.wrapUpForm.customerApproved
+    );
+  }
+
+  isSubmitWrapUpEnabled(): boolean {
+    return this.isAllTechnicianAssignmentsCompleted() && this.isWrapUpFormValid();
+  }
+
+  async onSaveWrapUpDraft() {
+    this.persistWrapUpDraftIfChanged();
+    console.log('[WrapUp] Save Draft placeholder triggered.', {
+      serviceOrderId: this.serviceOrderId,
+    });
+  }
+
+  async onSubmitWrapUpServiceOrder() {
+    if (!this.isSubmitWrapUpEnabled()) {
+      console.warn('[WrapUp] Submit blocked: assignments or validation incomplete.', {
+        serviceOrderId: this.serviceOrderId,
+        allAssignmentsCompleted: this.isAllTechnicianAssignmentsCompleted(),
+        wrapUpFormValid: this.isWrapUpFormValid(),
+      });
+      return;
+    }
+
+    console.log('[WrapUp] Submit Service Order placeholder triggered.', {
+      serviceOrderId: this.serviceOrderId,
+    });
+  }
+
   cycleGroundInspectionItemState(item: { state: 0 | 1 | 2 }) {
     if (this.isHubInputLocked()) {
       return;

@@ -45,6 +45,7 @@ const TABLES = {
     CUSTOMERS: 'bt73uh9ez',
     EMPLOYEES: 'bt73uh9mx',
     SERVICE_ORDERS: 'bt73uh9kh',
+    SERVICE_ORDER_TASKS: 'bt73wgry8',
     SERVICE_ORDER_ROOFS: (process.env.QB_SERVICE_ORDER_ROOFS_TABLE || 'bt73v6is2').trim(),
     LOCATIONS: (process.env.QB_LOCATIONS_TABLE || process.env.QB_LOCATION_TABLE || '').trim(),
     ESTIMATE_LINE_ITEMS: 'buukg8qpp',
@@ -1914,6 +1915,80 @@ app.post('/job-detail', async (req, res) => {
     }
 });
 
+// --- GET SERVICE ORDER ASSIGNMENTS ---
+app.post('/service-order/assignments', async (req, res) => {
+    const { serviceOrderId } = req.body || {};
+
+    if (!serviceOrderId) {
+        return res.status(400).json({ success: false, message: 'serviceOrderId is required' });
+    }
+
+    const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+    if (!Number.isFinite(normalizedServiceOrderId)) {
+        return res.status(400).json({ success: false, message: 'serviceOrderId must be numeric' });
+    }
+
+    try {
+        const assignmentsResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.ASSIGNED_TECHNICIANS,
+            select: [3, ASSIGNED_TECH_FIELDS.RELATED_SERVICE_ORDER, ASSIGNED_TECH_FIELDS.RELATED_EMPLOYEE, ASSIGNED_TECH_FIELDS.ASSIGNMENT_STATUS],
+            where: `{'${ASSIGNED_TECH_FIELDS.RELATED_SERVICE_ORDER}'.EX.'${normalizedServiceOrderId}'}`
+        }, {
+            headers: buildQuickbaseHeaders()
+        });
+
+        const assignmentRecords = Array.isArray(assignmentsResponse?.data?.data) ? assignmentsResponse.data.data : [];
+        const employeeIds = Array.from(new Set(
+            assignmentRecords
+                .map((record) => Number.parseInt(getFieldValue(record, ASSIGNED_TECH_FIELDS.RELATED_EMPLOYEE), 10))
+                .filter((id) => Number.isFinite(id))
+        ));
+
+        const employeeNamesById = new Map();
+        if (employeeIds.length > 0) {
+            const employeeWhere = employeeIds.map((id) => `{'3'.EX.${id}}`).join('OR');
+            const employeeResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+                from: TABLES.EMPLOYEES,
+                select: [3, 6, 7],
+                where: employeeWhere
+            }, {
+                headers: buildQuickbaseHeaders()
+            });
+
+            const employeeRecords = Array.isArray(employeeResponse?.data?.data) ? employeeResponse.data.data : [];
+            for (const record of employeeRecords) {
+                const id = Number.parseInt(getFieldValue(record, 3), 10);
+                if (Number.isFinite(id)) {
+                    const firstName = String(getFieldValue(record, 6) || '').trim();
+                    const lastName = String(getFieldValue(record, 7) || '').trim();
+                    employeeNamesById.set(String(id), `${firstName} ${lastName}`.trim() || `Technician ${id}`);
+                }
+            }
+        }
+
+        const data = assignmentRecords.map((record) => {
+            const recordId = String(getFieldValue(record, 3) || '');
+            const serviceOrderIdValue = String(getFieldValue(record, ASSIGNED_TECH_FIELDS.RELATED_SERVICE_ORDER) || '');
+            const technicianId = String(getFieldValue(record, ASSIGNED_TECH_FIELDS.RELATED_EMPLOYEE) || '');
+            const assignmentStatus = String(getFieldValue(record, ASSIGNED_TECH_FIELDS.ASSIGNMENT_STATUS) || '').trim();
+            const technicianName = employeeNamesById.get(technicianId) || `Technician ${technicianId}`;
+
+            return {
+                recordId,
+                serviceOrderId: serviceOrderIdValue,
+                technicianId,
+                technicianName,
+                assignmentStatus,
+            };
+        });
+
+        return res.json({ success: true, data });
+    } catch (error) {
+        console.error('Service Order Assignments Query Error:', error.response ? error.response.data : error.message);
+        return res.status(500).json({ success: false, message: 'Error retrieving service order assignments' });
+    }
+});
+
 // --- GET OFFERED SERVICE ITEMS CATALOG ---
 app.post('/estimate/offered-service-items', async (req, res) => {
     const { tableId } = req.body || {};
@@ -2230,7 +2305,9 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
         technicianFirstName,
         jobAddress,
         jobLat,
-        jobLng
+        jobLng,
+        taskId,
+        taskStatus
     } = req.body || {};
 
     const effectiveServiceOrderId = serviceOrderId || recordId;
@@ -2265,6 +2342,37 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
 
     try {
         if (workflowEventType) {
+            // --- TASK COMPLETE: update the child Task record directly ---
+            // This avoids writing a workflow log with an unsupported event type and
+            // keeps the parent Service Order status unchanged.
+            if (normalizedAction === 'TASKCOMPLETE') {
+                const normalizedTaskId = Number.parseInt(taskId, 10);
+                if (!Number.isFinite(normalizedTaskId)) {
+                    return res.status(400).json({ success: false, message: 'taskId is required and must be numeric for TaskComplete' });
+                }
+                const normalizedTaskStatus = String(taskStatus || '').trim();
+                if (!normalizedTaskStatus) {
+                    return res.status(400).json({ success: false, message: 'taskStatus is required for TaskComplete' });
+                }
+
+                await axios.post(`${QB_API_ENDPOINT}/records`, {
+                    to: TABLES.SERVICE_ORDER_TASKS,
+                    data: [{
+                        3: { value: normalizedTaskId },
+                        8: { value: normalizedTaskStatus }
+                    }],
+                    fieldsToReturn: [3, 8]
+                }, {
+                    headers: buildQuickbaseHeaders()
+                });
+
+                return res.json({
+                    success: true,
+                    recordId: String(normalizedTaskId),
+                    taskStatus: normalizedTaskStatus
+                });
+            }
+
             if (shouldProcessAssignmentAction && !Number.isFinite(normalizedTechId)) {
                 return res.status(400).json({
                     success: false,
@@ -4311,7 +4419,7 @@ app.post('/service-order/tasks', async (req, res) => {
     try {
         // 1. Fetch tasks
         const taskResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
-            from: 'bt73wgry8',
+            from: TABLES.SERVICE_ORDER_TASKS,
             select: [3, 9, 36, 29, 38, 40, 30, 8, 18],
             where: `{'9'.EX.'${escapedId}'}`,
             sortBy: [{ fieldId: 3, order: 'ASC' }]

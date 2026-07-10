@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { IonModal } from '@ionic/angular';
 import { AlertController } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
-import { AuthService, WorkflowLogPayload } from '../services/auth.service';
+import { AuthService, ServiceOrderTask, WorkflowLogPayload } from '../services/auth.service';
 import { LoadingService } from '../services/loading.service';
 import { GeoLocationService } from '../services/geo-location.service';
 import { ServiceOrderCollaborationService } from '../services/service-order-collaboration.service';
@@ -29,6 +29,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     private static readonly JOB_INDEX_STORAGE_KEY = 'trm.homeState.jobIndexes';
     private static readonly ACTIVE_JOB_ID_STORAGE_KEY = 'trm.activeJobId';
     private static readonly ACTIVE_JOB_MODE_STORAGE_KEY = 'trm.activeJobMode';
+    private static readonly ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY = 'trm.activeJobServiceOrderView';
     private static readonly ACTIVE_JOB_PAUSED_STORAGE_KEY = 'trm.activeJobPaused';
     private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
     private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
@@ -323,12 +324,18 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
   private jobTapTimestamps: number[] = [];
   isJobComplete(job: any): boolean {
     const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
-    return status === 'inspected'
-      || status === 'invoiced'
-      || status === 'complete'
-      || status === 'inspection complete'
-      || status === 'estimated'
-      || status === 'sold';
+    const terminalStatuses = ['inspected', 'invoiced', 'complete', 'inspection complete', 'estimated', 'sold'];
+    return terminalStatuses.includes(status);
+  }
+
+  private isTechnicianAssignmentComplete(job: any): boolean {
+    const assignmentStatus = (job?._techAssignmentStatus || '').toString().trim().toLowerCase();
+    return assignmentStatus === 'completed' || assignmentStatus === 'complete' || assignmentStatus === 'return required';
+  }
+
+  private isLeadTechnician(): boolean {
+    const role = (this.tech?.role || '').toString().trim().toLowerCase();
+    return role.includes('lead');
   }
 
   private isInspectedJob(job: any): boolean {
@@ -469,12 +476,28 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       return 'SELECT JOB';
     }
 
-    const label = this.jobActionStates[selectedJob._jobActionIndex || 0];
+    const isParentComplete = this.isJobComplete(selectedJob);
+    const isAssignmentComplete = this.isTechnicianAssignmentComplete(selectedJob);
+    const leadFlag = this.isLeadTechnician();
+    const actionIndex = selectedJob._jobActionIndex || 0;
+
+    let label: string;
+    if (isParentComplete || isAssignmentComplete) {
+      label = 'COMPLETED';
+    } else {
+      label = this.jobActionStates[actionIndex];
+    }
+
     console.log('[DIAG][getSelectedJobActionLabel]', {
+      technicianName: `${this.tech?.firstName || ''} ${this.tech?.lastName || ''}`.trim() || 'UNKNOWN',
+      roleString: this.tech?.role || 'EMPTY',
+      isLeadTechnician: leadFlag,
       serviceOrderId: this.selectedJobRecordId,
       parentStatus: selectedJob?.status || selectedJob?.['11']?.value,
       _techAssignmentStatus: selectedJob?._techAssignmentStatus,
-      _jobActionIndex: selectedJob._jobActionIndex,
+      isParentComplete,
+      isAssignmentComplete,
+      _jobActionIndex: actionIndex,
       label,
     });
     return label;
@@ -484,6 +507,14 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     const selectedJob = this.getSelectedJob();
     if (!selectedJob) {
       return 'medium';
+    }
+
+    if (this.isJobComplete(selectedJob)) {
+      return 'medium';
+    }
+
+    if (this.isTechnicianAssignmentComplete(selectedJob)) {
+      return this.isLeadTechnician() ? 'success' : 'medium';
     }
 
     const currentIndex = selectedJob._jobActionIndex || 0;
@@ -516,6 +547,14 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
   }
 
   getJobStatusLabel(job: any) {
+    const assignmentStatus = (job?._techAssignmentStatus || '').toString().trim().toLowerCase();
+    if (assignmentStatus === 'completed' || assignmentStatus === 'complete') {
+      return 'Completed';
+    }
+    if (assignmentStatus === 'return required') {
+      return 'Return Required';
+    }
+
     if (this.workflowLockedJobRecordId === this.getJobRecordId(job)) {
       const currentIndex = job?._jobActionIndex || 0;
       if (currentIndex === 1) {
@@ -530,6 +569,14 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
   }
 
   getJobStatusColor(job: any) {
+    const assignmentStatus = (job?._techAssignmentStatus || '').toString().trim().toLowerCase();
+    if (assignmentStatus === 'completed' || assignmentStatus === 'complete') {
+      return 'success';
+    }
+    if (assignmentStatus === 'return required') {
+      return 'warning';
+    }
+
     if (this.workflowLockedJobRecordId === this.getJobRecordId(job)) {
       const currentIndex = job?._jobActionIndex || 0;
       if (currentIndex === 1) {
@@ -545,7 +592,16 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
   isWorkflowActionDisabled() {
     const selectedJob = this.getSelectedJob();
-    return !this.isClockedIn || !this.selectedJobRecordId || !!selectedJob?._isPaused;
+    if (!this.isClockedIn || !this.selectedJobRecordId || !!selectedJob?._isPaused || this.isJobComplete(selectedJob)) {
+      return true;
+    }
+
+    // Completed regular technicians cannot dispatch again; leads can start wrap-up.
+    if (this.isTechnicianAssignmentComplete(selectedJob)) {
+      return !this.isLeadTechnician();
+    }
+
+    return false;
   }
 
   isJobPaused() {
@@ -554,7 +610,12 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
   async advanceSelectedJobAction() {
     const selectedJob = this.getSelectedJob();
-    if (!selectedJob) {
+    if (!selectedJob || this.isJobComplete(selectedJob)) {
+      return;
+    }
+
+    // Completed assignments are terminal; per-job START WRAP-UP is handled in viewJob().
+    if (this.isTechnicianAssignmentComplete(selectedJob)) {
       return;
     }
 
@@ -684,13 +745,41 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     await this.loadingService.withLoading(
       'Completing...',
       async () => {
-        const completionStatus = 'Invoiced';
-        const didComplete = await this.updateSelectedJobStatus(completionStatus, 'Complete');
-        if (!didComplete) {
+        const serviceOrderId = selectedRecordId;
+
+        // Verify all assigned tasks are marked finished before completing the technician assignment.
+        const tasks = await this.authService.getServiceOrderTasks(serviceOrderId);
+        const finishedTaskIds = await this.collaborationService.getSessionFinishedTaskIds(serviceOrderId);
+        const unfinishedTasks = tasks.filter((task: ServiceOrderTask) => !finishedTaskIds.includes(task.id));
+
+        if (unfinishedTasks.length > 0) {
+          await this.presentUnfinishedTasksAlert(unfinishedTasks);
           return;
         }
 
-        if (completionStatus === 'Invoiced' && this.activeTimecardRecordId) {
+        // All tasks finished: mark this technician's assignment as Completed and log the event.
+        // Reuse the existing /service-order/update-workflow endpoint (Dispatch/Arrive use it).
+        // Pass parent status 'In Progress' so the parent Service Order remains unchanged;
+        // the backend uses workflowEventType 'Complete' to set the technician assignment to Completed.
+        const workflowLog = await this.buildWorkflowLogPayload(
+          'Complete',
+          'Technician completed all assigned tasks.'
+        );
+        const technicianContext = {
+          technicianName: `${this.tech?.firstName || ''} ${this.tech?.lastName || ''}`.trim(),
+          technicianPhotoUrl: this.tech?.photoUrl || '',
+        };
+        const didUpdate = await this.authService.updateServiceOrderStatus(
+          serviceOrderId,
+          'In Progress',
+          workflowLog,
+          technicianContext
+        );
+        if (!didUpdate) {
+          return;
+        }
+
+        if (this.activeTimecardRecordId) {
           try {
             const didRecordEvent = await this.authService.recordTimecardJobEvent(
               this.activeTimecardRecordId,
@@ -704,6 +793,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
           }
         }
 
+        selectedJob._techAssignmentStatus = 'Completed';
         selectedJob._jobActionIndex = 0;
         selectedJob._isPaused = false;
         this.workflowLockedJobRecordId = null;
@@ -713,6 +803,16 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
         await this.fetchScheduleForDate(this.today);
       }
     );
+  }
+
+  private async presentUnfinishedTasksAlert(unfinishedTasks: ServiceOrderTask[]) {
+    const taskList = unfinishedTasks.map((task) => `• ${task.taskName}`).join('<br>');
+    const alert = await this.alertController.create({
+      header: 'Incomplete Tasks',
+      message: `Please finish all assigned tasks before completing this service order.<br><br>${taskList}`,
+      buttons: ['OK'],
+    });
+    await alert.present();
   }
 
   private async completeInspectionFromDraft(serviceOrderId: string): Promise<boolean> {
@@ -1793,9 +1893,18 @@ async ngOnInit() {
         firstName: userData[6]?.value,
         lastName: userData[7]?.value,
         phone: userData[9]?.value,
-        role: (userData?.role || userData?.['role']?.value || '').toString().trim(),
+        role: String(userData[17]?.value || '').trim(), // Employee Field ID 17 = Role
         photoUrl: userData[66]?.value?.url || ''
       };
+
+      // --- TEMP LEAD ROLE DIAGNOSTICS ---
+      console.log('[DIAG][LeadRole] Technician context loaded:', {
+        technicianName: `${this.tech.firstName || ''} ${this.tech.lastName || ''}`.trim() || 'UNKNOWN',
+        roleString: this.tech.role || 'EMPTY',
+        isLeadTechnician: this.isLeadTechnician(),
+        roleField17: userData[17]?.value,
+      });
+      // ----------------------------------
 
 // --- Live Backend Timecard Restoration Guard ---
       try {
@@ -2022,6 +2131,11 @@ async ngOnInit() {
       return 'START ESTIMATE';
     }
 
+    // Lead technician with a completed assignment sees START WRAP-UP on the job card.
+    if (this.isLeadTechnician() && this.isTechnicianAssignmentComplete(job)) {
+      return 'START WRAP-UP';
+    }
+
     return this.isInProgressJob(job) ? 'RETURN TO HUB' : 'VIEW JOB';
   }
 
@@ -2061,6 +2175,12 @@ async ngOnInit() {
 
     if (status === 'estimated') {
       this.openEstimate(jobRecordId, job, EstimateWorkflow.REVISE);
+      return;
+    }
+
+    // Lead technician with a completed assignment launches the Wrap-Up view.
+    if (this.isLeadTechnician() && this.isTechnicianAssignmentComplete(job)) {
+      this.openJobDetail(jobRecordId, 'work', false, 'wrapup');
       return;
     }
 
@@ -2154,12 +2274,21 @@ async ngOnInit() {
     });
   }
 
-  private openJobDetail(jobRecordId: string, mode: 'view' | 'work', paused = false) {
+  private openJobDetail(
+    jobRecordId: string,
+    mode: 'view' | 'work',
+    paused = false,
+    serviceOrderView: 'hub' | 'wrapup' = 'hub'
+  ) {
     localStorage.setItem(HomePage.ACTIVE_JOB_ID_STORAGE_KEY, jobRecordId);
     localStorage.setItem(HomePage.ACTIVE_JOB_MODE_STORAGE_KEY, mode);
+    localStorage.setItem(
+      HomePage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY,
+      serviceOrderView
+    );
     localStorage.setItem(HomePage.ACTIVE_JOB_PAUSED_STORAGE_KEY, paused ? '1' : '0');
     this.router.navigate(['/job-detail', jobRecordId], {
-      queryParams: { mode, paused: paused ? '1' : '0' },
+      queryParams: { mode, view: serviceOrderView, paused: paused ? '1' : '0' },
     });
   }
 
