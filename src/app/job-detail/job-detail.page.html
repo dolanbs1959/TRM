@@ -1,4 +1,4 @@
-<ion-header [translucent]="false">
+﻿<ion-header [translucent]="false">
   <ion-toolbar color="danger" class="main-header">
     <ion-buttons slot="start">
       <ion-img src="assets/TRM_logo.png" class="header-logo-large"></ion-img>
@@ -30,7 +30,7 @@
       <div class="payload-header">Stage: {{ job['40']?.value || 'Unknown' }}</div>
       <div class="mode-actions">
         <ion-button
-          *ngIf="isServiceOrderHub() || isWrapUpView()"
+          *ngIf="isServiceOrderHub()"
           fill="clear"
           size="small"
           class="refresh-collaboration-btn"
@@ -118,7 +118,7 @@
     </div>
 
     <!-- ========================================================== -->
-    <!-- INSPECTION HUB — visible for inspection jobs in all modes  -->
+    <!-- INSPECTION HUB â€” visible for inspection jobs in all modes  -->
     <!-- ========================================================== -->
     <div *ngIf="isInspection()" class="payload-body">
       <h3>Inspection Hub - Location: <strong>{{ getFieldValue(16) }}</strong></h3>
@@ -183,7 +183,7 @@
 
         <div *ngIf="roofsLoading" class="roof-loading">
           <ion-spinner name="crescent" color="danger"></ion-spinner>
-          <span>Loading roofs…</span>
+          <span>Loading roofsâ€¦</span>
         </div>
 
         <div *ngIf="!roofsLoading && roofs.length === 0" class="roof-empty">
@@ -546,11 +546,21 @@
     </div>
 
     <!-- ========================================================== -->
-    <!-- LEAD TECH WRAP-UP HUB — Service Order wrap-up mode -->
+    <!-- LEAD TECH WRAP-UP HUB â€” Service Order wrap-up mode -->
     <!-- ========================================================== -->
     <div *ngIf="isWrapUpView()" class="payload-body wrap-up-hub">
       <div class="wrap-up-title-row">
         <h3>Lead Tech Wrap-Up</h3>
+        <ion-button
+          class="wrapup-refresh-btn"
+          fill="solid"
+          color="danger"
+          size="small"
+          (click)="refreshCollaborationData()"
+          [disabled]="isRefreshingCollaboration">
+          <ion-spinner *ngIf="isRefreshingCollaboration" name="crescent"></ion-spinner>
+          <span *ngIf="!isRefreshingCollaboration">Refresh</span>
+        </ion-button>
       </div>
 
       <section class="wrap-up-section">
@@ -558,11 +568,11 @@
         <div class="detail-grid">
           <div class="detail-item">
             <span class="detail-label">Lead Technician</span>
-            <input type="text" [(ngModel)]="wrapUpForm.leadTechnician" class="wrap-up-input" placeholder="Lead technician name" />
+            <span class="detail-value">{{ getLeadTechnicianDisplayName() }}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Crew Members</span>
-            <input type="text" [(ngModel)]="wrapUpForm.crewMembers" class="wrap-up-input" placeholder="Assigned technicians" />
+            <span class="detail-value">{{ getCrewMembersDisplay() || 'Loading...' }}</span>
           </div>
         </div>
       </section>
@@ -572,21 +582,202 @@
         <div class="detail-grid">
           <div class="detail-item">
             <span class="detail-label">Arrival Time</span>
-            <input type="time" [(ngModel)]="wrapUpForm.arrivalTime" class="wrap-up-input" />
+            <span class="detail-value">{{ getEarliestArrivalDisplay() }}</span>
           </div>
           <div class="detail-item">
             <span class="detail-label">Completion Time</span>
-            <input type="time" [(ngModel)]="wrapUpForm.completionTime" class="wrap-up-input" />
+            <span class="detail-value wrap-up-placeholder-text">TBD â€” Automatically recorded upon successful submission.</span>
           </div>
         </div>
       </section>
 
       <section class="wrap-up-section">
+        <h4 class="wrap-up-section-title">Customer Service Information</h4>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Customer Home On Arrival</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'yes'" (click)="wrapUpForm.customerHomeOnArrival = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'no'" (click)="wrapUpForm.customerHomeOnArrival = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'na'" (click)="wrapUpForm.customerHomeOnArrival = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Customer Home On Departure</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'yes'" (click)="wrapUpForm.customerHomeOnDeparture = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'no'" (click)="wrapUpForm.customerHomeOnDeparture = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'na'" (click)="wrapUpForm.customerHomeOnDeparture = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Customer Walked Around Home</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'yes'" (click)="wrapUpForm.customerWalkedAround = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'no'" (click)="wrapUpForm.customerWalkedAround = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'na'" (click)="wrapUpForm.customerWalkedAround = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Photos Taken</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.photosTaken === 'yes'" (click)="wrapUpForm.photosTaken = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.photosTaken === 'no'" (click)="wrapUpForm.photosTaken = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.photosTaken === 'na'" (click)="wrapUpForm.photosTaken = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">All Windows Closed On Home</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'yes'" (click)="wrapUpForm.allWindowsClosed = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'no'" (click)="wrapUpForm.allWindowsClosed = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'na'" (click)="wrapUpForm.allWindowsClosed = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Vehicles Moved Away From Home</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'yes'" (click)="wrapUpForm.vehiclesMovedAway = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'no'" (click)="wrapUpForm.vehiclesMovedAway = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'na'" (click)="wrapUpForm.vehiclesMovedAway = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
+        <div class="wrap-up-section-header">
+          <h4 class="wrap-up-section-title">Ordered Services Completed</h4>
+          <span class="wrap-up-task-counter" *ngIf="serviceTasks.length > 0">
+            {{ getFinishedTaskCount() }} of {{ serviceTasks.length }} finished
+          </span>
+        </div>
+        <p class="wrap-up-helper" *ngIf="serviceTasks.length === 0">No service tasks assigned.</p>
+        <div class="wrap-up-task-list" *ngIf="serviceTasks.length > 0">
+          <ng-container *ngFor="let group of tasksByCategory">
+            <h5 class="wrap-up-category-heading">{{ group.category }}</h5>
+            <ng-container *ngFor="let task of group.tasks">
+              <div class="wrap-up-task-row" [class.wrap-up-task-row--finished]="isTaskFinished(task.id)">
+                <ion-icon [name]="isTaskFinished(task.id) ? 'checkmark-circle' : 'ellipse-outline'"></ion-icon>
+                <span class="wrap-up-task-name">{{ task.taskName }}</span>
+                <span *ngIf="task.quantity != null" class="wrap-up-task-qty">Qty: {{ task.quantity }}</span>
+              </div>
+              <div class="wrap-up-task-note" *ngIf="taskNotes[task.id]?.trim()">
+                <span class="wrap-up-task-note-label">Notes:</span>
+                <span class="wrap-up-task-note-text">{{ taskNotes[task.id] }}</span>
+              </div>
+            </ng-container>
+          </ng-container>
+        </div>
+        <div class="wrap-up-textarea-wrap">
+          <label>Additional Services Completed Notes</label>
+          <textarea [(ngModel)]="wrapUpForm.servicesCompletedNotes" rows="3" placeholder="Notes on completed services"></textarea>
+        </div>
+      </section>
+
+      <section class="wrap-up-section">
         <h4 class="wrap-up-section-title">Service & Property Preparation</h4>
-        <label class="wrap-up-checkbox">
-          <input type="checkbox" [(ngModel)]="wrapUpForm.prepWalkthroughDone" />
-          <span>Pre-service walkthrough / preparation completed</span>
-        </label>
+
+        <h5 class="wrap-up-subsection-heading">Moved / Tarped Items</h5>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Flower Beds</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'yes'" (click)="wrapUpForm.movedFlowerBeds = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'no'" (click)="wrapUpForm.movedFlowerBeds = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'na'" (click)="wrapUpForm.movedFlowerBeds = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Patio Furniture</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'yes'" (click)="wrapUpForm.movedPatioFurniture = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'no'" (click)="wrapUpForm.movedPatioFurniture = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'na'" (click)="wrapUpForm.movedPatioFurniture = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Flowers / Hanging Baskets</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'yes'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'no'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'na'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Miscellaneous Outdoor Items</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'yes'" (click)="wrapUpForm.movedMiscOutdoorItems = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'no'" (click)="wrapUpForm.movedMiscOutdoorItems = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'na'" (click)="wrapUpForm.movedMiscOutdoorItems = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Shrubs / Hedges / Trees</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'yes'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'no'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'na'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+
+        <h5 class="wrap-up-subsection-heading">Other</h5>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Hoses Ran Along Concrete (Not Grass)</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'yes'" (click)="wrapUpForm.hosesRanAlongConcrete = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'no'" (click)="wrapUpForm.hosesRanAlongConcrete = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'na'" (click)="wrapUpForm.hosesRanAlongConcrete = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+
+        <h5 class="wrap-up-subsection-heading">Basic Service Check</h5>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Roof Cleared of All Moss/Debris</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'yes'" (click)="wrapUpForm.roofClearedOfDebris = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'no'" (click)="wrapUpForm.roofClearedOfDebris = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'na'" (click)="wrapUpForm.roofClearedOfDebris = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">All Gutters/Downspouts Cleared</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'yes'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'no'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'na'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">All Included Roofs Serviced (Shed, Etc.)</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'yes'" (click)="wrapUpForm.allIncludedRoofsServiced = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'no'" (click)="wrapUpForm.allIncludedRoofsServiced = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'na'" (click)="wrapUpForm.allIncludedRoofsServiced = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Plants Rinsed Before Treatment</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'yes'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'no'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'na'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Plants Rinsed After Treatment</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'yes'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'no'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'na'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+
         <div class="wrap-up-textarea-wrap">
           <label>Preparation Notes</label>
           <textarea [(ngModel)]="wrapUpForm.prepNotes" rows="3" placeholder="Property prep notes..."></textarea>
@@ -594,109 +785,123 @@
       </section>
 
       <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Moved / Tarped Items</h4>
-        <div class="wrap-up-textarea-wrap">
-          <label>Items Moved</label>
-          <textarea [(ngModel)]="wrapUpForm.itemsMoved" rows="2" placeholder="Furniture, planters, etc."></textarea>
-        </div>
-        <div class="wrap-up-textarea-wrap">
-          <label>Items Tarped / Protected</label>
-          <textarea [(ngModel)]="wrapUpForm.itemsTarped" rows="2" placeholder="Tarped areas or protected surfaces"></textarea>
-        </div>
-      </section>
-
-      <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Basic Service Check</h4>
-        <label class="wrap-up-checkbox">
-          <input type="checkbox" [(ngModel)]="wrapUpForm.serviceCheckComplete" />
-          <span>Basic service check completed</span>
-        </label>
-        <div class="wrap-up-textarea-wrap">
-          <label>Service Check Notes</label>
-          <textarea [(ngModel)]="wrapUpForm.serviceCheckNotes" rows="3" placeholder="Service check observations"></textarea>
-        </div>
-      </section>
-
-      <section class="wrap-up-section">
         <h4 class="wrap-up-section-title">Service Completion & Property Clean-Up</h4>
-        <label class="wrap-up-checkbox">
-          <input type="checkbox" [(ngModel)]="wrapUpForm.cleanupComplete" />
-          <span>Property clean-up completed</span>
-        </label>
+
+        <h5 class="wrap-up-subsection-heading">Rinsed Items</h5>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Windows</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'yes'" (click)="wrapUpForm.rinsedWindows = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'no'" (click)="wrapUpForm.rinsedWindows = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'na'" (click)="wrapUpForm.rinsedWindows = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Siding</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'yes'" (click)="wrapUpForm.rinsedSiding = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'no'" (click)="wrapUpForm.rinsedSiding = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'na'" (click)="wrapUpForm.rinsedSiding = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Fascia / Soffits</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'yes'" (click)="wrapUpForm.rinsedFasciaSoffits = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'no'" (click)="wrapUpForm.rinsedFasciaSoffits = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'na'" (click)="wrapUpForm.rinsedFasciaSoffits = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Gutters</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'yes'" (click)="wrapUpForm.rinsedGutters = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'no'" (click)="wrapUpForm.rinsedGutters = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'na'" (click)="wrapUpForm.rinsedGutters = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+
+        <h5 class="wrap-up-subsection-heading">Cleared Of Debris (On, In, Around)</h5>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Decks / Patios</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'yes'" (click)="wrapUpForm.clearedDecksPatios = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'no'" (click)="wrapUpForm.clearedDecksPatios = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'na'" (click)="wrapUpForm.clearedDecksPatios = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Window Ledges</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'yes'" (click)="wrapUpForm.clearedWindowLedges = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'no'" (click)="wrapUpForm.clearedWindowLedges = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'na'" (click)="wrapUpForm.clearedWindowLedges = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Flower Beds</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'yes'" (click)="wrapUpForm.clearedFlowerBeds = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'no'" (click)="wrapUpForm.clearedFlowerBeds = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'na'" (click)="wrapUpForm.clearedFlowerBeds = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Shrubs / Hedges / Trees</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'yes'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'no'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'na'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Patio Furniture</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'yes'" (click)="wrapUpForm.clearedPatioFurniture = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'no'" (click)="wrapUpForm.clearedPatioFurniture = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'na'" (click)="wrapUpForm.clearedPatioFurniture = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Fence Line</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'yes'" (click)="wrapUpForm.clearedFenceLine = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'no'" (click)="wrapUpForm.clearedFenceLine = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'na'" (click)="wrapUpForm.clearedFenceLine = 'na'">N/A</button>
+            </div>
+          </div>
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">Neighbors Yards</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'yes'" (click)="wrapUpForm.clearedNeighborsYards = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'no'" (click)="wrapUpForm.clearedNeighborsYards = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'na'" (click)="wrapUpForm.clearedNeighborsYards = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+
+        <h5 class="wrap-up-subsection-heading">Other</h5>
+        <div class="wrap-up-checklist-group">
+          <div class="wrap-up-yn-row">
+            <span class="wrap-up-yn-label">All Gates Closed</span>
+            <div class="wrap-up-yn-toggle">
+              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'yes'" (click)="wrapUpForm.allGatesClosed = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'no'" (click)="wrapUpForm.allGatesClosed = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'na'" (click)="wrapUpForm.allGatesClosed = 'na'">N/A</button>
+            </div>
+          </div>
+        </div>
+
         <div class="wrap-up-textarea-wrap">
           <label>Clean-Up Notes</label>
           <textarea [(ngModel)]="wrapUpForm.cleanupNotes" rows="3" placeholder="Clean-up status / debris removal"></textarea>
         </div>
       </section>
 
-      <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Ordered Services Completed</h4>
-        <p class="wrap-up-helper" *ngIf="serviceTasks.length > 0">
-          {{ getFinishedTaskCount() }} of {{ serviceTasks.length }} tasks marked finished
-        </p>
-        <p class="wrap-up-helper" *ngIf="serviceTasks.length === 0">No service tasks assigned.</p>
-        <div class="wrap-up-task-list" *ngIf="serviceTasks.length > 0">
-          <ng-container *ngFor="let task of serviceTasks">
-            <div class="wrap-up-task-row" [class.wrap-up-task-row--finished]="isTaskFinished(task.id)">
-              <ion-icon [name]="isTaskFinished(task.id) ? 'checkmark-circle' : 'ellipse-outline'"></ion-icon>
-              <span class="wrap-up-task-name">{{ task.taskName }}</span>
-              <span *ngIf="task.quantity != null" class="wrap-up-task-qty">Qty: {{ task.quantity }}</span>
-            </div>
-            <div class="wrap-up-task-note" *ngIf="taskNotes[task.id]?.trim()">
-              <span class="wrap-up-task-note-label">Notes:</span>
-              <span class="wrap-up-task-note-text">{{ taskNotes[task.id] }}</span>
-            </div>
-          </ng-container>
-        </div>
-        <div class="wrap-up-textarea-wrap">
-          <label>Services Completed Notes</label>
-          <textarea [(ngModel)]="wrapUpForm.servicesCompletedNotes" rows="3" placeholder="Notes on completed services"></textarea>
-        </div>
-      </section>
 
-      <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Customer Service Information</h4>
-        <label class="wrap-up-checkbox">
-          <input type="checkbox" [(ngModel)]="wrapUpForm.customerPresent" />
-          <span>Customer was present</span>
-        </label>
-        <div class="detail-grid">
-          <div class="detail-item">
-            <span class="detail-label">Customer Name</span>
-            <input type="text" [(ngModel)]="wrapUpForm.customerName" class="wrap-up-input" placeholder="Customer name" />
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">Customer Contact</span>
-            <input type="text" [(ngModel)]="wrapUpForm.customerContact" class="wrap-up-input" placeholder="Phone or email" />
-          </div>
-        </div>
-      </section>
-
-      <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Customer Confirmation / Approval</h4>
-        <label class="wrap-up-checkbox">
-          <input type="checkbox" [(ngModel)]="wrapUpForm.customerApproved" />
-          <span>Customer confirmed / approved work</span>
-        </label>
-        <div class="detail-item">
-          <span class="detail-label">Approval Method</span>
-          <input type="text" [(ngModel)]="wrapUpForm.approvalMethod" class="wrap-up-input" placeholder="e.g., verbal, signature, text" />
-        </div>
-      </section>
-
-      <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Customer Notes</h4>
-        <div class="wrap-up-textarea-wrap">
-          <textarea [(ngModel)]="wrapUpForm.customerNotes" rows="4" placeholder="Customer-facing notes"></textarea>
-        </div>
-      </section>
-
-      <section class="wrap-up-section">
-        <h4 class="wrap-up-section-title">Internal Technician Notes</h4>
-        <div class="wrap-up-textarea-wrap">
-          <textarea [(ngModel)]="wrapUpForm.internalNotes" rows="4" placeholder="Internal notes for the office"></textarea>
-        </div>
-      </section>
 
       <section class="wrap-up-section">
         <div class="wrap-up-section-header">
@@ -801,7 +1006,7 @@
     </div>
 
     <!-- ========================================================== -->
-    <!-- SERVICE ORDER HUB — Service Tasks for service-order jobs -->
+    <!-- SERVICE ORDER HUB â€” Service Tasks for service-order jobs -->
     <!-- ========================================================== -->
     <div *ngIf="isServiceOrderHub()" class="payload-body service-order-hub">
       <h3>Service Tasks</h3>
@@ -922,7 +1127,7 @@
               [color]="isTaskFinished(task.id) ? 'medium' : 'success'"
               [disabled]="isHubInputLocked() || isTaskFinished(task.id)"
               (click)="markTaskFinished(task.id)">
-              {{ isTaskFinished(task.id) ? '✓ Task Finished' : 'Task Finished' }}
+              {{ isTaskFinished(task.id) ? 'âœ“ Task Finished' : 'Task Finished' }}
             </ion-button>
           </div>
         </ion-accordion>

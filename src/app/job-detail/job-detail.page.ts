@@ -81,6 +81,7 @@ export class JobDetailPage implements OnInit, DoCheck {
 
   // Service Order Tasks state
   serviceTasks: ServiceOrderTask[] = [];
+  tasksByCategory: { category: string; tasks: ServiceOrderTask[] }[] = [];
   serviceTasksLoading = false;
   isRefreshingCollaboration = false;
 
@@ -90,6 +91,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   taskPhotoState: Record<string, InspectionPhotoAttachment[]> = {};
   finishedTaskIds: Set<string> = new Set();
   taskNotes: Record<string, string> = {};
+  arrivalTimestamps: Record<string, { technicianName: string; arrivedAt: string }> = {};
   viewingPhoto: InspectionPhotoAttachment | null = null;
   selectedWrapUpPhotoIds: Set<string> = new Set();
 
@@ -169,23 +171,39 @@ export class JobDetailPage implements OnInit, DoCheck {
     crewMembers: '',
     arrivalTime: '',
     completionTime: '',
-    prepWalkthroughDone: false,
+    customerHomeOnArrival: '' as '' | 'yes' | 'no' | 'na',
+    customerHomeOnDeparture: '' as '' | 'yes' | 'no' | 'na',
+    customerWalkedAround: '' as '' | 'yes' | 'no' | 'na',
+    photosTaken: '' as '' | 'yes' | 'no' | 'na',
+    allWindowsClosed: '' as '' | 'yes' | 'no' | 'na',
+    vehiclesMovedAway: '' as '' | 'yes' | 'no' | 'na',
+    movedFlowerBeds: '' as '' | 'yes' | 'no' | 'na',
+    movedPatioFurniture: '' as '' | 'yes' | 'no' | 'na',
+    movedFlowersHangingBaskets: '' as '' | 'yes' | 'no' | 'na',
+    movedMiscOutdoorItems: '' as '' | 'yes' | 'no' | 'na',
+    movedShrubsHedgesTrees: '' as '' | 'yes' | 'no' | 'na',
+    hosesRanAlongConcrete: '' as '' | 'yes' | 'no' | 'na',
+    roofClearedOfDebris: '' as '' | 'yes' | 'no' | 'na',
+    allGuttersDownspoutsCleared: '' as '' | 'yes' | 'no' | 'na',
+    allIncludedRoofsServiced: '' as '' | 'yes' | 'no' | 'na',
+    plantsRinsedBeforeTreatment: '' as '' | 'yes' | 'no' | 'na',
+    plantsRinsedAfterTreatment: '' as '' | 'yes' | 'no' | 'na',
     prepNotes: '',
-    itemsMoved: '',
-    itemsTarped: '',
-    serviceCheckComplete: false,
-    serviceCheckNotes: '',
-    cleanupComplete: false,
+    rinsedWindows: '' as '' | 'yes' | 'no' | 'na',
+    rinsedSiding: '' as '' | 'yes' | 'no' | 'na',
+    rinsedFasciaSoffits: '' as '' | 'yes' | 'no' | 'na',
+    rinsedGutters: '' as '' | 'yes' | 'no' | 'na',
+    clearedDecksPatios: '' as '' | 'yes' | 'no' | 'na',
+    clearedWindowLedges: '' as '' | 'yes' | 'no' | 'na',
+    clearedFlowerBeds: '' as '' | 'yes' | 'no' | 'na',
+    clearedShrubsHedgesTrees: '' as '' | 'yes' | 'no' | 'na',
+    clearedPatioFurniture: '' as '' | 'yes' | 'no' | 'na',
+    clearedFenceLine: '' as '' | 'yes' | 'no' | 'na',
+    clearedNeighborsYards: '' as '' | 'yes' | 'no' | 'na',
+    allGatesClosed: '' as '' | 'yes' | 'no' | 'na',
     cleanupNotes: '',
     allServicesCompleted: false,
     servicesCompletedNotes: '',
-    customerPresent: false,
-    customerName: '',
-    customerContact: '',
-    customerApproved: false,
-    approvalMethod: '',
-    customerNotes: '',
-    internalNotes: '',
   };
 
   constructor(
@@ -355,6 +373,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   async loadServiceOrderTasks() {
     this.serviceTasksLoading = true;
     this.serviceTasks = await this.authService.getServiceOrderTasks(this.serviceOrderId);
+    this.rebuildTasksByCategory();
     await this.loadServiceOrderCollaborationData();
     this.serviceTasksLoading = false;
   }
@@ -417,6 +436,12 @@ export class JobDetailPage implements OnInit, DoCheck {
       });
     } catch {
       this.taskPhotoState = {};
+    }
+    // Restore arrival timestamps from Firestore session
+    try {
+      this.arrivalTimestamps = await this.collaborationService.getArrivalTimestamps(this.serviceOrderId);
+    } catch {
+      this.arrivalTimestamps = {};
     }
   }
 
@@ -749,17 +774,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   private initializeWrapUpForm() {
-    this.skipWrapUpDraftPersistence = true;
-    const user = this.authService.getUser();
-    const leadName = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
-    this.wrapUpForm = {
-      ...this.wrapUpForm,
-      leadTechnician: leadName || this.wrapUpForm.leadTechnician,
-      customerName: this.getCustomerName() || this.wrapUpForm.customerName,
-      customerContact: this.getCustomerPhone() || this.wrapUpForm.customerContact,
-      completionTime: this.getCurrentTimeInputValue(),
-    };
-    this.skipWrapUpDraftPersistence = false;
+    // No-op: previously populated customer fields that have been removed.
   }
 
   private getCurrentTimeInputValue(): string {
@@ -940,16 +955,91 @@ export class JobDetailPage implements OnInit, DoCheck {
   isWrapUpFormValid(): boolean {
     // Core required fields for the Lead Tech Wrap-Up submission gate.
     // Expand this checklist as business rules are defined.
+    // leadTechnician, arrivalTime, and completionTime are now auto-populated
+    // and no longer gated here.
     return (
-      (this.wrapUpForm.leadTechnician || '').toString().trim().length > 0 &&
-      (this.wrapUpForm.arrivalTime || '').toString().trim().length > 0 &&
-      (this.wrapUpForm.completionTime || '').toString().trim().length > 0 &&
-      this.wrapUpForm.prepWalkthroughDone &&
-      this.wrapUpForm.serviceCheckComplete &&
-      this.wrapUpForm.cleanupComplete &&
-      this.wrapUpForm.allServicesCompleted &&
-      this.wrapUpForm.customerApproved
+      !!this.wrapUpForm.customerHomeOnArrival &&
+      !!this.wrapUpForm.customerHomeOnDeparture &&
+      !!this.wrapUpForm.customerWalkedAround &&
+      !!this.wrapUpForm.photosTaken &&
+      !!this.wrapUpForm.allWindowsClosed &&
+      !!this.wrapUpForm.vehiclesMovedAway &&
+      !!this.wrapUpForm.movedFlowerBeds &&
+      !!this.wrapUpForm.movedPatioFurniture &&
+      !!this.wrapUpForm.movedFlowersHangingBaskets &&
+      !!this.wrapUpForm.movedMiscOutdoorItems &&
+      !!this.wrapUpForm.movedShrubsHedgesTrees &&
+      !!this.wrapUpForm.hosesRanAlongConcrete &&
+      !!this.wrapUpForm.roofClearedOfDebris &&
+      !!this.wrapUpForm.allGuttersDownspoutsCleared &&
+      !!this.wrapUpForm.allIncludedRoofsServiced &&
+      !!this.wrapUpForm.plantsRinsedBeforeTreatment &&
+      !!this.wrapUpForm.plantsRinsedAfterTreatment &&
+      !!this.wrapUpForm.rinsedWindows &&
+      !!this.wrapUpForm.rinsedSiding &&
+      !!this.wrapUpForm.rinsedFasciaSoffits &&
+      !!this.wrapUpForm.rinsedGutters &&
+      !!this.wrapUpForm.clearedDecksPatios &&
+      !!this.wrapUpForm.clearedWindowLedges &&
+      !!this.wrapUpForm.clearedFlowerBeds &&
+      !!this.wrapUpForm.clearedShrubsHedgesTrees &&
+      !!this.wrapUpForm.clearedPatioFurniture &&
+      !!this.wrapUpForm.clearedFenceLine &&
+      !!this.wrapUpForm.clearedNeighborsYards &&
+      !!this.wrapUpForm.allGatesClosed &&
+      this.wrapUpForm.allServicesCompleted
     );
+  }
+
+  getLeadTechnicianDisplayName(): string {
+    const user = this.authService.getUser();
+    const firstName = String(user?.[6]?.value || '').trim();
+    const lastName = String(user?.[7]?.value || '').trim();
+    return `${firstName} ${lastName}`.trim() || 'Unknown';
+  }
+
+  private rebuildTasksByCategory(): void {
+    const grouped = new Map<string, ServiceOrderTask[]>();
+    for (const task of this.serviceTasks) {
+      const category = task.serviceCategory || 'Uncategorized';
+      if (!grouped.has(category)) {
+        grouped.set(category, []);
+      }
+      grouped.get(category)!.push(task);
+    }
+    this.tasksByCategory = Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([category, tasks]) => ({
+        category,
+        tasks: tasks.slice().sort((a, b) => a.taskName.localeCompare(b.taskName)),
+      }));
+  }
+
+  getCrewMembersDisplay(): string {
+    if (this.serviceOrderAssignments.length === 0) {
+      return '';
+    }
+    return this.serviceOrderAssignments
+      .map(a => a.technicianName)
+      .filter(n => !!n)
+      .join(', ');
+  }
+
+  getEarliestArrivalDisplay(): string {
+    const entries = Object.values(this.arrivalTimestamps);
+    if (entries.length === 0) {
+      return 'No arrivals recorded yet.';
+    }
+    const sorted = entries
+      .filter(e => !!e.arrivedAt)
+      .sort((a, b) => new Date(a.arrivedAt).getTime() - new Date(b.arrivedAt).getTime());
+    if (sorted.length === 0) {
+      return 'No arrivals recorded yet.';
+    }
+    const earliest = sorted[0];
+    const dt = new Date(earliest.arrivedAt);
+    const timeStr = dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return `${timeStr} (${earliest.technicianName || 'Unknown'})`;
   }
 
   isSubmitWrapUpEnabled(): boolean {

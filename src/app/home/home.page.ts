@@ -324,7 +324,14 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
   private jobTapTimestamps: number[] = [];
   isJobComplete(job: any): boolean {
     const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
-    const terminalStatuses = ['inspected', 'invoiced', 'complete', 'inspection complete', 'estimated', 'sold'];
+    const terminalStatuses = [
+        'inspected',
+        'invoice review',
+        'complete',
+        'inspection complete',
+        'estimated',
+        'sold'
+      ];
     return terminalStatuses.includes(status);
   }
 
@@ -703,6 +710,13 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
           if (!this.isInspectionJob(selectedJob) && this.selectedJobRecordId) {
             this.collaborationService.createSession(String(this.selectedJobRecordId))
               .catch(err => console.warn('[SOCollaboration] createSession failed:', err));
+
+            const techId = String(this.tech?.id || '');
+            const techName = `${this.tech?.firstName || ''} ${this.tech?.lastName || ''}`.trim();
+            if (techId) {
+              this.collaborationService.recordArrival(String(this.selectedJobRecordId), techId, techName)
+                .catch(err => console.warn('[SOCollaboration] recordArrival failed:', err));
+            }
           }
         }
       );

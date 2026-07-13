@@ -4420,7 +4420,7 @@ app.post('/service-order/tasks', async (req, res) => {
         // 1. Fetch tasks
         const taskResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
             from: TABLES.SERVICE_ORDER_TASKS,
-            select: [3, 9, 36, 29, 38, 40, 30, 8, 18],
+            select: [3, 9, 36, 37, 29, 38, 40, 30, 8, 18],
             where: `{'9'.EX.'${escapedId}'}`,
             sortBy: [{ fieldId: 3, order: 'ASC' }]
         }, {
@@ -4432,6 +4432,7 @@ app.post('/service-order/tasks', async (req, res) => {
             id:                     (r['3']?.value  ?? '').toString(),
             relatedServiceOrder:    (r['9']?.value  ?? '').toString(),
             taskName:               (r['36']?.value ?? '').toString().trim(),
+            serviceCategory:        (r['37']?.value ?? '').toString().trim(),
             quantity:               r['29']?.value  ?? null,
             description:            (r['38']?.value ?? '').toString().trim(),
             specialInstructions:    (r['40']?.value ?? '').toString().trim(),

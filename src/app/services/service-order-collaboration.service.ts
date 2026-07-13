@@ -195,6 +195,42 @@ export class ServiceOrderCollaborationService {
     });
   }
 
+  async recordArrival(
+    serviceOrderId: string,
+    technicianId: string,
+    technicianName: string
+  ): Promise<void> {
+    const ref = doc(this.db, 'serviceOrders', serviceOrderId);
+    const now = new Date().toISOString();
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) {
+      await setDoc(ref, {
+        serviceOrderId,
+        createdAt: now,
+        lastUpdated: now,
+        arrivals: { [technicianId]: { technicianName, arrivedAt: now } },
+      });
+    } else {
+      await updateDoc(ref, {
+        [`arrivals.${technicianId}`]: { technicianName, arrivedAt: now },
+        lastUpdated: now,
+      });
+    }
+  }
+
+  async getArrivalTimestamps(
+    serviceOrderId: string
+  ): Promise<Record<string, { technicianName: string; arrivedAt: string }>> {
+    const ref = doc(this.db, 'serviceOrders', serviceOrderId);
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) {
+      return {};
+    }
+    const arrivals = snapshot.data()?.['arrivals'] as
+      Record<string, { technicianName: string; arrivedAt: string }> | undefined;
+    return arrivals && typeof arrivals === 'object' ? arrivals : {};
+  }
+
   async getSessionFinishedTaskIds(serviceOrderId: string): Promise<string[]> {
     const ref = doc(this.db, 'serviceOrders', serviceOrderId);
     const snapshot = await getDoc(ref);

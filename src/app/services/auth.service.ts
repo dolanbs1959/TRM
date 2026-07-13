@@ -45,6 +45,7 @@ export interface ServiceOrderTask {
   id: string;
   relatedServiceOrder: string;
   taskName: string;
+  serviceCategory: string;
   quantity: number | null;
   description: string;
   specialInstructions: string;
