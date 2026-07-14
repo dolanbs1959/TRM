@@ -52,6 +52,82 @@ interface InspectionSubmissionPayload {
   };
 }
 
+interface TechSheetPhoto {
+  slot: 'before' | 'after';
+  taskId: string;
+  fileName: string;
+  notes: string;
+  capturedAt: number;
+}
+
+interface TechSheetTask {
+  id: string;
+  taskName: string;
+  serviceCategory: string;
+  quantity: number | null;
+  estimatePrice: number | null;
+  sqFootage: number | null;
+  lineSubtotal: number | null;
+  isFinished: boolean;
+  technicianNote: string;
+}
+
+interface TechSheetCrewMember {
+  technicianId: string;
+  technicianName: string;
+  assignmentStatus: string;
+  arrivedAt: string | null;
+}
+
+interface TechSheetData {
+  serviceOrderId: string;
+  jobNumber: string;
+  wrapUpCompletedAt: string;
+  customerName: string;
+  serviceAddress: string;
+  locationName: string;
+  leadTechnicianName: string;
+  crewMembers: TechSheetCrewMember[];
+  earliestArrivalAt: string | null;
+  wrapUpForm: {
+    customerHomeOnArrival: '' | 'yes' | 'no' | 'na';
+    customerHomeOnDeparture: '' | 'yes' | 'no' | 'na';
+    customerWalkedAround: '' | 'yes' | 'no' | 'na';
+    photosTaken: '' | 'yes' | 'no' | 'na';
+    allWindowsClosed: '' | 'yes' | 'no' | 'na';
+    vehiclesMovedAway: '' | 'yes' | 'no' | 'na';
+    movedFlowerBeds: '' | 'yes' | 'no' | 'na';
+    movedPatioFurniture: '' | 'yes' | 'no' | 'na';
+    movedFlowersHangingBaskets: '' | 'yes' | 'no' | 'na';
+    movedMiscOutdoorItems: '' | 'yes' | 'no' | 'na';
+    movedShrubsHedgesTrees: '' | 'yes' | 'no' | 'na';
+    hosesRanAlongConcrete: '' | 'yes' | 'no' | 'na';
+    roofClearedOfDebris: '' | 'yes' | 'no' | 'na';
+    allGuttersDownspoutsCleared: '' | 'yes' | 'no' | 'na';
+    allIncludedRoofsServiced: '' | 'yes' | 'no' | 'na';
+    plantsRinsedBeforeTreatment: '' | 'yes' | 'no' | 'na';
+    plantsRinsedAfterTreatment: '' | 'yes' | 'no' | 'na';
+    prepNotes: string;
+    rinsedWindows: '' | 'yes' | 'no' | 'na';
+    rinsedSiding: '' | 'yes' | 'no' | 'na';
+    rinsedFasciaSoffits: '' | 'yes' | 'no' | 'na';
+    rinsedGutters: '' | 'yes' | 'no' | 'na';
+    clearedDecksPatios: '' | 'yes' | 'no' | 'na';
+    clearedWindowLedges: '' | 'yes' | 'no' | 'na';
+    clearedFlowerBeds: '' | 'yes' | 'no' | 'na';
+    clearedShrubsHedgesTrees: '' | 'yes' | 'no' | 'na';
+    clearedPatioFurniture: '' | 'yes' | 'no' | 'na';
+    clearedFenceLine: '' | 'yes' | 'no' | 'na';
+    clearedNeighborsYards: '' | 'yes' | 'no' | 'na';
+    allGatesClosed: '' | 'yes' | 'no' | 'na';
+    cleanupNotes: string;
+    allServicesCompleted: boolean;
+    servicesCompletedNotes: string;
+  };
+  tasks: TechSheetTask[];
+  selectedPhotos: TechSheetPhoto[];
+}
+
 @Component({
   selector: 'app-job-detail',
   templateUrl: './job-detail.page.html',
@@ -214,7 +290,7 @@ export class JobDetailPage implements OnInit, DoCheck {
     private collaborationService: ServiceOrderCollaborationService
   ) {}
 
-  private get serviceOrderId(): string {
+  get serviceOrderId(): string {
     return (this.activeJobId || '').toString().trim();
   }
 
@@ -509,7 +585,6 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   async beginTaskPhotoCapture(taskId: string, slot: 'before' | 'after', event?: Event) {
-    console.log('[DIAG] beginTaskPhotoCapture() called', { taskId, slot });
     event?.preventDefault();
     event?.stopPropagation();
 
@@ -529,13 +604,11 @@ export class JobDetailPage implements OnInit, DoCheck {
       });
 
       if (!photo?.dataUrl) {
-        console.log('[DIAG] beginTaskPhotoCapture() — no dataUrl returned from camera');
         return;
       }
 
       const optimizedDataUrl = await this.optimizePhotoDataUrl(photo.dataUrl);
       const photoBlob = await this.dataUrlToBlob(optimizedDataUrl);
-      console.log('[DIAG] beginTaskPhotoCapture() — pendingPhotoPreview set', { taskId, slot, blobSize: photoBlob?.size });
       this.pendingPhotoPreview = {
         sectionKey: null,
         taskId,
@@ -548,10 +621,8 @@ export class JobDetailPage implements OnInit, DoCheck {
     } catch (error: any) {
       const message = (error?.message || '').toString().toLowerCase();
       if (message.includes('cancel')) {
-        console.log('[DIAG] beginTaskPhotoCapture() — user cancelled camera');
         return;
       }
-      console.warn('[DIAG] beginTaskPhotoCapture() catch:', error);
     } finally {
       this.isCapturingPhoto = false;
     }
@@ -692,14 +763,6 @@ export class JobDetailPage implements OnInit, DoCheck {
       ''
     ).toString().trim().toLowerCase();
     const isLead = role.includes('lead');
-    console.log('[DIAG][JobDetail][isLeadTechnician]', {
-      hasUser: !!user,
-      roleProp: user?.role,
-      employeeRoleProp: user?.employeeRole,
-      field17: user?.['17']?.value,
-      computedRole: role,
-      isLead,
-    });
     return isLead;
   }
 
@@ -986,8 +1049,7 @@ export class JobDetailPage implements OnInit, DoCheck {
       !!this.wrapUpForm.clearedPatioFurniture &&
       !!this.wrapUpForm.clearedFenceLine &&
       !!this.wrapUpForm.clearedNeighborsYards &&
-      !!this.wrapUpForm.allGatesClosed &&
-      this.wrapUpForm.allServicesCompleted
+      !!this.wrapUpForm.allGatesClosed
     );
   }
 
@@ -1046,13 +1108,6 @@ export class JobDetailPage implements OnInit, DoCheck {
     return this.isAllTechnicianAssignmentsCompleted() && this.isWrapUpFormValid();
   }
 
-  async onSaveWrapUpDraft() {
-    this.persistWrapUpDraftIfChanged();
-    console.log('[WrapUp] Save Draft placeholder triggered.', {
-      serviceOrderId: this.serviceOrderId,
-    });
-  }
-
   async onSubmitWrapUpServiceOrder() {
     if (!this.isSubmitWrapUpEnabled()) {
       console.warn('[WrapUp] Submit blocked: assignments or validation incomplete.', {
@@ -1063,9 +1118,112 @@ export class JobDetailPage implements OnInit, DoCheck {
       return;
     }
 
-    console.log('[WrapUp] Submit Service Order placeholder triggered.', {
+    await this.submitServiceOrder();
+  }
+
+  private async submitServiceOrder() {
+    if (!this.isWrapUpFormValid()) {
+      console.warn('[SubmitServiceOrder] Validation failed — wrap-up form is incomplete.', {
+        serviceOrderId: this.serviceOrderId,
+      });
+      return;
+    }
+
+    const wrapUpCompletedAt = new Date().toISOString();
+
+    console.log('[SubmitServiceOrder] Wrap-up submission initiated.', {
       serviceOrderId: this.serviceOrderId,
+      wrapUpCompletedAt,
+      wrapUpForm: { ...this.wrapUpForm },
     });
+
+    const techSheetData = this.buildTechSheetData(wrapUpCompletedAt);
+
+    console.log('[SubmitServiceOrder] Tech Sheet data contract assembled.', techSheetData);
+
+    const combinedTaskNotes = this.serviceTasks
+      .map(t => ({ taskName: t.taskName, note: (this.taskNotes[t.id] || '').trim() }))
+      .filter(t => !!t.note)
+      .map(t => `${t.taskName}: ${t.note}`)
+      .join('\n');
+
+    const serviceOrderPayload = {
+      serviceOrderId: this.serviceOrderId,
+      parentStatus: 'Invoice Review',
+      // FID 73: combined technician task notes from all tasks
+      technicianTaskNotes: combinedTaskNotes,
+    };
+
+    const submissionPayload = { techSheetData, serviceOrderPayload };
+
+    console.log('[SubmitServiceOrder] Submitting to /service-order/submit.', {
+      serviceOrderId: this.serviceOrderId,
+      hasServiceOrderPayload: !!serviceOrderPayload,
+    });
+
+    const response = await this.authService.submitServiceOrder(submissionPayload);
+
+    console.log('[SubmitServiceOrder] Response received.', response);
+
+    if (!response.success) {
+      console.error('[SubmitServiceOrder] Submission failed.', {
+        serviceOrderId: this.serviceOrderId,
+        message: response.message,
+      });
+      return;
+    }
+  }
+
+  private buildTechSheetData(wrapUpCompletedAt: string): TechSheetData {
+    const allPhotos = [...this.getAllTaskBeforePhotos(), ...this.getAllTaskAfterPhotos()];
+    const selectedPhotos: TechSheetPhoto[] = allPhotos
+      .filter(p => this.isWrapUpPhotoSelected(p))
+      .map(p => ({
+        slot: p.slot as 'before' | 'after',
+        taskId: p.taskId || '',
+        fileName: p.fileName,
+        notes: p.notes,
+        capturedAt: p.capturedAt,
+      }));
+
+    const crewMembers: TechSheetCrewMember[] = this.serviceOrderAssignments.map(a => ({
+      technicianId: a.technicianId,
+      technicianName: a.technicianName,
+      assignmentStatus: a.assignmentStatus,
+      arrivedAt: this.arrivalTimestamps[a.technicianId]?.arrivedAt ?? null,
+    }));
+
+    const arrivalEntries = Object.values(this.arrivalTimestamps)
+      .filter(e => !!e.arrivedAt)
+      .sort((a, b) => new Date(a.arrivedAt).getTime() - new Date(b.arrivedAt).getTime());
+    const earliestArrivalAt = arrivalEntries[0]?.arrivedAt ?? null;
+
+    const tasks: TechSheetTask[] = this.serviceTasks.map(t => ({
+      id: t.id,
+      taskName: t.taskName,
+      serviceCategory: t.serviceCategory,
+      quantity: t.quantity,
+      estimatePrice: t.estimatePrice,
+      sqFootage: t.sqFootage,
+      lineSubtotal: t.lineSubtotal,
+      isFinished: this.isTaskFinished(t.id),
+      technicianNote: (this.taskNotes[t.id] || '').trim(),
+    }));
+
+    return {
+      serviceOrderId: this.serviceOrderId,
+      jobNumber: this.serviceOrderId,
+      wrapUpCompletedAt,
+      customerName: this.getCustomerName(),
+      serviceAddress: this.getCustomerAddressLine(),
+      locationName: this.getLocationName(),
+      leadTechnicianName: this.getLeadTechnicianDisplayName(),
+      crewMembers,
+      earliestArrivalAt,
+      wrapUpForm: { ...this.wrapUpForm },
+      tasks,
+      selectedPhotos,
+    };
   }
 
   cycleGroundInspectionItemState(item: { state: 0 | 1 | 2 }) {
@@ -1455,20 +1613,12 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   async acceptPendingPhoto() {
-    console.log('[DIAG] acceptPendingPhoto() entry — pendingPhotoPreview:', this.pendingPhotoPreview);
     if (!this.pendingPhotoPreview) {
-      console.log('[DIAG] acceptPendingPhoto() — early return: pendingPhotoPreview is null');
       return;
     }
 
     const { sectionKey, taskId, taskSlot, dataUrl, blob, notes } = this.pendingPhotoPreview;
-    console.log('[DIAG] acceptPendingPhoto() — destructured:', { sectionKey, taskId, taskSlot, blobSize: (blob as any)?.size, notesLen: notes?.length });
-
-    console.log('[DIAG] acceptPendingPhoto() — before task branch check: taskId=', taskId, 'taskSlot=', taskSlot);
     if (taskId && taskSlot) {
-      console.log('[DIAG] acceptPendingPhoto() — ENTERED task branch');
-      console.log('[DIAG] serviceOrderId:', this.serviceOrderId);
-      console.log('[DIAG] blob constructor:', blob?.constructor?.name, 'size:', (blob as any)?.size);
       const slotKey = `${taskSlot}-${taskId}`;
       if (!this.taskPhotoState[slotKey]) {
         this.taskPhotoState[slotKey] = [];
@@ -1485,24 +1635,20 @@ export class JobDetailPage implements OnInit, DoCheck {
         capturedAt,
       });
       this.closePhotoPreview();
-      console.log('[DIAG] acceptPendingPhoto() — immediately before uploadTaskPhoto()', { serviceOrderId: this.serviceOrderId, taskId, taskSlot, fileName, blobSize: (blob as any)?.size });
       this.collaborationService.uploadTaskPhoto(
         this.serviceOrderId, taskId, taskSlot, fileName, blob
       ).then(storageUrl => {
-        console.log('[DIAG] acceptPendingPhoto() — immediately after uploadTaskPhoto() returned. storageUrl:', storageUrl);
         const entry = this.taskPhotoState[slotKey]?.find(p => p.fileName === fileName);
         if (entry) {
           entry.dataUrl = storageUrl;
         }
-        console.log('[DIAG] acceptPendingPhoto() — immediately before addTaskPhoto()');
         return this.collaborationService.addTaskPhoto(
           this.serviceOrderId, taskId, taskSlot,
           { fileName, notes: trimmedNotes, capturedAt, storageUrl }
         );
       }).then(() => {
-        console.log('[DIAG] acceptPendingPhoto() — immediately after addTaskPhoto() returned. Firestore updated.');
       }).catch(err => {
-        console.warn('[DIAG] acceptPendingPhoto() — CATCH in upload/Firestore chain:', err);
+        console.error('[acceptPendingPhoto] Upload/Firestore chain failed:', err);
       });
       return;
     }

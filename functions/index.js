@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const functions = require('firebase-functions');
 const { onRequest } = require('firebase-functions/v2/https');
 const express = require('express');
@@ -7,6 +9,8 @@ const nodemailer = require('nodemailer');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium').default;
 const { generatePDFHtml } = require('./pdfGenerator');
+const { generateTechSheetHtml } = require('./techSheetGenerator');
+const { generateInvoiceHtml } = require('./invoiceGenerator');
 const { defineSecret } = require('firebase-functions/params');
 const RingCentralSDK = require('@ringcentral/sdk').SDK;
 const { sendSms } = require('./ringcentral');
@@ -58,7 +62,8 @@ const TABLES = {
     ROOF_MATERIALS: 'bt73z2v2f',
     ROOF_TYPES: 'bt73zrwzg',
     ROOF_BRANDS: 'bt73zxre4',
-    ROOF_COLORS: 'bt73zt6cf'
+    ROOF_COLORS: 'bt73zt6cf',
+    INVOICES: 'bt73v82ts'
 };
 
 const WRITABLE_FIELDS = ['3', '61', '63', '64', '66', '68', '70'];
@@ -1842,11 +1847,6 @@ app.post('/get-schedule', async (req, res) => {
             };
         });
 
-        console.log('[DIAG][get-schedule] returned records:', recordsWithAssignmentStatus.map((record) => ({
-            serviceOrderId: getFieldValue(record, 3),
-            parentStatus: getFieldValue(record, SERVICE_ORDER_STATUS_SYNC_FIELDS.PARENT_STATUS),
-            _techAssignmentStatus: record._techAssignmentStatus,
-        })));
 
         // console.log('[Schedule][PipelineSummary]', {
         //     techId: normalizedTechId,
@@ -4420,7 +4420,7 @@ app.post('/service-order/tasks', async (req, res) => {
         // 1. Fetch tasks
         const taskResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
             from: TABLES.SERVICE_ORDER_TASKS,
-            select: [3, 9, 36, 37, 29, 38, 40, 30, 8, 18],
+            select: [3, 9, 36, 37, 29, 38, 40, 30, 8, 18, 43, 44, 45],
             where: `{'9'.EX.'${escapedId}'}`,
             sortBy: [{ fieldId: 3, order: 'ASC' }]
         }, {
@@ -4439,6 +4439,9 @@ app.post('/service-order/tasks', async (req, res) => {
             technicianInstructions: (r['30']?.value ?? '').toString().trim(),
             taskStatus:             (r['8']?.value  ?? '').toString().trim(),
             taskOrigin:             (r['18']?.value ?? '').toString().trim(),
+            estimatePrice:          r['43']?.value  ?? null,
+            sqFootage:              r['44']?.value  ?? null,
+            lineSubtotal:           r['45']?.value  ?? null,
             beforePhotos:           [],
             afterPhotos:            [],
         }));
@@ -4561,6 +4564,434 @@ app.post('/service-order/task-photo/upload', async (req, res) => {
     } catch (error) {
         console.error('[TaskPhotoUpload] Error:', error.response ? error.response.data : error.message);
         return res.status(500).json({ success: false, message: 'Photo upload failed' });
+    }
+});
+
+// --- INTERNAL HELPER: Fetch tasks for Invoice line model ---
+async function fetchServiceOrderTasksForInvoice(serviceOrderId) {
+    const escapedId = String(serviceOrderId).trim().replace(/'/g, "\\'");
+    // FID map: 3=id, 9=relatedServiceOrder, 36=taskName, 37=serviceCategory,
+    //          29=quantity, 38=description, 8=taskStatus, 18=taskOrigin,
+    //          43=estimatePrice, 44=sqFootage, 45=lineSubtotal
+    const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+        from: TABLES.SERVICE_ORDER_TASKS,
+        select: [3, 9, 36, 37, 29, 38, 8, 18, 43, 44, 45],
+        where: `{'9'.EX.'${escapedId}'}`,
+        sortBy: [{ fieldId: 3, order: 'ASC' }]
+    }, {
+        headers: { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` }
+    });
+
+    return Array.isArray(response.data.data) ? response.data.data : [];
+}
+
+function deriveLineStatus(taskOrigin, taskStatus) {
+    const origin = String(taskOrigin || '').trim().toLowerCase();
+    const status = String(taskStatus || '').trim().toLowerCase();
+    if (status === 'cancelled') return 'Cancelled';
+    if (origin === 'added')     return 'Added';
+    if (origin === 'changed')   return 'Changed';
+    return 'Estimate';
+}
+
+async function writeInvoiceLineItems(serviceOrderId, invoiceLineItems) {
+    // 1. Query existing Invoice records for this Service Order, keyed by Related Task (FID 13)
+    const existingResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+        from: TABLES.INVOICES,
+        select: [3, 13],
+        where: `{'6'.EX.'${String(serviceOrderId).trim().replace(/'/g, "\\'")}'}`
+    }, {
+        headers: { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` }
+    });
+
+    // Build a map of taskRecordId -> existing Invoice record ID
+    const existingRecords = Array.isArray(existingResponse.data.data) ? existingResponse.data.data : [];
+    const taskToInvoiceRecordId = {};
+    for (const r of existingRecords) {
+        const taskRecordId = String(r['13']?.value ?? '').trim();
+        const invoiceRecordId = r['3']?.value;
+        if (taskRecordId && invoiceRecordId) {
+            taskToInvoiceRecordId[taskRecordId] = invoiceRecordId;
+        }
+    }
+
+    // 2. Build upsert rows — include FID 3 when a matching record exists (update), omit it for new lines (insert)
+    const rows = invoiceLineItems.map(line => {
+        const existingId = taskToInvoiceRecordId[line.taskRecordId];
+        const row = {
+            6:  { value: serviceOrderId },
+            7:  { value: line.taskName },
+            8:  { value: line.description },
+            9:  { value: line.quantity },
+            10: { value: line.estimatePrice },
+            11: { value: line.lineStatus },
+            12: { value: line.lineSubtotal },
+            13: { value: line.taskRecordId },
+            15: { value: line.sqFootage },
+        };
+        if (existingId) {
+            row[3] = { value: existingId };
+        }
+        return row;
+    });
+
+    const response = await writeQuickbaseRecords(TABLES.INVOICES, rows, [3]);
+    const written = Array.isArray(response?.data?.data) ? response.data.data.length : rows.length;
+
+    const updatedCount = rows.filter(r => !!r[3]).length;
+    const insertedCount = rows.length - updatedCount;
+
+    console.log('[SubmitServiceOrder] Invoice records upserted.', {
+        serviceOrderId,
+        inserted: insertedCount,
+        updated: updatedCount,
+        total: written,
+    });
+
+    return { inserted: insertedCount, updated: updatedCount, total: written };
+}
+
+function buildInvoiceLineItems(taskRecords) {
+    return taskRecords.map(r => {
+        const taskOrigin  = String(r['18']?.value ?? '').trim();
+        const taskStatus  = String(r['8']?.value  ?? '').trim();
+        const lineStatus  = deriveLineStatus(taskOrigin, taskStatus);
+        const isCancelled = lineStatus === 'Cancelled';
+
+        const quantity    = isCancelled ? 0 : (r['29']?.value ?? null);
+        const estimatePrice = isCancelled ? 0 : (r['43']?.value ?? null);
+        const sqFootage     = isCancelled ? 0 : (r['44']?.value ?? null);
+        const lineSubtotal  = isCancelled ? 0 : (r['45']?.value ?? null);
+
+        return {
+            relatedServiceOrder: String(r['9']?.value  ?? '').trim(),
+            taskRecordId:        String(r['3']?.value  ?? '').trim(),
+            taskName:            String(r['36']?.value ?? '').trim(),
+            description:         String(r['38']?.value ?? '').trim(),
+            serviceCategory:     String(r['37']?.value ?? '').trim(),
+            quantity,
+            estimatePrice,
+            sqFootage,
+            lineSubtotal,
+            lineStatus,
+            taskOrigin,
+            taskStatus,
+        };
+    });
+}
+
+// Resolve a QuickBase address field value into a structured address object.
+// Handles native address objects, simple strings, and comma-separated strings.
+function resolveAddressField(raw) {
+    if (raw == null) {
+        return { street1: null, street2: null, city: null, state: null, postalCode: null, country: null };
+    }
+    if (typeof raw === 'object') {
+        return {
+            street1:     String(raw.street1 ?? raw.street ?? '').trim() || null,
+            street2:     String(raw.street2 ?? '').trim() || null,
+            city:        String(raw.city ?? '').trim() || null,
+            state:       String(raw.subdivision ?? raw.state ?? '').trim() || null,
+            postalCode:  String(raw.postalCode ?? raw.zip ?? '').trim() || null,
+            country:     String(raw.country ?? '').trim() || null,
+        };
+    }
+    const str = String(raw).trim();
+    if (!str) {
+        return { street1: null, street2: null, city: null, state: null, postalCode: null, country: null };
+    }
+    // Expected QuickBase format: "Street, City, State PostalCode Country"
+    // Example: "25606 69th Avenue East, Graham, Washington 98338 United States"
+    const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+        const last = parts[parts.length - 1];
+        const stateZipCountryMatch = last.match(/^(.*?)\s+(\d{5}(-\d{4})?)\s*(.*)$/);
+        if (stateZipCountryMatch) {
+            return {
+                street1:    parts.slice(0, parts.length - 2).join(', ') || null,
+                street2:    null,
+                city:       parts[parts.length - 2] || null,
+                state:      stateZipCountryMatch[1].trim() || null,
+                postalCode: stateZipCountryMatch[2] || null,
+                country:    stateZipCountryMatch[4].trim() || null,
+            };
+        }
+    }
+    return { street1: str, street2: null, city: null, state: null, postalCode: null, country: null };
+}
+
+// --- INTERNAL HELPER: Build InvoiceData contract from persisted QuickBase data ---
+async function buildInvoiceData(serviceOrderId) {
+    const qbHeaders = { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` };
+    const escapedId = String(serviceOrderId).trim().replace(/'/g, "\\'");
+
+    // 1. Query parent Service Order
+    // FID map (known from /job-detail and /estimate/retrieve):
+    //   3=recordId, 6=relatedLocation, 7=relatedCustomer(numeric ref), 9=serviceDate,
+    //   10=serviceType, 11=status, 15=relatedCustomer(customer recordId lookup),
+    //   16=serviceSubtype, 40=stage, 57=locationEmail(alt), 66=taxAmount, 67=totalAmount,
+    //   73=serviceNotes, 83=secondaryDiscountAmount, 90=locationAddress,
+    //   93=customerFirstName, 94=customerLastName, 95=customerPhone,
+    //   105=locationZip, 106=locationStreet, 107=locationState, 137=subtotal,
+    //   142=locationEmail, 154=cleanMaintenanceScheduledFor, 155=repairServicesScheduledFor,
+    //   163=billingAddressSameAsPrimary
+    const soResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+        from: TABLES.SERVICE_ORDERS,
+        select: [3, 6, 7, 9, 10, 11, 15, 16, 40, 57, 66, 67, 73, 83, 90, 92, 93, 94, 95, 105, 106, 107, 137, 142, 154, 155, 163],
+        where: `{'3'.EX.'${escapedId}'}`
+    }, { headers: qbHeaders });
+
+    const soRecord = soResponse?.data?.data?.[0] || null;
+    if (!soRecord) {
+        throw new Error(`[buildInvoiceData] Service Order ${serviceOrderId} not found`);
+    }
+
+    const customerRecordId = soRecord['15']?.value ?? null;
+
+    // 2. Query Customer record for primary address (confirmed FIDs):
+    //   3=recordId, 6=firstName, 7=lastName, 8=email, 9=phone,
+    //   66=primaryStreet1, 67=primaryStreet2, 68=primaryCity,
+    //   69=primaryState, 70=primaryPostalCode, 71=primaryCountry
+    let customerRecord = null;
+    if (customerRecordId) {
+        const customerResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+            from: TABLES.CUSTOMERS,
+            select: [3, 6, 7, 8, 9, 66, 67, 68, 69, 70, 71],
+            where: `{'3'.EX.'${String(customerRecordId).trim()}'}`
+        }, { headers: qbHeaders });
+        customerRecord = customerResponse?.data?.data?.[0] || null;
+    }
+
+    // 3. Query Invoice records for this Service Order (already written in Phase 3)
+    const invoiceResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
+        from: TABLES.INVOICES,
+        select: [3, 6, 7, 8, 9, 10, 11, 12, 13, 15],
+        where: `{'6'.EX.'${escapedId}'}`
+    }, { headers: qbHeaders });
+    const invoiceRecords = Array.isArray(invoiceResponse?.data?.data) ? invoiceResponse.data.data : [];
+
+    // 4. Resolve job address and billing address
+    // Service Order FID 163 = "Billing address same as primary address" (checkbox lookup)
+    const billingSameAsPrimary = !!soRecord['163']?.value;
+
+    // Job address sourced from Service Order FID 90 (location address lookup)
+    const jobAddress = resolveAddressField(soRecord['90']?.value ?? null);
+
+    // Customer primary address from Customer record (confirmed FIDs):
+    //   66=street1, 67=street2, 68=city, 69=state, 70=postalCode, 71=country
+    const customerPrimaryAddress = customerRecord ? {
+        street1:     String(customerRecord['66']?.value ?? '').trim() || null,
+        street2:     String(customerRecord['67']?.value ?? '').trim() || null,
+        city:        String(customerRecord['68']?.value ?? '').trim() || null,
+        state:       String(customerRecord['69']?.value ?? '').trim() || null,
+        postalCode:  String(customerRecord['70']?.value ?? '').trim() || null,
+        country:     String(customerRecord['71']?.value ?? '').trim() || null,
+    } : null;
+
+    // Billing address rule:
+    //   FID 38 checked  → Customer Primary Address
+    //   FID 38 unchecked → Job Location Address
+    const billingAddress = billingSameAsPrimary ? customerPrimaryAddress : jobAddress;
+
+    // 6. Build Invoice line items from queried Invoice records
+    const lineItems = invoiceRecords.map(r => ({
+        invoiceRecordId: String(r['3']?.value  ?? '').trim(),
+        taskRecordId:    String(r['13']?.value ?? '').trim(),
+        taskName:        String(r['7']?.value  ?? '').trim(),
+        description:     String(r['8']?.value  ?? '').trim(),
+        quantity:        r['9']?.value  ?? null,
+        unitPrice:       r['10']?.value ?? null,
+        lineStatus:      String(r['11']?.value ?? '').trim(),
+        lineTotal:       r['12']?.value ?? null,
+        sqFootage:       r['15']?.value ?? null,
+    }));
+
+    // 6. Financial summary — sourced from Service Order lookup fields
+    const subtotal = soRecord['137']?.value ?? null;
+    const taxAmount = soRecord['66']?.value ?? null;
+    const totalAmount = soRecord['67']?.value ?? null;
+    const discountAmount = soRecord['83']?.value ?? null;
+
+    console.log('[buildInvoiceData] Resolved from Service Order.', {
+        serviceOrderId,
+        customerRecordId: customerRecordId ?? null,
+        billingSameAsPrimary,
+        rawFid90: soRecord['90']?.value ?? null,
+        rawFid163: soRecord['163']?.value ?? null,
+    });
+
+    // 7. Assemble InvoiceData contract
+    return {
+        serviceOrder: {
+            recordId:       String(soRecord['3']?.value  ?? '').trim(),
+            jobNumber:      String(soRecord['3']?.value  ?? '').trim(),
+            status:         String(soRecord['11']?.value ?? '').trim() || null,
+            stage:          String(soRecord['40']?.value ?? '').trim() || null,
+            serviceDate:    soRecord['9']?.value  ?? null,
+            serviceType:    String(soRecord['10']?.value ?? '').trim() || null,
+            serviceSubtype: String(soRecord['16']?.value ?? '').trim() || null,
+            serviceNotes:   String(soRecord['73']?.value ?? '').trim() || null,
+            cleanMaintenanceScheduledFor: soRecord['154']?.value ?? null,
+            repairServicesScheduledFor:   soRecord['155']?.value ?? null,
+        },
+        customer: {
+            recordId:      customerRecord ? String(customerRecord['3']?.value ?? '').trim() : null,
+            firstName:     String(soRecord['93']?.value ?? '').trim() || null,
+            lastName:      String(soRecord['94']?.value ?? '').trim() || null,
+            phone:         String(soRecord['95']?.value ?? '').trim() || null,
+            email:         String(soRecord['142']?.value ?? soRecord['57']?.value ?? '').trim() || null,
+            primaryAddress: customerPrimaryAddress,
+        },
+        billingAddress,
+        billingSameAsPrimary,
+        jobAddress,
+        invoiceMeta: {
+            invoiceDate:    null, // TODO: populate when Invoice header date field is identified
+            paymentTerms:   null, // TODO: populate from SO or Invoice header field
+            dueDate:        null, // TODO: populate from SO or Invoice header field
+        },
+        financialSummary: {
+            subtotal,
+            discountAmount,
+            taxAmount,
+            total:      totalAmount,
+            balanceDue: totalAmount, // TODO: subtract payments when payment records are available
+        },
+        lineItems,
+        payment:   null, // TODO: populate when payment records are available
+        signature: null, // TODO: populate from SO digital signature field if present
+    };
+}
+
+// --- SERVICE ORDER SUBMISSION ORCHESTRATION ---
+app.post('/service-order/submit', async (req, res) => {
+    const { techSheetData, serviceOrderPayload } = req.body || {};
+
+    // --- Validation ---
+    const serviceOrderId = String(techSheetData?.serviceOrderId || '').trim();
+    if (!serviceOrderId) {
+        return res.status(400).json({ success: false, message: 'techSheetData.serviceOrderId is required' });
+    }
+    if (!techSheetData) {
+        return res.status(400).json({ success: false, message: 'techSheetData is required' });
+    }
+
+    console.log('[SubmitServiceOrder] Submission received.', {
+        serviceOrderId,
+        customerName: techSheetData.customerName,
+        taskCount: techSheetData.tasks?.length ?? 0,
+        selectedPhotoCount: techSheetData.selectedPhotos?.length ?? 0,
+        hasServiceOrderPayload: !!serviceOrderPayload,
+    });
+
+    // --- Phase 1: Tech Sheet PDF Generation ---
+    const tmpDir = path.join(process.cwd(), 'tmp');
+    if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    let browser = null;
+    try {
+        const htmlContent = await generateTechSheetHtml(techSheetData);
+        console.log('[SubmitServiceOrder] Tech Sheet HTML generated, length:', htmlContent.length);
+
+        const executablePath =
+            process.env.FUNCTIONS_EMULATOR === 'true'
+            ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+            : await chromium.executablePath();
+
+        browser = await puppeteer.launch({
+            executablePath,
+            headless: 'new',
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+            ],
+        });
+
+        const page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+        const techSheetPdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+        const techSheetFilename = `TechSheet_${serviceOrderId}.pdf`;
+
+        console.log('[SubmitServiceOrder] Tech Sheet PDF generated.', {
+            serviceOrderId,
+            techSheetFilename,
+            techSheetPdfSize: techSheetPdfBuffer.length,
+        });
+
+        // --- DEV ONLY: Write Tech Sheet PDF to tmp for visual validation ---
+        const techSheetTmpPath = path.join(tmpDir, techSheetFilename);
+        fs.writeFileSync(techSheetTmpPath, techSheetPdfBuffer);
+        console.log('[SubmitServiceOrder] Tech Sheet PDF written to disk.', {
+            serviceOrderId,
+            techSheetTmpPath,
+        });
+
+        // --- Phase 2: Read completed Service Order Tasks and build Invoice line model ---
+        const taskRecords = await fetchServiceOrderTasksForInvoice(serviceOrderId);
+        const invoiceLineItems = buildInvoiceLineItems(taskRecords);
+
+        console.log('[SubmitServiceOrder] Invoice line model assembled.', {
+            serviceOrderId,
+            totalLines: invoiceLineItems.length,
+            cancelledLines: invoiceLineItems.filter(l => l.lineStatus === 'Cancelled').length,
+            invoiceLineItems,
+        });
+
+        // --- Phase 3: Upsert Invoice records in Invoices table (bt73v82ts) ---
+        const invoiceWriteResult = await writeInvoiceLineItems(serviceOrderId, invoiceLineItems);
+
+        console.log('[SubmitServiceOrder] Invoice records upsert complete.', {
+            serviceOrderId,
+            ...invoiceWriteResult,
+        });
+        // --- Phase 3.5: Build InvoiceData contract from persisted QuickBase data ---
+        const invoiceData = await buildInvoiceData(serviceOrderId);
+
+        console.log('[InvoiceData]', JSON.stringify(invoiceData, null, 2));
+
+        // --- Phase 4 (Validation Only): Generate Invoice PDF ---
+        const invoiceHtml = await generateInvoiceHtml(invoiceData);
+        console.log('[SubmitServiceOrder] Invoice HTML generated, length:', invoiceHtml.length);
+
+        const invoicePage = await browser.newPage();
+        await invoicePage.setContent(invoiceHtml, { waitUntil: 'networkidle0' });
+        const invoicePdfBuffer = await invoicePage.pdf({ format: 'A4', printBackground: true });
+        await invoicePage.close();
+
+        console.log('[SubmitServiceOrder] Invoice PDF generated (validation only).', {
+            serviceOrderId,
+            invoiceHtmlLength: invoiceHtml.length,
+            invoicePdfSize: invoicePdfBuffer.length,
+        });
+
+        // --- DEV ONLY: Write Invoice PDF to tmp for visual validation ---
+        const invoiceFilename = `Invoice_${serviceOrderId}.pdf`;
+        const invoiceTmpPath = path.join(tmpDir, invoiceFilename);
+        fs.writeFileSync(invoiceTmpPath, invoicePdfBuffer);
+        console.log('[SubmitServiceOrder] Invoice PDF written to disk.', {
+            serviceOrderId,
+            invoiceTmpPath,
+        });
+
+        // TODO Phase 4: Generate Invoice PDF from the created Invoice records
+        // TODO Phase 5: Assemble complete Service Order payload
+        // TODO Phase 6: Update parent Service Order record
+        // TODO Phase 7: Attach PDFs
+        // TODO Phase 8: Email Tech Sheet
+        // TODO Phase 9: Schedule Review Request
+        // TODO Phase 10: Cleanup
+
+        return res.status(200).json({ success: true, serviceOrderId });
+    } catch (error) {
+        console.error('[SubmitServiceOrder] Orchestration failed:', error.message);
+        return res.status(500).json({ success: false, message: 'Service Order submission failed' });
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 });
 

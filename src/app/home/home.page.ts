@@ -495,18 +495,6 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       label = this.jobActionStates[actionIndex];
     }
 
-    console.log('[DIAG][getSelectedJobActionLabel]', {
-      technicianName: `${this.tech?.firstName || ''} ${this.tech?.lastName || ''}`.trim() || 'UNKNOWN',
-      roleString: this.tech?.role || 'EMPTY',
-      isLeadTechnician: leadFlag,
-      serviceOrderId: this.selectedJobRecordId,
-      parentStatus: selectedJob?.status || selectedJob?.['11']?.value,
-      _techAssignmentStatus: selectedJob?._techAssignmentStatus,
-      isParentComplete,
-      isAssignmentComplete,
-      _jobActionIndex: actionIndex,
-      label,
-    });
     return label;
   }
 
@@ -1540,12 +1528,6 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
             job._jobActionIndex = savedValue?.actionIndex || 0;
             job._isPaused = !!savedValue?.isPaused;
           }
-          console.log('[DIAG][restoreJobActionIndexes]', {
-            serviceOrderId: id,
-            beforeIndex,
-            afterIndex: job._jobActionIndex,
-            savedValue,
-          });
         }
       }
     } catch {}
@@ -1585,12 +1567,6 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
         }
       }
 
-      console.log('[DIAG][computeJobActionIndexFromStatus]', {
-        serviceOrderId: job?.['3']?.value ?? job?.id,
-        parentStatus: job?.status || job?.['11']?.value,
-        _techAssignmentStatus: job?._techAssignmentStatus,
-        computedIndex: computed,
-      });
       return computed;
     } catch {
       return 0;
@@ -1911,14 +1887,6 @@ async ngOnInit() {
         photoUrl: userData[66]?.value?.url || ''
       };
 
-      // --- TEMP LEAD ROLE DIAGNOSTICS ---
-      console.log('[DIAG][LeadRole] Technician context loaded:', {
-        technicianName: `${this.tech.firstName || ''} ${this.tech.lastName || ''}`.trim() || 'UNKNOWN',
-        roleString: this.tech.role || 'EMPTY',
-        isLeadTechnician: this.isLeadTechnician(),
-        roleField17: userData[17]?.value,
-      });
-      // ----------------------------------
 
 // --- Live Backend Timecard Restoration Guard ---
       try {

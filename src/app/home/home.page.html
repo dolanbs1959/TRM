@@ -151,6 +151,7 @@
       <ion-card-content>
         <div class="job-header">
           <ion-badge [color]="getJobStatusColor(job)">{{ getJobStatusLabel(job) }}</ion-badge>
+          <ion-badge color="medium" *ngIf="job['3']?.value">Job #{{ job['3']?.value }}</ion-badge>
           <ion-badge color="medium" *ngIf="job['108']?.value">{{ job['108']?.value }}</ion-badge>
           <ion-badge color="medium" *ngIf="!isClockedIn">CLOCK IN REQUIRED</ion-badge>
           <ion-badge color="danger" *ngIf="workflowLockedJobRecordId && isSelectedJob(job)">ACTIVE</ion-badge>

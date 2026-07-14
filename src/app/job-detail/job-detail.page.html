@@ -30,16 +30,6 @@
       <div class="payload-header">Stage: {{ job['40']?.value || 'Unknown' }}</div>
       <div class="mode-actions">
         <ion-button
-          *ngIf="isServiceOrderHub()"
-          fill="clear"
-          size="small"
-          class="refresh-collaboration-btn"
-          (click)="refreshCollaborationData()"
-          [disabled]="isRefreshingCollaboration">
-          <ion-spinner *ngIf="isRefreshingCollaboration" name="crescent" slot="icon-only"></ion-spinner>
-          <ion-icon *ngIf="!isRefreshingCollaboration" name="refresh-outline" slot="icon-only"></ion-icon>
-        </ion-button>
-        <ion-button
           *ngIf="isWrapUpView()"
           size="small"
           fill="outline"
@@ -121,7 +111,7 @@
     <!-- INSPECTION HUB â€” visible for inspection jobs in all modes  -->
     <!-- ========================================================== -->
     <div *ngIf="isInspection()" class="payload-body">
-      <h3>Inspection Hub - Location: <strong>{{ getFieldValue(16) }}</strong></h3>
+      <h3>Inspection Hub - Job #{{ serviceOrderId }} - Location: <strong>{{ getFieldValue(16) }}</strong></h3>
 
       <ion-note color="warning" *ngIf="isPausedWorkflow" class="inspection-lock-note">
         Job is paused. Inputs are locked until you resume from the dashboard controls.
@@ -550,7 +540,7 @@
     <!-- ========================================================== -->
     <div *ngIf="isWrapUpView()" class="payload-body wrap-up-hub">
       <div class="wrap-up-title-row">
-        <h3>Lead Tech Wrap-Up</h3>
+        <h3>Lead Tech Wrap-Up - Job #{{ serviceOrderId }}</h3>
         <ion-button
           class="wrapup-refresh-btn"
           fill="solid"
@@ -586,7 +576,7 @@
           </div>
           <div class="detail-item">
             <span class="detail-label">Completion Time</span>
-            <span class="detail-value wrap-up-placeholder-text">TBD â€” Automatically recorded upon successful submission.</span>
+            <span class="detail-value wrap-up-placeholder-text">TBD - Automatically recorded upon successful submission.</span>
           </div>
         </div>
       </section>
@@ -982,7 +972,6 @@
       </section>
 
       <div class="wrap-up-action-bar">
-        <ion-button expand="block" fill="outline" color="medium" (click)="onSaveWrapUpDraft()">Save Draft</ion-button>
         <ion-button
           expand="block"
           color="danger"
@@ -1009,7 +998,19 @@
     <!-- SERVICE ORDER HUB â€” Service Tasks for service-order jobs -->
     <!-- ========================================================== -->
     <div *ngIf="isServiceOrderHub()" class="payload-body service-order-hub">
-      <h3>Service Tasks</h3>
+      <h3>Service Order Hub - Job #{{ serviceOrderId }}</h3>
+      <div class="service-tasks-header-row">
+        <h4>Service Tasks</h4>
+        <ion-button
+          fill="solid"
+          color="danger"
+          size="small"
+          (click)="refreshCollaborationData()"
+          [disabled]="isRefreshingCollaboration">
+          <ion-spinner *ngIf="isRefreshingCollaboration" name="crescent"></ion-spinner>
+          <span *ngIf="!isRefreshingCollaboration">Refresh</span>
+        </ion-button>
+      </div>
 
       <div *ngIf="serviceTasksLoading" class="task-loading">
         <ion-spinner name="crescent"></ion-spinner>
@@ -1127,7 +1128,7 @@
               [color]="isTaskFinished(task.id) ? 'medium' : 'success'"
               [disabled]="isHubInputLocked() || isTaskFinished(task.id)"
               (click)="markTaskFinished(task.id)">
-              {{ isTaskFinished(task.id) ? 'âœ“ Task Finished' : 'Task Finished' }}
+              {{ isTaskFinished(task.id) ? 'Task Finished' : 'Task Finished' }}
             </ion-button>
           </div>
         </ion-accordion>

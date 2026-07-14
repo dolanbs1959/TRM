@@ -9,6 +9,7 @@
   <ion-toolbar color="danger" class="sub-header">
     <div class="tech-greeting">{{ getCustomerName() }}</div>
     <div class="job-address-line">{{ getCustomerAddressLine() }}</div>
+    <div class="job-number-line" *ngIf="job">Job #{{ job['3']?.value }}</div>
   </ion-toolbar>
 </ion-header>
 

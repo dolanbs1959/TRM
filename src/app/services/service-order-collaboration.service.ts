@@ -36,23 +36,18 @@ export class ServiceOrderCollaborationService {
     blob: Blob
   ): Promise<string> {
     const path = `service-orders/${serviceOrderId}/tasks/${taskId}/${slot}/${fileName}`;
-    console.log('[DIAG] uploadTaskPhoto() entered. path:', path, 'blob size:', blob?.size);
     const fileRef = storageRef(this.storage, path);
-    console.log('[DIAG] uploadTaskPhoto() — immediately before uploadBytes()');
     try {
       await uploadBytes(fileRef, blob, { contentType: 'image/jpeg' });
-      console.log('[DIAG] uploadTaskPhoto() — immediately after uploadBytes() returned');
     } catch (err) {
-      console.warn('[DIAG] uploadTaskPhoto() — CATCH at uploadBytes():', err);
+      console.error('[uploadTaskPhoto] uploadBytes failed:', err);
       throw err;
     }
-    console.log('[DIAG] uploadTaskPhoto() — immediately before getDownloadURL()');
     try {
       const url = await getDownloadURL(fileRef);
-      console.log('[DIAG] uploadTaskPhoto() — immediately after getDownloadURL() returned. url:', url);
       return url;
     } catch (err) {
-      console.warn('[DIAG] uploadTaskPhoto() — CATCH at getDownloadURL():', err);
+      console.error('[uploadTaskPhoto] getDownloadURL failed:', err);
       throw err;
     }
   }

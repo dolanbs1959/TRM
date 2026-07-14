@@ -52,6 +52,9 @@ export interface ServiceOrderTask {
   technicianInstructions: string;
   taskStatus: string;
   taskOrigin: string;
+  estimatePrice: number | null;
+  sqFootage: number | null;
+  lineSubtotal: number | null;
   beforePhotos: TaskPhoto[];
   afterPhotos: TaskPhoto[];
 }
@@ -754,7 +757,6 @@ async checkActiveTimecardSession(employeeId: any, dateStr: string) {
       techId: employeeId,
       relatedEmployeeId: employeeId,
     };
-    console.log('[DIAG][TaskComplete] Workflow payload:', payload);
     try {
       const response: any = await this.http.post(url, payload).toPromise();
       return !!response?.success;
@@ -791,6 +793,33 @@ async checkActiveTimecardSession(employeeId: any, dateStr: string) {
     } catch (error) {
       console.error('Fetch Historical Inspection Error:', error);
       return null;
+    }
+  }
+
+  async submitServiceOrder(payload: {
+    techSheetData: any;
+    serviceOrderPayload: any;
+  }): Promise<{ success: boolean; message?: string }> {
+    const url = `${this.apiBaseUrl}/service-order/submit`;
+
+    try {
+      const response: any = await this.http
+        .post(url, payload, { observe: 'response' })
+        .toPromise();
+
+      if (response?.status !== 200) {
+        return { success: false, message: `Unexpected response status ${response?.status || 'unknown'}` };
+      }
+
+      const body = response.body;
+      if (body && typeof body === 'object') {
+        return { success: !!body.success, message: body.message };
+      }
+
+      return { success: false, message: 'Empty response from service order submission endpoint' };
+    } catch (error) {
+      console.error('Submit Service Order Error:', error);
+      return { success: false, message: 'Service Order submission request failed' };
     }
   }
 }
