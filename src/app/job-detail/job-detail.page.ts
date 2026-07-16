@@ -24,6 +24,8 @@ interface InspectionPhotoAttachment {
   capturedAt: number;
   slot?: 'before' | 'after';
   taskId?: string;
+  quickbaseRecordId?: string;
+  isExistingQuickbaseRecord?: boolean;
   selected?: boolean;
 }
 
@@ -55,6 +57,9 @@ interface InspectionSubmissionPayload {
 interface TechSheetPhoto {
   slot: 'before' | 'after';
   taskId: string;
+  taskName: string;
+  quickbaseRecordId: string;
+  isExistingQuickbaseRecord: boolean;
   fileName: string;
   notes: string;
   capturedAt: number;
@@ -128,6 +133,7 @@ interface TechSheetData {
   };
   tasks: TechSheetTask[];
   selectedPhotos: TechSheetPhoto[];
+  jobPhotos: TechSheetPhoto[];
 }
 
 @Component({
@@ -245,6 +251,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   // Lead Tech Wrap-Up state
   private lastWrapUpDraftSnapshot = '';
   private skipWrapUpDraftPersistence = false;
+  private isWrapUpDraftHydrated = false;
   wrapUpSubmitting = false;
   wrapUpSubmitted = false;
   wrapUpSubmittedAt: string | null = null;
@@ -418,6 +425,7 @@ export class JobDetailPage implements OnInit, DoCheck {
         }
         this.initializeWrapUpForm();
         await this.hydrateWrapUpDraftIfPresent();
+        this.isWrapUpDraftHydrated = true;
         this.persistWrapUpDraftIfChanged();
         void this.loadServiceOrderAssignments();
       }
@@ -505,6 +513,8 @@ export class JobDetailPage implements OnInit, DoCheck {
           capturedAt: m.capturedAt,
           slot: (slot === 'before' || slot === 'after' ? slot : undefined) as 'before' | 'after' | undefined,
           taskId,
+          quickbaseRecordId: String(m.quickbaseRecordId || '').trim(),
+          isExistingQuickbaseRecord: !!m.isExistingQuickbaseRecord,
         }));
       }
       const photoNoteSamples: Record<string, { fileName: string; notes: string }[]> = {};
@@ -518,6 +528,35 @@ export class JobDetailPage implements OnInit, DoCheck {
       });
     } catch {
       this.taskPhotoState = {};
+    }
+    for (const task of this.serviceTasks) {
+      for (const [slot, photos] of [
+        ['before', task.beforePhotos],
+        ['after', task.afterPhotos],
+      ] as const) {
+        const slotKey = `${slot}-${task.id}`;
+        const existingPhotos = this.taskPhotoState[slotKey] || [];
+        for (const photo of photos || []) {
+          const quickbaseRecordId = String(photo.recordId || '').trim();
+          if (!quickbaseRecordId || existingPhotos.some(p => p.quickbaseRecordId === quickbaseRecordId)) {
+            continue;
+          }
+          existingPhotos.push({
+            fileName: `job-photo-${quickbaseRecordId}.jpg`,
+            dataUrl: photo.url,
+            blob: new Blob([]),
+            notes: '',
+            capturedAt: 0,
+            slot,
+            taskId: task.id,
+            quickbaseRecordId,
+            isExistingQuickbaseRecord: true,
+          });
+        }
+        if (existingPhotos.length > 0) {
+          this.taskPhotoState[slotKey] = existingPhotos;
+        }
+      }
     }
     // Restore arrival timestamps from Firestore session
     try {
@@ -947,12 +986,14 @@ export class JobDetailPage implements OnInit, DoCheck {
     if (!this.canAccessWrapUp()) {
       return;
     }
+    this.isWrapUpDraftHydrated = false;
     this.pageMode = 'work';
     this.serviceOrderView = 'wrapup';
     localStorage.setItem(JobDetailPage.ACTIVE_JOB_MODE_STORAGE_KEY, 'work');
     localStorage.setItem(JobDetailPage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY, 'wrapup');
     this.initializeWrapUpForm();
     void this.hydrateWrapUpDraftIfPresent().then(() => {
+      this.isWrapUpDraftHydrated = true;
       this.persistWrapUpDraftIfChanged();
     });
   }
@@ -974,7 +1015,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   private persistWrapUpDraftIfChanged() {
-    if (this.skipWrapUpDraftPersistence || !this.isWrapUpView() || !this.serviceOrderId) {
+    if (this.skipWrapUpDraftPersistence || !this.isWrapUpDraftHydrated || !this.isWrapUpView() || !this.serviceOrderId) {
       return;
     }
 
@@ -1237,6 +1278,11 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   async ionViewWillLeave() {
+    if (this.isServiceOrder() && this.isWrapUpView() && !this.wrapUpSubmitted) {
+      this.persistWrapUpDraftIfChanged();
+      return;
+    }
+
     if (!this.wrapUpSubmitted || !this.isServiceOrder()) {
       return;
     }
@@ -1263,16 +1309,30 @@ export class JobDetailPage implements OnInit, DoCheck {
 
   private buildTechSheetData(wrapUpCompletedAt: string): TechSheetData {
     const allPhotos = [...this.getAllTaskBeforePhotos(), ...this.getAllTaskAfterPhotos()];
+    const createPhotoPayload = (photo: InspectionPhotoAttachment): TechSheetPhoto => {
+      const taskId = photo.taskId || '';
+      const taskName = this.serviceTasks.find(task => task.id === taskId)?.taskName || '';
+      return {
+        slot: photo.slot as 'before' | 'after',
+        taskId,
+        taskName,
+        quickbaseRecordId: photo.quickbaseRecordId || '',
+        isExistingQuickbaseRecord: !!photo.isExistingQuickbaseRecord,
+        fileName: photo.fileName,
+        notes: photo.notes,
+        capturedAt: photo.capturedAt,
+        dataUrl: photo.dataUrl || '',
+      };
+    };
     const selectedPhotos: TechSheetPhoto[] = allPhotos
       .filter(p => this.isWrapUpPhotoSelected(p))
-      .map(p => ({
-        slot: p.slot as 'before' | 'after',
-        taskId: p.taskId || '',
-        fileName: p.fileName,
-        notes: p.notes,
-        capturedAt: p.capturedAt,
-        dataUrl: p.dataUrl || '',
-      }));
+      .map(createPhotoPayload);
+    const jobPhotos: TechSheetPhoto[] = allPhotos
+      .filter(photo => {
+        const source = photo.dataUrl || '';
+        return source.startsWith('data:image/') || source.includes('firebasestorage.googleapis.com');
+      })
+      .map(createPhotoPayload);
 
     const normalizeId = (id: string) => String(id || '').trim();
 
@@ -1325,6 +1385,7 @@ export class JobDetailPage implements OnInit, DoCheck {
       wrapUpForm: { ...this.wrapUpForm },
       tasks,
       selectedPhotos,
+      jobPhotos,
     };
   }
 
@@ -1735,23 +1796,34 @@ export class JobDetailPage implements OnInit, DoCheck {
         blob,
         notes: trimmedNotes,
         capturedAt,
+        slot: taskSlot,
+        taskId,
+        quickbaseRecordId: '',
+        isExistingQuickbaseRecord: false,
       });
       this.closePhotoPreview();
-      this.collaborationService.uploadTaskPhoto(
-        this.serviceOrderId, taskId, taskSlot, fileName, blob
-      ).then(storageUrl => {
+      try {
+        const storageUrl = await this.collaborationService.uploadTaskPhoto(
+          this.serviceOrderId, taskId, taskSlot, fileName, blob
+        );
         const entry = this.taskPhotoState[slotKey]?.find(p => p.fileName === fileName);
         if (entry) {
           entry.dataUrl = storageUrl;
         }
-        return this.collaborationService.addTaskPhoto(
+        await this.collaborationService.addTaskPhoto(
           this.serviceOrderId, taskId, taskSlot,
-          { fileName, notes: trimmedNotes, capturedAt, storageUrl }
+          {
+            fileName,
+            notes: trimmedNotes,
+            capturedAt,
+            storageUrl,
+            quickbaseRecordId: '',
+            isExistingQuickbaseRecord: false,
+          }
         );
-      }).then(() => {
-      }).catch(err => {
+      } catch (err) {
         console.error('[acceptPendingPhoto] Upload/Firestore chain failed:', err);
-      });
+      }
       return;
     }
 

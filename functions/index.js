@@ -11,6 +11,7 @@ const chromium = require('@sparticuz/chromium').default;
 const { generatePDFHtml } = require('./pdfGenerator');
 const { generateTechSheetHtml } = require('./techSheetGenerator');
 const { generateInvoiceHtml } = require('./invoiceGenerator');
+const { getTaxRate } = require('./taxUtility');
 const { defineSecret } = require('firebase-functions/params');
 const RingCentralSDK = require('@ringcentral/sdk').SDK;
 const { sendSms } = require('./ringcentral');
@@ -632,6 +633,23 @@ function normalizeRoofRecordIds(roofRecordIds) {
     ));
 }
 
+async function uploadQuickbasePdfAttachment(serviceOrderId, fieldId, filename, pdfContent) {
+    const hasSupportedContent = Buffer.isBuffer(pdfContent) || pdfContent instanceof Uint8Array;
+    if (!hasSupportedContent || pdfContent.length === 0) {
+        throw new Error(`Cannot upload ${filename}: PDF content is missing, unsupported, or empty`);
+    }
+
+    const uploadBuffer = Buffer.from(pdfContent);
+    const qbPayload = {
+        to: TABLES.SERVICE_ORDERS,
+        data: [{
+            3: { value: Number.parseInt(serviceOrderId, 10) },
+            [fieldId]: { value: { fileName: filename, data: uploadBuffer.toString('base64') } }
+        }]
+    };
+    await axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, { headers: buildQuickbaseHeaders() });
+}
+
 async function generateAndDispatchPDF(payload) {
     try {
         console.log('[BackgroundWorker] Starting PDF generation and dispatch (v2)...');
@@ -843,26 +861,8 @@ async function generateAndDispatchPDF(payload) {
 
             // Explicitly clone the buffer stream to ensure it is isolated and fully finalized
             // before base64 encoding, preventing the race condition with the email tasks.
-            const uploadBuffer = Buffer.from(pdfBuffer);
-
-            // For File attachment in JSON API, encode buffer to base64
-            const base64Pdf = uploadBuffer.toString('base64');
-
-            const qbPayload = {
-                to: TABLES.SERVICE_ORDERS,
-                data: [{
-                    '3': { value: parseInt(payload.serviceOrderId, 10) },
-                    '144': { value: { fileName: filename, data: base64Pdf } }
-                }]
-            };
-
             try {
-                await axios.post(`${QB_API_ENDPOINT}/records`, qbPayload, {
-                    headers: {
-                        'QB-Realm-Hostname': QB_REALM_HOST,
-                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
-                    }
-                });
+                await uploadQuickbasePdfAttachment(payload.serviceOrderId, 144, filename, pdfBuffer);
                 console.log('[BackgroundWorker] PDF asset uploaded to Quickbase master record successfully.');
             } catch (qbErr) {
                 console.error('[BackgroundWorker] Quickbase PDF upload failed:', qbErr);
@@ -4737,7 +4737,7 @@ async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
     //   163=billingAddressSameAsPrimary
     const soResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
         from: TABLES.SERVICE_ORDERS,
-        select: [3, 6, 7, 9, 10, 11, 15, 16, 40, 57, 66, 67, 73, 83, 90, 92, 93, 94, 95, 105, 106, 107, 137, 142, 154, 155, 163],
+        select: [3, 6, 7, 9, 10, 11, 15, 16, 40, 57, 66, 67, 73, 83, 90, 92, 93, 94, 95, 105, 106, 107, 137, 138, 140, 142, 154, 155, 163],
         where: `{'3'.EX.'${escapedId}'}`
     }, { headers: qbHeaders });
 
@@ -4811,10 +4811,22 @@ async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
     const taxAmount = soRecord['66']?.value ?? null;
     const totalAmount = soRecord['67']?.value ?? null;
     const discountAmount = soRecord['83']?.value ?? null;
+    const hasDiscount = (parseFloat(discountAmount) || 0) > 0;
     const discountControlValue = String(soRecord['138']?.value ?? '').trim();
-    const discountLabel = discountControlValue
-        ? (/discount/i.test(discountControlValue) ? discountControlValue : `${discountControlValue} Discount`)
-        : 'Discount';
+    const normalizedDiscountControlValue = discountControlValue.toLowerCase();
+    const isMilitarySeniorDiscount = hasDiscount && (
+        normalizedDiscountControlValue.includes('military') || normalizedDiscountControlValue.includes('senior')
+    );
+    const discountLabel = isMilitarySeniorDiscount
+        ? 'Military / Senior Discount'
+        : hasDiscount && normalizedDiscountControlValue.includes('other')
+            ? 'Other Discount'
+            : hasDiscount && discountControlValue
+                ? (/discount/i.test(discountControlValue) ? discountControlValue : `${discountControlValue} Discount`)
+                : 'Discount';
+    const storedDiscountPercentage = parseFloat(soRecord['140']?.value) || 0;
+    const discountPercentage = storedDiscountPercentage || (isMilitarySeniorDiscount ? 5 : null);
+    const taxRate = getTaxRate(String(soRecord['105']?.value ?? ''));
 
     console.log('[buildInvoiceData] Resolved from Service Order.', {
         serviceOrderId,
@@ -4858,7 +4870,9 @@ async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
             subtotal,
             discountAmount,
             discountLabel,
+            discountPercentage,
             taxAmount,
+            taxRate,
             total:      totalAmount,
             balanceDue: totalAmount, // TODO: subtract payments when payment records are available
         },
@@ -4994,6 +5008,152 @@ async function injectDeterministicPageBreaks(page) {
     }
 }
 
+async function getSubmittedPhotoBuffer(photo) {
+    const source = String(photo?.dataUrl || '').trim();
+    if (!source) {
+        throw new Error('Submitted photo is missing Firebase Storage content');
+    }
+    if (source.startsWith('data:image/')) {
+        const base64 = source.replace(/^data:[^;]+;base64,/i, '').replace(/\s+/g, '');
+        return Buffer.from(base64, 'base64');
+    }
+
+    const photoUrl = new URL(source);
+    if (photoUrl.hostname !== 'firebasestorage.googleapis.com') {
+        throw new Error('Submitted photo must use a Firebase Storage URL');
+    }
+    const response = await axios.get(photoUrl.toString(), {
+        responseType: 'arraybuffer',
+        maxContentLength: 50 * 1024 * 1024,
+        maxBodyLength: 50 * 1024 * 1024,
+    });
+    return Buffer.from(response.data);
+}
+
+async function updateSubmittedJobPhotos(serviceOrderId, jobPhotos) {
+    if (!Array.isArray(jobPhotos) || jobPhotos.length === 0) {
+        return { createdRecordIds: [], updatedRecordIds: [] };
+    }
+
+    const createdRecordIds = [];
+    const updates = [];
+    for (const photo of jobPhotos) {
+        const slot = String(photo?.slot || '').trim().toLowerCase();
+        const taskId = String(photo?.taskId || '').trim();
+        const taskName = String(photo?.taskName || '').trim();
+        const recordId = String(photo?.quickbaseRecordId || '').trim();
+        const fileName = String(photo?.fileName || '').trim();
+        const isExistingQuickbaseRecord = photo?.isExistingQuickbaseRecord === true;
+        console.log('[SubmitServiceOrder][JobPhotoUpdate]', {
+            serviceOrderId,
+            taskId,
+            slot,
+            quickbaseRecordId: recordId || null,
+            fileName,
+            isExistingQuickbaseRecord,
+        });
+        if ((slot !== 'before' && slot !== 'after') || !taskId || !taskName || !fileName) {
+            throw new Error('Submitted photo is missing a valid task, task name, before/after slot, or filename');
+        }
+
+        const caption = String(photo?.notes || '').trim();
+        const photoNotes = `${slot === 'before' ? 'Before' : 'After'}:${caption ? ` ${caption}` : ''}`;
+        const numericRecordId = Number.parseInt(recordId, 10);
+        if (Number.isFinite(numericRecordId)) {
+            updates.push({
+                3: { value: numericRecordId },
+                11: { value: 'Service Order' },
+                7: { value: photoNotes }
+            });
+            continue;
+        }
+
+        const photoBuffer = await getSubmittedPhotoBuffer(photo);
+        if (photoBuffer.length === 0) {
+            throw new Error(`Submitted ${slot} photo ${fileName} is empty`);
+        }
+        const createResponse = await axios.post(`${QB_API_ENDPOINT}/records`, {
+            to: TABLES.JOB_PHOTOS,
+            data: [{
+                6: { value: taskName },
+                7: { value: photoNotes },
+                8: { value: { fileName, data: photoBuffer.toString('base64') } },
+                9: { value: Number.parseInt(serviceOrderId, 10) },
+                11: { value: 'Service Order' },
+            }],
+            fieldsToReturn: [3],
+        }, { headers: buildQuickbaseHeaders() });
+        const createdRecordId = String(createResponse?.data?.data?.[0]?.['3']?.value || '').trim();
+        if (!createdRecordId) {
+            throw new Error(`QuickBase did not return a Job Photo record ID for ${fileName}`);
+        }
+        createdRecordIds.push(createdRecordId);
+    }
+
+    if (updates.length > 0) {
+        await writeQuickbaseRecords(TABLES.JOB_PHOTOS, updates, [3, 7, 11]);
+    }
+    return {
+        createdRecordIds,
+        updatedRecordIds: updates.map((update) => String(update[3].value)),
+    };
+}
+
+async function updateCompletedTaskNotes(techSheetData) {
+    const completedTasks = Array.isArray(techSheetData?.tasks)
+        ? techSheetData.tasks.filter((task) => task?.isFinished === true)
+        : [];
+    if (completedTasks.length === 0) {
+        return 0;
+    }
+
+    const technicianName = String(techSheetData?.leadTechnicianName || '').trim();
+    if (!technicianName) {
+        throw new Error('Lead technician name is required to update completed task notes');
+    }
+    const updates = completedTasks.map((task) => {
+        const taskId = Number.parseInt(String(task?.id || ''), 10);
+        if (!Number.isFinite(taskId)) {
+            throw new Error('Completed task is missing a valid record ID');
+        }
+        const technicianNote = String(task?.technicianNote || '').trim();
+        return {
+            3: { value: taskId },
+            41: { value: technicianNote ? `${technicianName}\n${technicianNote}` : technicianName }
+        };
+    });
+
+    await writeQuickbaseRecords(TABLES.SERVICE_ORDER_TASKS, updates, [3, 41]);
+    return updates.length;
+}
+
+async function sendTechSheetEmail(invoiceData, techSheetFilename, techSheetPdfBuffer) {
+    const recipient = String(invoiceData?.customer?.email || '').trim();
+    if (!recipient) {
+        throw new Error('Service Order customer email is required to send the Tech Sheet');
+    }
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        throw new Error('Email credentials are not configured');
+    }
+
+    const transporter = nodemailer.createTransport({
+        host: 'smtp.ionos.com',
+        port: 465,
+        secure: true,
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    });
+    const customerName = [invoiceData?.customer?.firstName, invoiceData?.customer?.lastName]
+        .filter(Boolean)
+        .join(' ') || 'Customer';
+    await transporter.sendMail({
+        from: `"The Roof Medic" <${process.env.EMAIL_USER}>`,
+        to: recipient,
+        subject: 'Your Roof Medic Tech Sheet',
+        html: `<p>Dear ${customerName},</p><p>Attached is the Tech Sheet for your completed service.</p><p>Sincerely,<br><strong>The Roof Medic</strong></p>`,
+        attachments: [{ filename: techSheetFilename, content: techSheetPdfBuffer }]
+    });
+}
+
 app.post('/service-order/submit', async (req, res) => {
     const { techSheetData, serviceOrderPayload } = req.body || {};
 
@@ -5011,6 +5171,7 @@ app.post('/service-order/submit', async (req, res) => {
         customerName: techSheetData.customerName,
         taskCount: techSheetData.tasks?.length ?? 0,
         selectedPhotoCount: techSheetData.selectedPhotos?.length ?? 0,
+        jobPhotoCount: techSheetData.jobPhotos?.length ?? 0,
         hasServiceOrderPayload: !!serviceOrderPayload,
     });
 
@@ -5022,8 +5183,9 @@ app.post('/service-order/submit', async (req, res) => {
     }
 
     // --- Phase 1: Tech Sheet PDF Generation ---
+    const writeDebugArtifacts = process.env.WRITE_PDF_DEBUG_ARTIFACTS === 'true';
     const tmpDir = path.join(process.cwd(), 'tmp');
-    if (!fs.existsSync(tmpDir)) {
+    if (writeDebugArtifacts && !fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
     }
     let browser = null;
@@ -5057,7 +5219,7 @@ app.post('/service-order/submit', async (req, res) => {
         console.log('[SubmitServiceOrder] Applying deterministic pagination to Tech Sheet.');
         await injectDeterministicPageBreaks(page);
 
-        const techSheetPdfBuffer = await page.pdf({
+        const techSheetPdfResult = await page.pdf({
             format: 'A4',
             printBackground: true,
             margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
@@ -5067,6 +5229,7 @@ app.post('/service-order/submit', async (req, res) => {
                 <span style="color: #555;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
             </div>`,
         });
+        const techSheetPdfBuffer = Buffer.from(techSheetPdfResult);
         const techSheetFilename = `TechSheet_${serviceOrderId}.pdf`;
 
         console.log('[SubmitServiceOrder] Tech Sheet PDF generated.', {
@@ -5076,20 +5239,22 @@ app.post('/service-order/submit', async (req, res) => {
         });
 
         // --- DEV ONLY: Write Tech Sheet PDF and HTML to tmp for visual validation ---
-        const techSheetTmpPath = path.join(tmpDir, techSheetFilename);
-        fs.writeFileSync(techSheetTmpPath, techSheetPdfBuffer);
-        console.log('[SubmitServiceOrder] Tech Sheet PDF written to disk.', {
-            serviceOrderId,
-            techSheetTmpPath,
-        });
+        if (writeDebugArtifacts) {
+            const techSheetTmpPath = path.join(tmpDir, techSheetFilename);
+            fs.writeFileSync(techSheetTmpPath, techSheetPdfBuffer);
+            console.log('[SubmitServiceOrder] Tech Sheet PDF written to disk.', {
+                serviceOrderId,
+                techSheetTmpPath,
+            });
 
-        // Also write the generated HTML so pagination decisions can be inspected.
-        const techSheetHtmlTmpPath = path.join(tmpDir, `TechSheet_${serviceOrderId}.html`);
-        fs.writeFileSync(techSheetHtmlTmpPath, htmlContent);
-        console.log('[SubmitServiceOrder] Tech Sheet HTML written to disk.', {
-            serviceOrderId,
-            techSheetHtmlTmpPath,
-        });
+            // Also write the generated HTML so pagination decisions can be inspected.
+            const techSheetHtmlTmpPath = path.join(tmpDir, `TechSheet_${serviceOrderId}.html`);
+            fs.writeFileSync(techSheetHtmlTmpPath, htmlContent);
+            console.log('[SubmitServiceOrder] Tech Sheet HTML written to disk.', {
+                serviceOrderId,
+                techSheetHtmlTmpPath,
+            });
+        }
 
         // --- Phase 2: Read completed Service Order Tasks and build Invoice line model ---
         const taskRecords = await fetchServiceOrderTasksForInvoice(serviceOrderId);
@@ -5126,7 +5291,7 @@ app.post('/service-order/submit', async (req, res) => {
 
         const invoicePage = await browser.newPage();
         await invoicePage.setContent(invoiceHtml, { waitUntil: 'networkidle0' });
-        const invoicePdfBuffer = await invoicePage.pdf({
+        const invoicePdfResult = await invoicePage.pdf({
             format: 'A4',
             printBackground: true,
             margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
@@ -5137,6 +5302,7 @@ app.post('/service-order/submit', async (req, res) => {
                 <span style="color: #555;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
             </div>`,
         });
+        const invoicePdfBuffer = Buffer.from(invoicePdfResult);
         await invoicePage.close();
 
         console.log('[SubmitServiceOrder] Invoice PDF generated (validation only).', {
@@ -5147,12 +5313,14 @@ app.post('/service-order/submit', async (req, res) => {
 
         // --- DEV ONLY: Write Invoice PDF to tmp for visual validation ---
         const invoiceFilename = `Invoice_${serviceOrderId}.pdf`;
-        const invoiceTmpPath = path.join(tmpDir, invoiceFilename);
-        fs.writeFileSync(invoiceTmpPath, invoicePdfBuffer);
-        console.log('[SubmitServiceOrder] Invoice PDF written to disk.', {
-            serviceOrderId,
-            invoiceTmpPath,
-        });
+        if (writeDebugArtifacts) {
+            const invoiceTmpPath = path.join(tmpDir, invoiceFilename);
+            fs.writeFileSync(invoiceTmpPath, invoicePdfBuffer);
+            console.log('[SubmitServiceOrder] Invoice PDF written to disk.', {
+                serviceOrderId,
+                invoiceTmpPath,
+            });
+        }
 
         // TODO Phase 4: Generate Invoice PDF from the created Invoice records
         // TODO Phase 5: Assemble complete Service Order payload
@@ -5162,7 +5330,55 @@ app.post('/service-order/submit', async (req, res) => {
         // TODO Phase 9: Schedule Review Request
         // TODO Phase 10: Cleanup
 
-        return res.status(200).json({ success: true, serviceOrderId });
+        const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+        const actualEndDate = invoiceData?.serviceOrder?.serviceDate;
+        if (!Number.isFinite(normalizedServiceOrderId)) {
+            throw new Error('Service Order record ID must be numeric');
+        }
+        if (!actualEndDate) {
+            throw new Error('Completed service date is required to update Actual End Date');
+        }
+
+        console.log('[SubmitServiceOrder][TechSheetUploadBuffer]', {
+            exists: !!techSheetPdfBuffer,
+            isBuffer: Buffer.isBuffer(techSheetPdfBuffer),
+            length: techSheetPdfBuffer?.length ?? null,
+            type: typeof techSheetPdfBuffer,
+        });
+        await uploadQuickbasePdfAttachment(serviceOrderId, 160, techSheetFilename, techSheetPdfBuffer);
+        console.log('[SubmitServiceOrder][InvoiceUploadBuffer]', {
+            exists: !!invoicePdfBuffer,
+            isBuffer: Buffer.isBuffer(invoicePdfBuffer),
+            length: invoicePdfBuffer?.length ?? null,
+            type: typeof invoicePdfBuffer,
+        });
+        await uploadQuickbasePdfAttachment(serviceOrderId, 159, invoiceFilename, invoicePdfBuffer);
+        await writeQuickbaseRecords(TABLES.SERVICE_ORDERS, [{
+            3: { value: normalizedServiceOrderId },
+            73: { value: String(serviceOrderPayload?.technicianTaskNotes || '').trim() },
+            65: { value: actualEndDate }
+        }], [3, 65, 73]);
+        const photoUpdateCount = await updateSubmittedJobPhotos(serviceOrderId, techSheetData.jobPhotos);
+        const taskUpdateCount = await updateCompletedTaskNotes(techSheetData);
+        await writeQuickbaseRecords(TABLES.SERVICE_ORDERS, [{
+            3: { value: normalizedServiceOrderId },
+            11: { value: 'Invoice Review' }
+        }], [3, 11]);
+        await sendTechSheetEmail(invoiceData, techSheetFilename, techSheetPdfBuffer);
+
+        return res.status(200).json({
+            success: true,
+            serviceOrderId,
+            production: {
+                techSheetUploaded: true,
+                invoiceUploaded: true,
+                serviceOrderUpdated: true,
+                photoUpdateCount,
+                taskUpdateCount,
+                status: 'Invoice Review',
+                techSheetEmailSent: true
+            }
+        });
     } catch (error) {
         console.error('[SubmitServiceOrder] Orchestration failed:', error.message);
         return res.status(500).json({ success: false, message: 'Service Order submission failed' });

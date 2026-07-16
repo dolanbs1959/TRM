@@ -101,7 +101,14 @@ export class ServiceOrderCollaborationService {
     serviceOrderId: string,
     taskId: string,
     slot: 'before' | 'after',
-    photo: { fileName: string; notes: string; capturedAt: number; storageUrl: string }
+    photo: {
+      fileName: string;
+      notes: string;
+      capturedAt: number;
+      storageUrl: string;
+      quickbaseRecordId: string;
+      isExistingQuickbaseRecord: boolean;
+    }
   ): Promise<void> {
     const ref = doc(this.db, 'serviceOrders', serviceOrderId);
     const snapshot = await getDoc(ref);
@@ -151,19 +158,42 @@ export class ServiceOrderCollaborationService {
 
   async getSessionTaskPhotos(
     serviceOrderId: string
-  ): Promise<Record<string, { fileName: string; notes: string; capturedAt: number; storageUrl: string }[]>> {
+  ): Promise<Record<string, {
+    fileName: string;
+    notes: string;
+    capturedAt: number;
+    storageUrl: string;
+    quickbaseRecordId: string;
+    isExistingQuickbaseRecord: boolean;
+  }[]>> {
     const ref = doc(this.db, 'serviceOrders', serviceOrderId);
     const snapshot = await getDoc(ref);
     if (!snapshot.exists()) {
       return {};
     }
     const tasks = snapshot.data()?.['tasks'] as
-      Record<string, { photos?: Record<string, { fileName: string; notes: string; capturedAt: number; storageUrl: string }[]> }>
+      Record<string, {
+        photos?: Record<string, {
+          fileName: string;
+          notes: string;
+          capturedAt: number;
+          storageUrl: string;
+          quickbaseRecordId: string;
+          isExistingQuickbaseRecord: boolean;
+        }[]>
+      }>
       | undefined;
     if (!tasks || typeof tasks !== 'object') {
       return {};
     }
-    const result: Record<string, { fileName: string; notes: string; capturedAt: number; storageUrl: string }[]> = {};
+    const result: Record<string, {
+      fileName: string;
+      notes: string;
+      capturedAt: number;
+      storageUrl: string;
+      quickbaseRecordId: string;
+      isExistingQuickbaseRecord: boolean;
+    }[]> = {};
     for (const [taskId, taskData] of Object.entries(tasks)) {
       const photos = taskData?.photos;
       if (!photos || typeof photos !== 'object') {

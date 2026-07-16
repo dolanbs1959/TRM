@@ -129,7 +129,7 @@ function buildLineItemsSectionHtml(invoiceData) {
         return `
             <tr class="${rowClass}">
                 <td>${item.taskName || '—'}</td>
-                <td class="description-cell">${item.description || '—'}</td>
+                <td class="description-cell">${item.description || 'No description available.'}</td>
                 <td class="numeric center">${qtyCell}</td>
                 ${sqFtTd}
                 <td class="numeric">${unitPriceCell}</td>
@@ -162,12 +162,18 @@ function buildFinancialSummaryHtml(invoiceData) {
     const discountAmount = parseFloat(financialSummary?.discountAmount) || 0;
     const discountLabel = financialSummary?.discountLabel || 'Discount';
     const taxAmount = parseFloat(financialSummary?.taxAmount) || 0;
+    const taxRate = parseFloat(financialSummary?.taxRate) || 0;
+    const discountPercentage = parseFloat(financialSummary?.discountPercentage) || 0;
     const total = parseFloat(financialSummary?.total) || (subtotal - discountAmount + taxAmount);
     const balanceDue = parseFloat(financialSummary?.balanceDue) || total;
 
     const discountDisplay = discountAmount > 0
         ? `-${formatCurrency(discountAmount)}`
         : formatCurrency(0);
+    const discountDisplayLabel = discountAmount > 0 && discountPercentage > 0
+        ? `${discountLabel} (${discountPercentage.toFixed(2).replace(/\.00$/, '')}%)`
+        : discountLabel;
+    const taxDisplayLabel = `Sales Tax (${(taxRate * 100).toFixed(2)}%)`; 
 
     return `
         <div class="totals-container">
@@ -177,11 +183,11 @@ function buildFinancialSummaryHtml(invoiceData) {
                     <span>${formatCurrency(subtotal)}</span>
                 </div>
                 <div class="totals-row">
-                    <span>${discountLabel}</span>
+                    <span>${discountDisplayLabel}</span>
                     <span>${discountDisplay}</span>
                 </div>
                 <div class="totals-row">
-                    <span>Tax</span>
+                    <span>${taxDisplayLabel}</span>
                     <span>${formatCurrency(taxAmount)}</span>
                 </div>
                 <div class="totals-row grand-total">
@@ -248,14 +254,12 @@ async function resizePhotoForPdf(imageInput, maxWidth = 800) {
 async function buildPhotoGalleryHtml(photos, title) {
     const photoItems = await Promise.all(photos.map(async (photo, index) => {
         const src = photo.src || photo.dataUrl || photo.url || '';
-        const label = photo.fileName || photo.section || photo.label || `Photo ${index + 1}`;
-        const notes = photo.notes || photo.description || '';
+        const notes = photo.notes || photo.description || ''; 
         const resizedSrc = src ? await resizePhotoForPdf(src, 800) : '';
 
         return `
             <div class="photo-item">
-                <img src="${resizedSrc}" alt="${label}" class="photo-img">
-                <div class="photo-section">${label}</div>
+                <img src="${resizedSrc}" alt="${title} ${index + 1}" class="photo-img">
                 ${notes ? `<div class="photo-notes">${notes}</div>` : ''}
             </div>`;
     }));

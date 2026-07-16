@@ -546,6 +546,11 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
   }
 
   getJobStatusLabel(job: any) {
+    const parentStatus = (job?.['11']?.value || '').toString().trim();
+    if (parentStatus.toLowerCase() === 'invoice review') {
+      return parentStatus;
+    }
+
     const assignmentStatus = (job?._techAssignmentStatus || '').toString().trim().toLowerCase();
     if (assignmentStatus === 'completed' || assignmentStatus === 'complete') {
       return 'Completed';

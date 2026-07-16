@@ -38,7 +38,7 @@
           Service Hub
         </ion-button>
         <ion-button
-          *ngIf="isServiceOrderHub() && canAccessWrapUp()"
+          *ngIf="isServiceOrderHub() && !isReadOnlyMode() && canAccessWrapUp()"
           size="small"
           fill="outline"
           color="light"
@@ -50,7 +50,7 @@
     </div>
 
     <!-- Read-only detail grid: non-inspection jobs in view mode, OR view mode fallback -->
-    <div class="payload-body" *ngIf="isReadOnlyMode() && !isInspection() && !isServiceOrder()">
+    <div class="payload-body" *ngIf="isReadOnlyMode() && !isInspection()">
       <h3>Job Detail (Read Only)</h3>
       <p>Look, don't touch mode. Use Dispatch/Arrive/Complete on the dashboard to run workflow (Inspected or Invoiced at completion).</p>
 
@@ -1016,7 +1016,7 @@
     <!-- ========================================================== -->
     <!-- SERVICE ORDER HUB â€” Service Tasks for service-order jobs -->
     <!-- ========================================================== -->
-    <div *ngIf="isServiceOrderHub()" class="payload-body service-order-hub">
+    <div *ngIf="isServiceOrderHub() && !isReadOnlyMode()" class="payload-body service-order-hub">
       <h3>Service Order Hub - Job #{{ serviceOrderId }}</h3>
       <div class="service-tasks-header-row">
         <h4>Service Tasks</h4>
