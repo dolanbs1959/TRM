@@ -79,3 +79,7 @@ src/environments/firebase.config.ts
 
 # Temporary files for AI discussions
 temp_images/
+
+# Development PDF output
+functions/tmp/*
+!functions/tmp/.gitkeep

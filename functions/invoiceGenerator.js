@@ -53,8 +53,8 @@ function buildCustomerInfoHtml(invoiceData) {
     const billTo = billingAddress || customer?.primaryAddress;
 
     const invoiceMeta = invoiceData.invoiceMeta || {};
-    const invoiceDate = invoiceMeta.invoiceDate ? formatDate(invoiceMeta.invoiceDate) : '';
-    const dueDate = invoiceMeta.dueDate ? formatDate(invoiceMeta.dueDate) : '';
+    const invoiceDate = invoiceMeta.invoiceDate ? formatDate(invoiceMeta.invoiceDate) : 'Pending';
+    const dueDate = invoiceMeta.dueDate ? formatDate(invoiceMeta.dueDate) : 'Pending';
     const paymentTerms = invoiceMeta.paymentTerms || 'Net 15';
     const serviceDate = invoiceData.serviceOrder?.serviceDate ? formatDate(invoiceData.serviceOrder.serviceDate) : '';
 
@@ -73,11 +73,11 @@ function buildCustomerInfoHtml(invoiceData) {
             </div>
             <div>
                 <strong>Invoice Date:</strong>
-                <div>${invoiceDate || '________________________'}</div>
+                <div>${invoiceDate}</div>
             </div>
             <div>
                 <strong>Due Date:</strong>
-                <div>${dueDate || '________________________'}</div>
+                <div>${dueDate}</div>
             </div>
             <div>
                 <strong>Payment Terms:</strong>
@@ -85,32 +85,15 @@ function buildCustomerInfoHtml(invoiceData) {
             </div>
             <div>
                 <strong>Service Date:</strong>
-                <div>${serviceDate || '________________________'}</div>
+                <div>${serviceDate || 'Pending'}</div>
             </div>
         </div>`;
 }
 
 function buildDescriptionOfWorkHtml(invoiceData) {
-    const { serviceOrder } = invoiceData;
-    const parts = [
-        serviceOrder?.serviceType,
-        serviceOrder?.serviceSubtype,
-        serviceOrder?.serviceNotes,
-    ].filter(Boolean);
-
-    if (parts.length === 0) {
-        return '';
-    }
-
-    const content = parts
-        .map(line => `<div style="margin-bottom: 6px;">${line}</div>`)
-        .join('');
-
-    return `
-        <div style="margin-bottom: 30px; padding: 15px 20px; background-color: #f9f9f9; border-left: 5px solid #f21616;">
-            <h3 style="color: #f21616; font-size: 18px; margin: 0 0 10px 0; border-bottom: 2px solid #f21616; padding-bottom: 8px;">Description of Work</h3>
-            <div style="font-size: 14px; color: #333; line-height: 1.5;">${content}</div>
-        </div>`;
+    // The completed work is represented by the invoice line items, so a separate
+    // Description of Work section is intentionally omitted.
+    return '';
 }
 
 function buildLineItemsSectionHtml(invoiceData) {
@@ -177,6 +160,7 @@ function buildFinancialSummaryHtml(invoiceData) {
     const { financialSummary } = invoiceData;
     const subtotal = parseFloat(financialSummary?.subtotal) || 0;
     const discountAmount = parseFloat(financialSummary?.discountAmount) || 0;
+    const discountLabel = financialSummary?.discountLabel || 'Discount';
     const taxAmount = parseFloat(financialSummary?.taxAmount) || 0;
     const total = parseFloat(financialSummary?.total) || (subtotal - discountAmount + taxAmount);
     const balanceDue = parseFloat(financialSummary?.balanceDue) || total;
@@ -193,7 +177,7 @@ function buildFinancialSummaryHtml(invoiceData) {
                     <span>${formatCurrency(subtotal)}</span>
                 </div>
                 <div class="totals-row">
-                    <span>Discounts</span>
+                    <span>${discountLabel}</span>
                     <span>${discountDisplay}</span>
                 </div>
                 <div class="totals-row">
@@ -213,29 +197,34 @@ function buildFinancialSummaryHtml(invoiceData) {
 }
 
 function buildSignatureSectionHtml() {
-    return `
-        <div class="signature-container">
-            <h3 style="color: #f21616; font-size: 18px; margin: 0 0 15px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Customer Acknowledgement</h3>
-            <p style="font-size: 13px; color: #555; margin-bottom: 25px; line-height: 1.5;">
-                By signing below, the customer acknowledges receipt of this invoice and agrees to pay the balance due in accordance with the stated payment terms.
-            </p>
-            <div class="signature-lines">
-                <div class="signature-line">
-                    <div class="line">____________________________________</div>
-                    <div class="label">Signature</div>
-                </div>
-                <div class="signature-line">
-                    <div class="line">______________________</div>
-                    <div class="label">Date</div>
-                </div>
-            </div>
-        </div>`;
+    // Customer Acknowledgement section intentionally omitted from customer-facing invoice.
+    return '';
 }
 
-async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
+async function resizePhotoForPdf(imageInput, maxWidth = 800) {
     try {
-        const base64Data = base64DataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-        const buffer = Buffer.from(base64Data, 'base64');
+        if (typeof imageInput !== 'string' || imageInput.length === 0) {
+            throw new Error('Image input is empty or not a string');
+        }
+
+        let buffer;
+        if (imageInput.startsWith('data:image/')) {
+            const base64Data = imageInput.replace(/^data:image\/[a-z]+;base64,/, '');
+            buffer = Buffer.from(base64Data, 'base64');
+        } else if (imageInput.match(/^https?:\/\//)) {
+            const response = await fetch(imageInput);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image from URL: ${response.status} ${response.statusText}`);
+            }
+            buffer = Buffer.from(await response.arrayBuffer());
+        } else {
+            throw new Error(`Unsupported image input format: ${imageInput.slice(0, 40)}...`);
+        }
+
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Image buffer is empty after decoding/fetching');
+        }
+
         const metadata = await sharp(buffer).metadata();
 
         let resizedBuffer;
@@ -252,8 +241,30 @@ async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
         return `data:image/jpeg;base64,${resizedBuffer.toString('base64')}`;
     } catch (error) {
         console.error('[InvoiceGenerator] Photo resize failed:', error.message);
-        return base64DataUrl;
+        return imageInput;
     }
+}
+
+async function buildPhotoGalleryHtml(photos, title) {
+    const photoItems = await Promise.all(photos.map(async (photo, index) => {
+        const src = photo.src || photo.dataUrl || photo.url || '';
+        const label = photo.fileName || photo.section || photo.label || `Photo ${index + 1}`;
+        const notes = photo.notes || photo.description || '';
+        const resizedSrc = src ? await resizePhotoForPdf(src, 800) : '';
+
+        return `
+            <div class="photo-item">
+                <img src="${resizedSrc}" alt="${label}" class="photo-img">
+                <div class="photo-section">${label}</div>
+                ${notes ? `<div class="photo-notes">${notes}</div>` : ''}
+            </div>`;
+    }));
+
+    return `
+        <div class="photo-subsection">
+            <h4 class="photo-subsection-title">${title}</h4>
+            <div class="photo-grid">${photoItems.join('')}</div>
+        </div>`;
 }
 
 async function buildPhotoSectionHtml(photos) {
@@ -261,28 +272,79 @@ async function buildPhotoSectionHtml(photos) {
         return '';
     }
 
-    const photoItems = await Promise.all(photos.map(async (photo, index) => {
-        const src = photo.src || photo.dataUrl || photo.url || '';
-        const label = photo.section || photo.label || `Photo ${index + 1}`;
-        const notes = photo.notes || photo.description || '';
-        const resizedSrc = src.startsWith('data:image/')
-            ? await resizePhotoForPdf(src, 1000)
-            : src;
+    const beforePhotos = photos.filter(p => String(p?.slot || '').toLowerCase() === 'before');
+    const afterPhotos = photos.filter(p => String(p?.slot || '').toLowerCase() === 'after');
 
-        return `
-            <div class="photo-item">
-                <img src="${resizedSrc}" alt="${label}" class="photo-img">
-                <div class="photo-section">${label}</div>
-                ${notes ? `<div style="font-size: 12px; color: #666; margin-top: 8px; line-height: 1.4;">${notes}</div>` : ''}
-            </div>`;
-    }));
+    const beforeHtml = beforePhotos.length > 0
+        ? await buildPhotoGalleryHtml(beforePhotos, 'Before Photos')
+        : '';
+    const afterHtml = afterPhotos.length > 0
+        ? await buildPhotoGalleryHtml(afterPhotos, 'After Photos')
+        : '';
+
+    if (!beforeHtml && !afterHtml) {
+        return '';
+    }
 
     return `
         <div class="section-3">
             <div class="photo-section-container">
-                <h3 style="color: #f21616; font-size: 18px; margin: 0 0 20px 0; border-bottom: 2px solid #f21616; padding-bottom: 10px;">Photos</h3>
-                <div class="photo-grid">${photoItems.join('')}</div>
+                <h3 class="section-title">Service Photos</h3>
+                ${beforeHtml}
+                ${afterHtml}
             </div>
+        </div>`;
+}
+
+function buildPaymentInfoHtml() {
+    return `
+        <div class="closing-section payment-info-section">
+            <h3 class="section-title">Payment Information</h3>
+            <div class="payment-info-grid">
+                <div>
+                    <div class="payment-info-label">Checks Payable To</div>
+                    <div class="payment-info-value">The Roof Medic</div>
+                </div>
+                <div>
+                    <div class="payment-info-label">Mail To</div>
+                    <div class="payment-info-value">PO Box 8098</div>
+                    <div class="payment-info-value">Bonney Lake, WA 98391</div>
+                </div>
+                <div>
+                    <div class="payment-info-label">Online Payments</div>
+                    <div class="payment-info-value">www.YourRoofMedic.com</div>
+                </div>
+                <div>
+                    <div class="payment-info-label">Debit Cards</div>
+                    <div class="payment-info-value">No Fee</div>
+                </div>
+                <div>
+                    <div class="payment-info-label">Credit Cards</div>
+                    <div class="payment-info-value">3.0% Processing Fee</div>
+                </div>
+                <div>
+                    <div class="payment-info-label">Questions?</div>
+                    <div class="payment-info-value">(253) 862-4412</div>
+                    <div class="payment-info-value">contact@YourRoofMedic.com</div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function buildPaymentTermsHtml() {
+    return `
+        <div class="closing-section payment-terms-section">
+            <h3 class="section-title">Payment Terms</h3>
+            <p>Payment is due within 15 days of the Invoice Date unless otherwise noted.</p>
+            <p>Past due balances are subject to a 1.5% monthly late fee.</p>
+        </div>`;
+}
+
+function buildThankYouHtml() {
+    return `
+        <div class="closing-section thank-you-section">
+            <p class="thank-you-title">Thank you for choosing The Roof Medic.</p>
+            <p>We appreciate the opportunity to serve you.</p>
         </div>`;
 }
 
@@ -471,9 +533,10 @@ async function generateInvoiceHtml(invoiceData) {
         break-inside: avoid;
     }
     .photo-img {
-        width: 100%;
+        max-width: 2.75in;
+        max-height: 4in;
+        width: auto;
         height: auto;
-        max-height: 250px;
         object-fit: contain;
         display: block;
     }
@@ -483,13 +546,38 @@ async function generateInvoiceHtml(invoiceData) {
         color: #f21616;
         margin-top: 10px;
     }
+    .photo-notes {
+        font-size: 12px;
+        color: #666;
+        margin-top: 8px;
+        line-height: 1.4;
+    }
     .photo-section-container {
         page-break-before: always;
         break-before: page;
         margin-top: 40px;
         padding: 20px;
     }
-    .photo-section-container h3 {
+    .photo-subsection {
+        margin-top: 24px;
+    }
+    .photo-subsection:first-of-type {
+        margin-top: 0;
+    }
+    .photo-subsection-title {
+        font-size: 15px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 6px;
+    }
+    .section-title {
+        color: #f21616;
+        font-size: 18px;
+        margin: 0 0 20px 0;
+        border-bottom: 2px solid #f21616;
+        padding-bottom: 10px;
         page-break-after: avoid;
         break-after: avoid;
         page-break-inside: avoid;
@@ -498,6 +586,51 @@ async function generateInvoiceHtml(invoiceData) {
     .section-3 {
         page-break-before: always;
         break-before: page;
+    }
+    .closing-section {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin-top: 30px;
+    }
+    .payment-info-section {
+        margin-top: 40px;
+    }
+    .payment-info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        font-size: 13px;
+    }
+    .payment-info-label {
+        font-weight: bold;
+        color: #555;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 4px;
+    }
+    .payment-info-value {
+        color: #333;
+        line-height: 1.4;
+    }
+    .payment-terms-section p {
+        font-size: 13px;
+        color: #333;
+        margin: 0 0 6px 0;
+        line-height: 1.5;
+    }
+    .thank-you-section {
+        text-align: center;
+        margin-top: 40px;
+        color: #333;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .thank-you-title {
+        font-weight: bold;
+        color: #f21616;
+        font-size: 15px;
+        margin: 0 0 4px 0;
     }
     .legal-text {
         font-size: 10px;
@@ -522,8 +655,7 @@ async function generateInvoiceHtml(invoiceData) {
         <div>${companyConfig.address}</div>
         <div>${companyConfig.phone}</div>
         <div>${companyConfig.email}</div>
-        <div style="margin-top: 10px;" class="invoice-meta-line"><strong>Job #:</strong> ${jobNumber}</div>
-        <div class="invoice-meta-line"><strong>Service Order #:</strong> ${serviceOrderNumber}</div>
+        <div style="margin-top: 10px;" class="invoice-meta-line"><strong>Service Order #:</strong> ${serviceOrderNumber}</div>
     </div>
 </div>
 
@@ -535,7 +667,11 @@ ${buildLineItemsSectionHtml(invoiceData)}
 
 ${buildFinancialSummaryHtml(invoiceData)}
 
-${buildSignatureSectionHtml()}
+<div class="closing-page">
+    ${buildPaymentInfoHtml()}
+    ${buildPaymentTermsHtml()}
+    ${buildThankYouHtml()}
+</div>
 
 ${photoSectionHtml}
 

@@ -4721,7 +4721,7 @@ function resolveAddressField(raw) {
 }
 
 // --- INTERNAL HELPER: Build InvoiceData contract from persisted QuickBase data ---
-async function buildInvoiceData(serviceOrderId) {
+async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
     const qbHeaders = { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` };
     const escapedId = String(serviceOrderId).trim().replace(/'/g, "\\'");
 
@@ -4811,6 +4811,10 @@ async function buildInvoiceData(serviceOrderId) {
     const taxAmount = soRecord['66']?.value ?? null;
     const totalAmount = soRecord['67']?.value ?? null;
     const discountAmount = soRecord['83']?.value ?? null;
+    const discountControlValue = String(soRecord['138']?.value ?? '').trim();
+    const discountLabel = discountControlValue
+        ? (/discount/i.test(discountControlValue) ? discountControlValue : `${discountControlValue} Discount`)
+        : 'Discount';
 
     console.log('[buildInvoiceData] Resolved from Service Order.', {
         serviceOrderId,
@@ -4853,17 +4857,143 @@ async function buildInvoiceData(serviceOrderId) {
         financialSummary: {
             subtotal,
             discountAmount,
+            discountLabel,
             taxAmount,
             total:      totalAmount,
             balanceDue: totalAmount, // TODO: subtract payments when payment records are available
         },
         lineItems,
+        photos: selectedPhotos,
         payment:   null, // TODO: populate when payment records are available
         signature: null, // TODO: populate from SO digital signature field if present
     };
 }
 
 // --- SERVICE ORDER SUBMISSION ORCHESTRATION ---
+
+/**
+ * Determine which task blocks in the Tech Sheet would be split across printed
+ * pages and inject explicit page-break-before rules so each block stays intact.
+ * This avoids relying on Chromium's break-inside handling, which is unreliable
+ * inside flex/grid containers and for large images.
+ */
+async function injectDeterministicPageBreaks(page) {
+    // A4 content area with 0.5in margins at 96 CSS pixels per inch.
+    const CONTENT_WIDTH_PX = 698;
+    const CONTENT_HEIGHT_PX = 1026;
+
+    await page.setViewport({
+        width: CONTENT_WIDTH_PX,
+        height: CONTENT_HEIGHT_PX,
+        deviceScaleFactor: 1,
+    });
+
+    // Wait for fonts, images, and layout to fully settle before measuring.
+    // This is critical because data-url images may decode asynchronously.
+    await page.evaluate(async () => {
+        await document.fonts.ready;
+        const images = Array.from(document.images);
+        await Promise.all(images.map(img => {
+            if (img.complete) {
+                return img.decode ? img.decode() : Promise.resolve();
+            }
+            return new Promise((resolve) => {
+                img.addEventListener('load', () => resolve(), { once: true });
+                img.addEventListener('error', () => resolve(), { once: true });
+            }).then(() => img.decode ? img.decode() : Promise.resolve());
+        }));
+        // Force a layout recalculation.
+        document.body.offsetHeight;
+    });
+
+    // Extra beat to ensure any post-decode reflow has completed.
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const getTaskBoxes = async () => {
+        return page.evaluate(() => {
+            return Array.from(document.querySelectorAll('[data-task-index]')).map(el => {
+                const rect = el.getBoundingClientRect();
+                return {
+                    index: el.dataset.taskIndex,
+                    top: rect.top,
+                    height: rect.height,
+                };
+            });
+        });
+    };
+
+    console.log('[injectDeterministicPageBreaks] Starting pagination analysis.');
+    console.log('[injectDeterministicPageBreaks] Printable page height (px):', CONTENT_HEIGHT_PX);
+
+    const initialBoxes = await getTaskBoxes();
+    console.log('[injectDeterministicPageBreaks] Measured task blocks:', initialBoxes.length);
+    console.log('[injectDeterministicPageBreaks] Task block measurements:', initialBoxes.map(b => ({ index: b.index, top: b.top, height: b.height })));
+
+    if (!initialBoxes || initialBoxes.length === 0) {
+        return;
+    }
+
+    const breaks = new Set();
+
+    for (let iteration = 0; iteration < 5; iteration++) {
+        let changed = false;
+        let accumulatedShift = 0;
+
+        for (const box of initialBoxes) {
+            const adjustedTop = box.top + accumulatedShift;
+            const adjustedBottom = adjustedTop + box.height;
+            const pageIndex = Math.floor(adjustedTop / CONTENT_HEIGHT_PX);
+            const pageStart = pageIndex * CONTENT_HEIGHT_PX;
+            const pageContentEnd = (pageIndex + 1) * CONTENT_HEIGHT_PX;
+            const remainingSpace = pageContentEnd - adjustedTop;
+            const crossesBoundary = adjustedBottom > pageContentEnd + 0.5;
+            const fitsOnOnePage = box.height <= CONTENT_HEIGHT_PX + 0.5;
+
+            let decision = 'KEEP';
+            let reason = '';
+            const expression = `crossesBoundary(${crossesBoundary}) && fitsOnOnePage(${fitsOnOnePage}) && !alreadyBreaking(${breaks.has(box.index)})`;
+
+            if (crossesBoundary && fitsOnOnePage && !breaks.has(box.index)) {
+                breaks.add(box.index);
+                changed = true;
+                decision = 'BREAK';
+                reason = 'task crosses page boundary and fits on one page';
+            } else if (crossesBoundary && !fitsOnOnePage) {
+                reason = 'task crosses page boundary but is larger than one printable page; cannot keep intact';
+            } else if (breaks.has(box.index)) {
+                reason = 'task already marked for break';
+            } else if (crossesBoundary) {
+                reason = 'task crosses boundary but is already scheduled for break';
+            } else {
+                reason = 'task fits within current printable page';
+            }
+
+            console.log(`[injectDeterministicPageBreaks] Task ${box.index}: top=${adjustedTop.toFixed(1)}, height=${box.height.toFixed(1)}, page=${pageIndex}, pageStart=${pageStart.toFixed(1)}, pageEnd=${pageContentEnd.toFixed(1)}, remaining=${remainingSpace.toFixed(1)}, crosses=${crossesBoundary}, fits=${fitsOnOnePage}, decision=${decision}, expression="${expression}", reason="${reason}"`);
+
+            if (breaks.has(box.index)) {
+                // Simulate the effect of breaking before this block: it will start
+                // at the top of the next page's content area.
+                const nextPageContentStart = (pageIndex + 1) * CONTENT_HEIGHT_PX;
+                const shift = nextPageContentStart - adjustedTop;
+                accumulatedShift += shift;
+            }
+        }
+
+        if (!changed) break;
+    }
+
+    if (breaks.size > 0) {
+        const css = Array.from(breaks)
+            .map(idx => `[data-task-index="${idx}"] { page-break-before: always !important; break-before: page !important; }`)
+            .join('\n');
+        await page.addStyleTag({ content: css });
+        console.log('[injectDeterministicPageBreaks] Injected CSS:', css);
+        console.log('[SubmitServiceOrder] Injected deterministic page breaks for task indexes:', Array.from(breaks));
+    } else {
+        console.log('[injectDeterministicPageBreaks] No page breaks needed; all task blocks fit.');
+    }
+}
+
 app.post('/service-order/submit', async (req, res) => {
     const { techSheetData, serviceOrderPayload } = req.body || {};
 
@@ -4883,6 +5013,13 @@ app.post('/service-order/submit', async (req, res) => {
         selectedPhotoCount: techSheetData.selectedPhotos?.length ?? 0,
         hasServiceOrderPayload: !!serviceOrderPayload,
     });
+
+    // Use the server timestamp at request receipt as the authoritative
+    // successful Wrap-Up submission time.
+    const wrapUpCompletedAt = new Date().toISOString();
+    if (techSheetData && typeof techSheetData === 'object') {
+        techSheetData.wrapUpCompletedAt = wrapUpCompletedAt;
+    }
 
     // --- Phase 1: Tech Sheet PDF Generation ---
     const tmpDir = path.join(process.cwd(), 'tmp');
@@ -4911,8 +5048,25 @@ app.post('/service-order/submit', async (req, res) => {
         });
 
         const page = await browser.newPage();
+        // Set the viewport to the PDF content size before loading HTML so the
+        // initial layout matches the printable area.
+        await page.setViewport({ width: 698, height: 1026, deviceScaleFactor: 1 });
         await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-        const techSheetPdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+
+        // Apply deterministic pagination so each task block stays intact.
+        console.log('[SubmitServiceOrder] Applying deterministic pagination to Tech Sheet.');
+        await injectDeterministicPageBreaks(page);
+
+        const techSheetPdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+            displayHeaderFooter: true,
+            footerTemplate: `<div style="font-size: 9px; width: 100%; padding: 0 0.5in; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box;">
+                <span style="color: #555;">The Roof Medic &bull; 6519 Myers Rd E Unit 3, Bonney Lake, WA 98391 &bull; 253-862-4412 &bull; contact@YourRoofMedic.com</span>
+                <span style="color: #555;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+            </div>`,
+        });
         const techSheetFilename = `TechSheet_${serviceOrderId}.pdf`;
 
         console.log('[SubmitServiceOrder] Tech Sheet PDF generated.', {
@@ -4921,12 +5075,20 @@ app.post('/service-order/submit', async (req, res) => {
             techSheetPdfSize: techSheetPdfBuffer.length,
         });
 
-        // --- DEV ONLY: Write Tech Sheet PDF to tmp for visual validation ---
+        // --- DEV ONLY: Write Tech Sheet PDF and HTML to tmp for visual validation ---
         const techSheetTmpPath = path.join(tmpDir, techSheetFilename);
         fs.writeFileSync(techSheetTmpPath, techSheetPdfBuffer);
         console.log('[SubmitServiceOrder] Tech Sheet PDF written to disk.', {
             serviceOrderId,
             techSheetTmpPath,
+        });
+
+        // Also write the generated HTML so pagination decisions can be inspected.
+        const techSheetHtmlTmpPath = path.join(tmpDir, `TechSheet_${serviceOrderId}.html`);
+        fs.writeFileSync(techSheetHtmlTmpPath, htmlContent);
+        console.log('[SubmitServiceOrder] Tech Sheet HTML written to disk.', {
+            serviceOrderId,
+            techSheetHtmlTmpPath,
         });
 
         // --- Phase 2: Read completed Service Order Tasks and build Invoice line model ---
@@ -4948,7 +5110,7 @@ app.post('/service-order/submit', async (req, res) => {
             ...invoiceWriteResult,
         });
         // --- Phase 3.5: Build InvoiceData contract from persisted QuickBase data ---
-        const invoiceData = await buildInvoiceData(serviceOrderId);
+        const invoiceData = await buildInvoiceData(serviceOrderId, techSheetData?.selectedPhotos || []);
 
         console.log('[InvoiceData]', JSON.stringify(invoiceData, null, 2));
 
@@ -4956,9 +5118,25 @@ app.post('/service-order/submit', async (req, res) => {
         const invoiceHtml = await generateInvoiceHtml(invoiceData);
         console.log('[SubmitServiceOrder] Invoice HTML generated, length:', invoiceHtml.length);
 
+        const invoicePrintTimestamp = new Date().toLocaleString('en-US', {
+            timeZone: 'America/Los_Angeles',
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true,
+        });
+
         const invoicePage = await browser.newPage();
         await invoicePage.setContent(invoiceHtml, { waitUntil: 'networkidle0' });
-        const invoicePdfBuffer = await invoicePage.pdf({ format: 'A4', printBackground: true });
+        const invoicePdfBuffer = await invoicePage.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+            displayHeaderFooter: true,
+            footerTemplate: `<div style="font-size: 9px; width: 100%; padding: 0 0.5in; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box;">
+                <span style="color: #555;">Printed ${invoicePrintTimestamp}</span>
+                <span style="color: #555;">The Roof Medic &bull; 6519 Myers Rd E Unit 3, Bonney Lake, WA 98391 &bull; 253-862-4412 &bull; contact@YourRoofMedic.com</span>
+                <span style="color: #555;">Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+            </div>`,
+        });
         await invoicePage.close();
 
         console.log('[SubmitServiceOrder] Invoice PDF generated (validation only).', {

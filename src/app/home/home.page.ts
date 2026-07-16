@@ -36,6 +36,8 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     private static readonly INSPECTION_DRAFT_DB_VERSION = 1;
     private static readonly INSPECTION_PHOTO_STORE_NAME = 'inspectionPhotoDrafts';
     private static readonly ESTIMATE_DRAFT_STORAGE_KEY_PREFIX = 'trm_estimate_draft_';
+    private static readonly WRAPUP_DRAFT_STORAGE_KEY_PREFIX = 'trm_wrapup_draft_';
+    private static readonly WRAPUP_SUBMITTED_STORAGE_KEY_PREFIX = 'trm.wrapUpSubmitted.';
 
     tech: any = {
       id: '',
@@ -72,6 +74,8 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
    apiKey: string = '1aeba395c05d88a9369eb7127f21afca';
   private viewEnterCount = 0;
   private draftStateCache: Record<string, boolean> = {};
+  private wrapUpDraftStateCache: Record<string, boolean> = {};
+  private wrapUpSubmittedStateCache: Record<string, boolean> = {};
   private historicalRetrievalCache: Map<string, any> = new Map();
 
   constructor(
@@ -1653,6 +1657,34 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     return !!raw;
   }
 
+  private hasWrapUpDraft(jobRecordId: string): boolean {
+    const id = (jobRecordId || '').trim();
+    if (!id) {
+      return false;
+    }
+
+    const storageKey = `${HomePage.WRAPUP_DRAFT_STORAGE_KEY_PREFIX}${id}`;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      return false;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      return !!parsed && typeof parsed === 'object';
+    } catch {
+      return false;
+    }
+  }
+
+  private hasWrapUpBeenSubmitted(jobRecordId: string): boolean {
+    const id = (jobRecordId || '').trim();
+    if (!id) {
+      return false;
+    }
+    return !!localStorage.getItem(`${HomePage.WRAPUP_SUBMITTED_STORAGE_KEY_PREFIX}${id}`);
+  }
+
   private getDraftStateForJob(jobRecordId: string): boolean {
     return this.hasEstimateDraft(jobRecordId);
   }
@@ -1962,15 +1994,21 @@ async ngOnInit() {
   private refreshDraftStateCache() {
     if (!this.serviceOrders) {
       this.draftStateCache = {};
+      this.wrapUpDraftStateCache = {};
+      this.wrapUpSubmittedStateCache = {};
       return;
     }
 
     this.draftStateCache = {};
+    this.wrapUpDraftStateCache = {};
+    this.wrapUpSubmittedStateCache = {};
     this.serviceOrders.forEach((job) => {
       const jobRecordId = this.getJobRecordId(job);
       if (jobRecordId) {
         const hasDraft = this.hasEstimateDraft(jobRecordId);
         this.draftStateCache[jobRecordId] = hasDraft;
+        this.wrapUpDraftStateCache[jobRecordId] = this.hasWrapUpDraft(jobRecordId);
+        this.wrapUpSubmittedStateCache[jobRecordId] = this.hasWrapUpBeenSubmitted(jobRecordId);
       }
     });
   }
@@ -2097,14 +2135,20 @@ async ngOnInit() {
   }
 
   getViewJobButtonLabel(job: any): string {
-    // Priority 1: Check if draft exists (highest priority)
     const jobRecordId = this.getJobRecordId(job);
+
+    // After Wrap-Up submission the Service Order is read-only.
+    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
+    if (this.wrapUpSubmittedStateCache[jobRecordId] || status === 'invoice review') {
+      return 'VIEW JOB';
+    }
+
+    // Priority 1: Check if draft exists (highest priority)
     if (this.draftStateCache[jobRecordId]) {
       return 'RESUME ESTIMATE';
     }
 
     // Priority 2: No draft exists - check job status
-    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
     if (status === 'estimated') {
       return 'REVISE ESTIMATE';
     }
@@ -2113,9 +2157,9 @@ async ngOnInit() {
       return 'START ESTIMATE';
     }
 
-    // Lead technician with a completed assignment sees START WRAP-UP on the job card.
+    // Lead technician with a completed assignment sees START / RESUME WRAP-UP on the job card.
     if (this.isLeadTechnician() && this.isTechnicianAssignmentComplete(job)) {
-      return 'START WRAP-UP';
+      return this.wrapUpDraftStateCache[jobRecordId] ? 'RESUME WRAP-UP' : 'START WRAP-UP';
     }
 
     return this.isInProgressJob(job) ? 'RETURN TO HUB' : 'VIEW JOB';
@@ -2141,9 +2185,15 @@ async ngOnInit() {
       return;
     }
 
+    // Completed service orders open read-only regardless of drafts or role.
+    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
+    if (this.wrapUpSubmittedStateCache[jobRecordId] || status === 'invoice review') {
+      this.openJobDetail(jobRecordId, 'view', false, 'hub');
+      return;
+    }
+
     // Determine workflow from draft state and job status
     const hasDraft = !!this.draftStateCache[jobRecordId];
-    const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
 
     if (hasDraft) {
       this.openEstimate(jobRecordId, job, EstimateWorkflow.RESUME);

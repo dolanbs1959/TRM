@@ -240,4 +240,17 @@ export class ServiceOrderCollaborationService {
       .filter(([, taskData]) => taskData?.finished === true)
       .map(([taskId]) => taskId);
   }
+
+  async closeSession(serviceOrderId: string): Promise<void> {
+    const ref = doc(this.db, 'serviceOrders', serviceOrderId);
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) {
+      return;
+    }
+    const now = new Date().toISOString();
+    await updateDoc(ref, {
+      wrapUpSubmittedAt: now,
+      lastUpdated: now,
+    });
+  }
 }

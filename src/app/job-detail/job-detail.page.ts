@@ -58,11 +58,13 @@ interface TechSheetPhoto {
   fileName: string;
   notes: string;
   capturedAt: number;
+  dataUrl?: string;
 }
 
 interface TechSheetTask {
   id: string;
   taskName: string;
+  description: string;
   serviceCategory: string;
   quantity: number | null;
   estimatePrice: number | null;
@@ -138,6 +140,7 @@ export class JobDetailPage implements OnInit, DoCheck {
   private static readonly ACTIVE_JOB_ID_STORAGE_KEY = 'trm.activeJobId';
   private static readonly ACTIVE_JOB_MODE_STORAGE_KEY = 'trm.activeJobMode';
   private static readonly ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY = 'trm.activeJobServiceOrderView';
+  private static readonly WRAP_UP_SUBMITTED_STORAGE_KEY_PREFIX = 'trm.wrapUpSubmitted.';
   private static readonly ACTIVE_JOB_PAUSED_STORAGE_KEY = 'trm.activeJobPaused';
   private static readonly INSPECTION_CACHE_PREFIX = 'trm.inspectionCache.';
   private static readonly INSPECTION_DRAFT_DB_NAME = 'trmInspectionDraftDb';
@@ -242,6 +245,9 @@ export class JobDetailPage implements OnInit, DoCheck {
   // Lead Tech Wrap-Up state
   private lastWrapUpDraftSnapshot = '';
   private skipWrapUpDraftPersistence = false;
+  wrapUpSubmitting = false;
+  wrapUpSubmitted = false;
+  wrapUpSubmittedAt: string | null = null;
   wrapUpForm = {
     leadTechnician: '',
     crewMembers: '',
@@ -913,6 +919,26 @@ export class JobDetailPage implements OnInit, DoCheck {
     return photos.filter(p => this.isWrapUpPhotoSelected(p)).length;
   }
 
+  selectAllTaskSlotPhotos(taskId: string, slot: 'before' | 'after'): void {
+    for (const photo of this.getTaskPhotoAttachments(taskId, slot)) {
+      this.selectedWrapUpPhotoIds.add(this.getWrapUpPhotoSelectionId(photo));
+    }
+  }
+
+  clearAllTaskSlotPhotoSelections(taskId: string, slot: 'before' | 'after'): void {
+    const ids = this.getTaskPhotoAttachments(taskId, slot)
+      .map(p => this.getWrapUpPhotoSelectionId(p));
+    for (const id of ids) {
+      this.selectedWrapUpPhotoIds.delete(id);
+    }
+  }
+
+  getSelectedTaskSlotPhotoCount(taskId: string, slot: 'before' | 'after'): number {
+    return this.getTaskPhotoAttachments(taskId, slot)
+      .filter(p => this.isWrapUpPhotoSelected(p))
+      .length;
+  }
+
   getFinishedTaskCount(): number {
     return this.serviceTasks.filter(t => this.isTaskFinished(t.id)).length;
   }
@@ -942,6 +968,8 @@ export class JobDetailPage implements OnInit, DoCheck {
     return {
       serviceOrderId: this.serviceOrderId,
       wrapUpForm: { ...this.wrapUpForm },
+      selectedWrapUpPhotoIds: Array.from(this.selectedWrapUpPhotoIds),
+      taskNotes: { ...this.taskNotes },
     };
   }
 
@@ -984,6 +1012,17 @@ export class JobDetailPage implements OnInit, DoCheck {
         };
       }
 
+      if (Array.isArray(parsed?.selectedWrapUpPhotoIds)) {
+        this.selectedWrapUpPhotoIds = new Set(parsed.selectedWrapUpPhotoIds);
+      }
+
+      if (parsed?.taskNotes && typeof parsed.taskNotes === 'object') {
+        this.taskNotes = {
+          ...this.taskNotes,
+          ...parsed.taskNotes,
+        };
+      }
+
       this.lastWrapUpDraftSnapshot = JSON.stringify(this.buildWrapUpDraftData());
       console.log('[WrapUp] Hydrated local wrap-up draft from storage.', {
         storageKey,
@@ -1003,6 +1042,7 @@ export class JobDetailPage implements OnInit, DoCheck {
 
     localStorage.removeItem(this.getWrapUpDraftStorageKey());
     this.lastWrapUpDraftSnapshot = '';
+    this.skipWrapUpDraftPersistence = true;
   }
 
   isAllTechnicianAssignmentsCompleted(): boolean {
@@ -1101,11 +1141,16 @@ export class JobDetailPage implements OnInit, DoCheck {
     const earliest = sorted[0];
     const dt = new Date(earliest.arrivedAt);
     const timeStr = dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    return `${timeStr} (${earliest.technicianName || 'Unknown'})`;
+    return timeStr;
   }
 
   isSubmitWrapUpEnabled(): boolean {
-    return this.isAllTechnicianAssignmentsCompleted() && this.isWrapUpFormValid();
+    return (
+      !this.wrapUpSubmitting &&
+      !this.wrapUpSubmitted &&
+      this.isAllTechnicianAssignmentsCompleted() &&
+      this.isWrapUpFormValid()
+    );
   }
 
   async onSubmitWrapUpServiceOrder() {
@@ -1118,7 +1163,12 @@ export class JobDetailPage implements OnInit, DoCheck {
       return;
     }
 
-    await this.submitServiceOrder();
+    this.wrapUpSubmitting = true;
+    try {
+      await this.submitServiceOrder();
+    } finally {
+      this.wrapUpSubmitting = false;
+    }
   }
 
   private async submitServiceOrder() {
@@ -1172,6 +1222,43 @@ export class JobDetailPage implements OnInit, DoCheck {
       });
       return;
     }
+
+    this.wrapUpSubmitted = true;
+    this.wrapUpSubmittedAt = wrapUpCompletedAt;
+    this.clearWrapUpDraft();
+    localStorage.setItem(
+      `${JobDetailPage.WRAP_UP_SUBMITTED_STORAGE_KEY_PREFIX}${this.serviceOrderId}`,
+      this.wrapUpSubmittedAt
+    );
+    console.log('[WrapUp] Submission successful. Page is now read-only.', {
+      serviceOrderId: this.serviceOrderId,
+      wrapUpSubmittedAt: this.wrapUpSubmittedAt,
+    });
+  }
+
+  async ionViewWillLeave() {
+    if (!this.wrapUpSubmitted || !this.isServiceOrder()) {
+      return;
+    }
+
+    this.clearWrapUpDraft();
+    this.clearActiveWrapUpNavigationState();
+
+    try {
+      await this.collaborationService.closeSession(this.serviceOrderId);
+      console.log('[WrapUp] Collaboration session closed.', {
+        serviceOrderId: this.serviceOrderId,
+      });
+    } catch (err) {
+      console.warn('[WrapUp] Failed to close collaboration session:', err);
+    }
+  }
+
+  private clearActiveWrapUpNavigationState() {
+    localStorage.removeItem(JobDetailPage.ACTIVE_JOB_SERVICE_ORDER_VIEW_STORAGE_KEY);
+    localStorage.setItem(JobDetailPage.ACTIVE_JOB_MODE_STORAGE_KEY, 'view');
+    this.pageMode = 'view';
+    this.serviceOrderView = 'hub';
   }
 
   private buildTechSheetData(wrapUpCompletedAt: string): TechSheetData {
@@ -1184,14 +1271,28 @@ export class JobDetailPage implements OnInit, DoCheck {
         fileName: p.fileName,
         notes: p.notes,
         capturedAt: p.capturedAt,
+        dataUrl: p.dataUrl || '',
       }));
 
-    const crewMembers: TechSheetCrewMember[] = this.serviceOrderAssignments.map(a => ({
-      technicianId: a.technicianId,
-      technicianName: a.technicianName,
-      assignmentStatus: a.assignmentStatus,
-      arrivedAt: this.arrivalTimestamps[a.technicianId]?.arrivedAt ?? null,
-    }));
+    const normalizeId = (id: string) => String(id || '').trim();
+
+    const crewMembers: TechSheetCrewMember[] = this.serviceOrderAssignments.map(a => {
+      const techId = normalizeId(a.technicianId);
+      const techName = (a.technicianName || '').trim();
+      const arrivalKey = Object.keys(this.arrivalTimestamps).find(key => {
+        const entry = this.arrivalTimestamps[key];
+        return (
+          normalizeId(key) === techId ||
+          (entry?.technicianName || '').trim().toLowerCase() === techName.toLowerCase()
+        );
+      });
+      return {
+        technicianId: a.technicianId,
+        technicianName: a.technicianName,
+        assignmentStatus: a.assignmentStatus,
+        arrivedAt: arrivalKey ? this.arrivalTimestamps[arrivalKey].arrivedAt : null,
+      };
+    });
 
     const arrivalEntries = Object.values(this.arrivalTimestamps)
       .filter(e => !!e.arrivedAt)
@@ -1201,6 +1302,7 @@ export class JobDetailPage implements OnInit, DoCheck {
     const tasks: TechSheetTask[] = this.serviceTasks.map(t => ({
       id: t.id,
       taskName: t.taskName,
+      description: t.description,
       serviceCategory: t.serviceCategory,
       quantity: t.quantity,
       estimatePrice: t.estimatePrice,

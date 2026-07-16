@@ -587,83 +587,54 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Customer Home On Arrival</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'yes'" (click)="wrapUpForm.customerHomeOnArrival = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'no'" (click)="wrapUpForm.customerHomeOnArrival = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'na'" (click)="wrapUpForm.customerHomeOnArrival = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'yes'" (click)="wrapUpForm.customerHomeOnArrival = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'no'" (click)="wrapUpForm.customerHomeOnArrival = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerHomeOnArrival === 'na'" (click)="wrapUpForm.customerHomeOnArrival = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Customer Home On Departure</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'yes'" (click)="wrapUpForm.customerHomeOnDeparture = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'no'" (click)="wrapUpForm.customerHomeOnDeparture = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'na'" (click)="wrapUpForm.customerHomeOnDeparture = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'yes'" (click)="wrapUpForm.customerHomeOnDeparture = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'no'" (click)="wrapUpForm.customerHomeOnDeparture = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerHomeOnDeparture === 'na'" (click)="wrapUpForm.customerHomeOnDeparture = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Customer Walked Around Home</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'yes'" (click)="wrapUpForm.customerWalkedAround = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'no'" (click)="wrapUpForm.customerWalkedAround = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'na'" (click)="wrapUpForm.customerWalkedAround = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'yes'" (click)="wrapUpForm.customerWalkedAround = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'no'" (click)="wrapUpForm.customerWalkedAround = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.customerWalkedAround === 'na'" (click)="wrapUpForm.customerWalkedAround = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Photos Taken</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.photosTaken === 'yes'" (click)="wrapUpForm.photosTaken = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.photosTaken === 'no'" (click)="wrapUpForm.photosTaken = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.photosTaken === 'na'" (click)="wrapUpForm.photosTaken = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.photosTaken === 'yes'" (click)="wrapUpForm.photosTaken = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.photosTaken === 'no'" (click)="wrapUpForm.photosTaken = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.photosTaken === 'na'" (click)="wrapUpForm.photosTaken = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">All Windows Closed On Home</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'yes'" (click)="wrapUpForm.allWindowsClosed = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'no'" (click)="wrapUpForm.allWindowsClosed = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'na'" (click)="wrapUpForm.allWindowsClosed = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'yes'" (click)="wrapUpForm.allWindowsClosed = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'no'" (click)="wrapUpForm.allWindowsClosed = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allWindowsClosed === 'na'" (click)="wrapUpForm.allWindowsClosed = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Vehicles Moved Away From Home</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'yes'" (click)="wrapUpForm.vehiclesMovedAway = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'no'" (click)="wrapUpForm.vehiclesMovedAway = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'na'" (click)="wrapUpForm.vehiclesMovedAway = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'yes'" (click)="wrapUpForm.vehiclesMovedAway = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'no'" (click)="wrapUpForm.vehiclesMovedAway = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.vehiclesMovedAway === 'na'" (click)="wrapUpForm.vehiclesMovedAway = 'na'">N/A</button>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="wrap-up-section">
-        <div class="wrap-up-section-header">
-          <h4 class="wrap-up-section-title">Ordered Services Completed</h4>
-          <span class="wrap-up-task-counter" *ngIf="serviceTasks.length > 0">
-            {{ getFinishedTaskCount() }} of {{ serviceTasks.length }} finished
-          </span>
-        </div>
-        <p class="wrap-up-helper" *ngIf="serviceTasks.length === 0">No service tasks assigned.</p>
-        <div class="wrap-up-task-list" *ngIf="serviceTasks.length > 0">
-          <ng-container *ngFor="let group of tasksByCategory">
-            <h5 class="wrap-up-category-heading">{{ group.category }}</h5>
-            <ng-container *ngFor="let task of group.tasks">
-              <div class="wrap-up-task-row" [class.wrap-up-task-row--finished]="isTaskFinished(task.id)">
-                <ion-icon [name]="isTaskFinished(task.id) ? 'checkmark-circle' : 'ellipse-outline'"></ion-icon>
-                <span class="wrap-up-task-name">{{ task.taskName }}</span>
-                <span *ngIf="task.quantity != null" class="wrap-up-task-qty">Qty: {{ task.quantity }}</span>
-              </div>
-              <div class="wrap-up-task-note" *ngIf="taskNotes[task.id]?.trim()">
-                <span class="wrap-up-task-note-label">Notes:</span>
-                <span class="wrap-up-task-note-text">{{ taskNotes[task.id] }}</span>
-              </div>
-            </ng-container>
-          </ng-container>
-        </div>
-        <div class="wrap-up-textarea-wrap">
-          <label>Additional Services Completed Notes</label>
-          <textarea [(ngModel)]="wrapUpForm.servicesCompletedNotes" rows="3" placeholder="Notes on completed services"></textarea>
-        </div>
-      </section>
 
       <section class="wrap-up-section">
         <h4 class="wrap-up-section-title">Service & Property Preparation</h4>
@@ -673,41 +644,41 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Flower Beds</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'yes'" (click)="wrapUpForm.movedFlowerBeds = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'no'" (click)="wrapUpForm.movedFlowerBeds = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'na'" (click)="wrapUpForm.movedFlowerBeds = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'yes'" (click)="wrapUpForm.movedFlowerBeds = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'no'" (click)="wrapUpForm.movedFlowerBeds = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedFlowerBeds === 'na'" (click)="wrapUpForm.movedFlowerBeds = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Patio Furniture</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'yes'" (click)="wrapUpForm.movedPatioFurniture = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'no'" (click)="wrapUpForm.movedPatioFurniture = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'na'" (click)="wrapUpForm.movedPatioFurniture = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'yes'" (click)="wrapUpForm.movedPatioFurniture = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'no'" (click)="wrapUpForm.movedPatioFurniture = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedPatioFurniture === 'na'" (click)="wrapUpForm.movedPatioFurniture = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Flowers / Hanging Baskets</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'yes'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'no'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'na'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'yes'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'no'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedFlowersHangingBaskets === 'na'" (click)="wrapUpForm.movedFlowersHangingBaskets = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Miscellaneous Outdoor Items</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'yes'" (click)="wrapUpForm.movedMiscOutdoorItems = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'no'" (click)="wrapUpForm.movedMiscOutdoorItems = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'na'" (click)="wrapUpForm.movedMiscOutdoorItems = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'yes'" (click)="wrapUpForm.movedMiscOutdoorItems = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'no'" (click)="wrapUpForm.movedMiscOutdoorItems = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedMiscOutdoorItems === 'na'" (click)="wrapUpForm.movedMiscOutdoorItems = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Shrubs / Hedges / Trees</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'yes'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'no'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'na'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'yes'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'no'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.movedShrubsHedgesTrees === 'na'" (click)="wrapUpForm.movedShrubsHedgesTrees = 'na'">N/A</button>
             </div>
           </div>
         </div>
@@ -717,9 +688,9 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Hoses Ran Along Concrete (Not Grass)</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'yes'" (click)="wrapUpForm.hosesRanAlongConcrete = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'no'" (click)="wrapUpForm.hosesRanAlongConcrete = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'na'" (click)="wrapUpForm.hosesRanAlongConcrete = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'yes'" (click)="wrapUpForm.hosesRanAlongConcrete = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'no'" (click)="wrapUpForm.hosesRanAlongConcrete = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.hosesRanAlongConcrete === 'na'" (click)="wrapUpForm.hosesRanAlongConcrete = 'na'">N/A</button>
             </div>
           </div>
         </div>
@@ -729,48 +700,48 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Roof Cleared of All Moss/Debris</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'yes'" (click)="wrapUpForm.roofClearedOfDebris = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'no'" (click)="wrapUpForm.roofClearedOfDebris = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'na'" (click)="wrapUpForm.roofClearedOfDebris = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'yes'" (click)="wrapUpForm.roofClearedOfDebris = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'no'" (click)="wrapUpForm.roofClearedOfDebris = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.roofClearedOfDebris === 'na'" (click)="wrapUpForm.roofClearedOfDebris = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">All Gutters/Downspouts Cleared</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'yes'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'no'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'na'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'yes'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'no'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allGuttersDownspoutsCleared === 'na'" (click)="wrapUpForm.allGuttersDownspoutsCleared = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">All Included Roofs Serviced (Shed, Etc.)</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'yes'" (click)="wrapUpForm.allIncludedRoofsServiced = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'no'" (click)="wrapUpForm.allIncludedRoofsServiced = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'na'" (click)="wrapUpForm.allIncludedRoofsServiced = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'yes'" (click)="wrapUpForm.allIncludedRoofsServiced = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'no'" (click)="wrapUpForm.allIncludedRoofsServiced = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allIncludedRoofsServiced === 'na'" (click)="wrapUpForm.allIncludedRoofsServiced = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Plants Rinsed Before Treatment</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'yes'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'no'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'na'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'yes'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'no'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.plantsRinsedBeforeTreatment === 'na'" (click)="wrapUpForm.plantsRinsedBeforeTreatment = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Plants Rinsed After Treatment</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'yes'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'no'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'na'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'yes'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'no'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.plantsRinsedAfterTreatment === 'na'" (click)="wrapUpForm.plantsRinsedAfterTreatment = 'na'">N/A</button>
             </div>
           </div>
         </div>
 
         <div class="wrap-up-textarea-wrap">
           <label>Preparation Notes</label>
-          <textarea [(ngModel)]="wrapUpForm.prepNotes" rows="3" placeholder="Property prep notes..."></textarea>
+          <textarea [(ngModel)]="wrapUpForm.prepNotes" [readonly]="wrapUpSubmitted" rows="3" placeholder="Property prep notes..."></textarea>
         </div>
       </section>
 
@@ -782,33 +753,33 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Windows</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'yes'" (click)="wrapUpForm.rinsedWindows = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'no'" (click)="wrapUpForm.rinsedWindows = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'na'" (click)="wrapUpForm.rinsedWindows = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'yes'" (click)="wrapUpForm.rinsedWindows = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'no'" (click)="wrapUpForm.rinsedWindows = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedWindows === 'na'" (click)="wrapUpForm.rinsedWindows = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Siding</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'yes'" (click)="wrapUpForm.rinsedSiding = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'no'" (click)="wrapUpForm.rinsedSiding = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'na'" (click)="wrapUpForm.rinsedSiding = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'yes'" (click)="wrapUpForm.rinsedSiding = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'no'" (click)="wrapUpForm.rinsedSiding = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedSiding === 'na'" (click)="wrapUpForm.rinsedSiding = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Fascia / Soffits</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'yes'" (click)="wrapUpForm.rinsedFasciaSoffits = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'no'" (click)="wrapUpForm.rinsedFasciaSoffits = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'na'" (click)="wrapUpForm.rinsedFasciaSoffits = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'yes'" (click)="wrapUpForm.rinsedFasciaSoffits = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'no'" (click)="wrapUpForm.rinsedFasciaSoffits = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedFasciaSoffits === 'na'" (click)="wrapUpForm.rinsedFasciaSoffits = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Gutters</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'yes'" (click)="wrapUpForm.rinsedGutters = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'no'" (click)="wrapUpForm.rinsedGutters = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'na'" (click)="wrapUpForm.rinsedGutters = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'yes'" (click)="wrapUpForm.rinsedGutters = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'no'" (click)="wrapUpForm.rinsedGutters = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.rinsedGutters === 'na'" (click)="wrapUpForm.rinsedGutters = 'na'">N/A</button>
             </div>
           </div>
         </div>
@@ -818,57 +789,57 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Decks / Patios</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'yes'" (click)="wrapUpForm.clearedDecksPatios = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'no'" (click)="wrapUpForm.clearedDecksPatios = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'na'" (click)="wrapUpForm.clearedDecksPatios = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'yes'" (click)="wrapUpForm.clearedDecksPatios = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'no'" (click)="wrapUpForm.clearedDecksPatios = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedDecksPatios === 'na'" (click)="wrapUpForm.clearedDecksPatios = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Window Ledges</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'yes'" (click)="wrapUpForm.clearedWindowLedges = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'no'" (click)="wrapUpForm.clearedWindowLedges = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'na'" (click)="wrapUpForm.clearedWindowLedges = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'yes'" (click)="wrapUpForm.clearedWindowLedges = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'no'" (click)="wrapUpForm.clearedWindowLedges = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedWindowLedges === 'na'" (click)="wrapUpForm.clearedWindowLedges = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Flower Beds</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'yes'" (click)="wrapUpForm.clearedFlowerBeds = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'no'" (click)="wrapUpForm.clearedFlowerBeds = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'na'" (click)="wrapUpForm.clearedFlowerBeds = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'yes'" (click)="wrapUpForm.clearedFlowerBeds = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'no'" (click)="wrapUpForm.clearedFlowerBeds = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedFlowerBeds === 'na'" (click)="wrapUpForm.clearedFlowerBeds = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Shrubs / Hedges / Trees</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'yes'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'no'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'na'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'yes'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'no'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedShrubsHedgesTrees === 'na'" (click)="wrapUpForm.clearedShrubsHedgesTrees = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Patio Furniture</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'yes'" (click)="wrapUpForm.clearedPatioFurniture = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'no'" (click)="wrapUpForm.clearedPatioFurniture = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'na'" (click)="wrapUpForm.clearedPatioFurniture = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'yes'" (click)="wrapUpForm.clearedPatioFurniture = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'no'" (click)="wrapUpForm.clearedPatioFurniture = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedPatioFurniture === 'na'" (click)="wrapUpForm.clearedPatioFurniture = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Fence Line</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'yes'" (click)="wrapUpForm.clearedFenceLine = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'no'" (click)="wrapUpForm.clearedFenceLine = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'na'" (click)="wrapUpForm.clearedFenceLine = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'yes'" (click)="wrapUpForm.clearedFenceLine = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'no'" (click)="wrapUpForm.clearedFenceLine = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedFenceLine === 'na'" (click)="wrapUpForm.clearedFenceLine = 'na'">N/A</button>
             </div>
           </div>
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">Neighbors Yards</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'yes'" (click)="wrapUpForm.clearedNeighborsYards = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'no'" (click)="wrapUpForm.clearedNeighborsYards = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'na'" (click)="wrapUpForm.clearedNeighborsYards = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'yes'" (click)="wrapUpForm.clearedNeighborsYards = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'no'" (click)="wrapUpForm.clearedNeighborsYards = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.clearedNeighborsYards === 'na'" (click)="wrapUpForm.clearedNeighborsYards = 'na'">N/A</button>
             </div>
           </div>
         </div>
@@ -878,16 +849,16 @@
           <div class="wrap-up-yn-row">
             <span class="wrap-up-yn-label">All Gates Closed</span>
             <div class="wrap-up-yn-toggle">
-              <button class="yn-btn yn-btn--yes" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'yes'" (click)="wrapUpForm.allGatesClosed = 'yes'">Yes</button>
-              <button class="yn-btn yn-btn--no" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'no'" (click)="wrapUpForm.allGatesClosed = 'no'">No</button>
-              <button class="yn-btn yn-btn--na" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'na'" (click)="wrapUpForm.allGatesClosed = 'na'">N/A</button>
+              <button class="yn-btn yn-btn--yes" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'yes'" (click)="wrapUpForm.allGatesClosed = 'yes'">Yes</button>
+              <button class="yn-btn yn-btn--no" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'no'" (click)="wrapUpForm.allGatesClosed = 'no'">No</button>
+              <button class="yn-btn yn-btn--na" [disabled]="wrapUpSubmitted" [class.yn-btn--active]="wrapUpForm.allGatesClosed === 'na'" (click)="wrapUpForm.allGatesClosed = 'na'">N/A</button>
             </div>
           </div>
         </div>
 
         <div class="wrap-up-textarea-wrap">
           <label>Clean-Up Notes</label>
-          <textarea [(ngModel)]="wrapUpForm.cleanupNotes" rows="3" placeholder="Clean-up status / debris removal"></textarea>
+          <textarea [(ngModel)]="wrapUpForm.cleanupNotes" [readonly]="wrapUpSubmitted" rows="3" placeholder="Clean-up status / debris removal"></textarea>
         </div>
       </section>
 
@@ -895,79 +866,118 @@
 
       <section class="wrap-up-section">
         <div class="wrap-up-section-header">
-          <h4 class="wrap-up-section-title">Before Photos</h4>
-          <div class="wrap-up-section-actions" *ngIf="getAllTaskBeforePhotos().length > 0">
-            <ion-button
-              size="small"
-              fill="clear"
-              class="wrap-up-select-btn"
-              (click)="selectAllWrapUpPhotos('before')">
-              Select All
-            </ion-button>
-            <ion-button
-              size="small"
-              fill="clear"
-              class="wrap-up-select-btn"
-              (click)="clearAllWrapUpPhotoSelections('before')">
-              Clear
-            </ion-button>
-            <span class="wrap-up-selected-count">{{ getSelectedWrapUpPhotoCount('before') }} selected</span>
-          </div>
+          <h4 class="wrap-up-section-title">Ordered Services Completed</h4>
+          <span class="wrap-up-task-counter" *ngIf="serviceTasks.length > 0">
+            {{ getFinishedTaskCount() }} of {{ serviceTasks.length }} finished
+          </span>
         </div>
-        <p class="wrap-up-helper" *ngIf="getAllTaskBeforePhotos().length === 0">No before photos captured.</p>
-        <div class="wrap-up-photo-grid" *ngIf="getAllTaskBeforePhotos().length > 0">
-          <ng-container *ngFor="let photo of getAllTaskBeforePhotos()">
-            <div class="wrap-up-photo-thumb-wrap" [class.wrap-up-photo-thumb-wrap--selected]="isWrapUpPhotoSelected(photo)">
-              <input
-                type="checkbox"
-                class="wrap-up-photo-check"
-                [checked]="isWrapUpPhotoSelected(photo)"
-                (click)="toggleWrapUpPhotoSelection(photo, $event)" />
-              <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="wrap-up-photo-thumb" [title]="photo.notes || 'Before photo'" alt="Before photo" (click)="openPhotoViewer(photo)" />
-              <div *ngIf="!photo.dataUrl" class="wrap-up-photo-thumb wrap-up-photo-thumb--remote" (click)="openPhotoViewer(photo)">
-                <ion-icon name="image-outline"></ion-icon>
+        <p class="wrap-up-helper" *ngIf="serviceTasks.length === 0">No service tasks assigned.</p>
+
+        <ng-container *ngFor="let task of serviceTasks; let i = index; let last = last">
+          <section class="wrap-up-section wrap-up-task-card">
+            <h4 class="wrap-up-section-title">Task #{{ i + 1 }} – {{ task.taskName }}</h4>
+            <div class="wrap-up-task-row" [class.wrap-up-task-row--finished]="isTaskFinished(task.id)">
+              <ion-icon [name]="isTaskFinished(task.id) ? 'checkmark-circle' : 'ellipse-outline'"></ion-icon>
+              <span class="wrap-up-task-name">{{ task.taskName }}</span>
+              <span *ngIf="task.quantity != null" class="wrap-up-task-qty">Qty: {{ task.quantity }}</span>
+            </div>
+            <div class="wrap-up-task-note" *ngIf="taskNotes[task.id]?.trim()">
+              <span class="wrap-up-task-note-label">Notes:</span>
+              <span class="wrap-up-task-note-text">{{ taskNotes[task.id] }}</span>
+            </div>
+
+            <div class="wrap-up-task-photos">
+              <div class="wrap-up-photo-slot">
+                <div class="wrap-up-section-header">
+                  <h5 class="wrap-up-section-title">Before Photos</h5>
+                  <div class="wrap-up-section-actions" *ngIf="getTaskPhotoAttachments(task.id, 'before').length > 0">
+                    <ion-button
+                      size="small"
+                      fill="clear"
+                      class="wrap-up-select-btn"
+                      [disabled]="wrapUpSubmitted"
+                      (click)="selectAllTaskSlotPhotos(task.id, 'before')">
+                      Select All
+                    </ion-button>
+                    <ion-button
+                      size="small"
+                      fill="clear"
+                      class="wrap-up-select-btn"
+                      [disabled]="wrapUpSubmitted"
+                      (click)="clearAllTaskSlotPhotoSelections(task.id, 'before')">
+                      Clear
+                    </ion-button>
+                    <span class="wrap-up-selected-count">{{ getSelectedTaskSlotPhotoCount(task.id, 'before') }} selected</span>
+                  </div>
+                </div>
+                <p class="wrap-up-helper" *ngIf="getTaskPhotoAttachments(task.id, 'before').length === 0">No before photos captured.</p>
+                <div class="wrap-up-photo-grid" *ngIf="getTaskPhotoAttachments(task.id, 'before').length > 0">
+                  <ng-container *ngFor="let photo of getTaskPhotoAttachments(task.id, 'before')">
+                    <div class="wrap-up-photo-thumb-wrap" [class.wrap-up-photo-thumb-wrap--selected]="isWrapUpPhotoSelected(photo)">
+                      <input
+                        type="checkbox"
+                        class="wrap-up-photo-check"
+                        [checked]="isWrapUpPhotoSelected(photo)" [disabled]="wrapUpSubmitted"
+                        (click)="toggleWrapUpPhotoSelection(photo, $event)" />
+                      <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="wrap-up-photo-thumb" [title]="photo.notes || 'Before photo'" alt="Before photo" (click)="openPhotoViewer(photo)" />
+                      <div *ngIf="!photo.dataUrl" class="wrap-up-photo-thumb wrap-up-photo-thumb--remote" (click)="openPhotoViewer(photo)">
+                        <ion-icon name="image-outline"></ion-icon>
+                      </div>
+                    </div>
+                  </ng-container>
+                </div>
+              </div>
+
+              <div class="wrap-up-photo-slot">
+                <div class="wrap-up-section-header">
+                  <h5 class="wrap-up-section-title">After Photos</h5>
+                  <div class="wrap-up-section-actions" *ngIf="getTaskPhotoAttachments(task.id, 'after').length > 0">
+                    <ion-button
+                      size="small"
+                      fill="clear"
+                      class="wrap-up-select-btn"
+                      [disabled]="wrapUpSubmitted"
+                      (click)="selectAllTaskSlotPhotos(task.id, 'after')">
+                      Select All
+                    </ion-button>
+                    <ion-button
+                      size="small"
+                      fill="clear"
+                      class="wrap-up-select-btn"
+                      [disabled]="wrapUpSubmitted"
+                      (click)="clearAllTaskSlotPhotoSelections(task.id, 'after')">
+                      Clear
+                    </ion-button>
+                    <span class="wrap-up-selected-count">{{ getSelectedTaskSlotPhotoCount(task.id, 'after') }} selected</span>
+                  </div>
+                </div>
+                <p class="wrap-up-helper" *ngIf="getTaskPhotoAttachments(task.id, 'after').length === 0">No after photos captured.</p>
+                <div class="wrap-up-photo-grid" *ngIf="getTaskPhotoAttachments(task.id, 'after').length > 0">
+                  <ng-container *ngFor="let photo of getTaskPhotoAttachments(task.id, 'after')">
+                    <div class="wrap-up-photo-thumb-wrap" [class.wrap-up-photo-thumb-wrap--selected]="isWrapUpPhotoSelected(photo)">
+                      <input
+                        type="checkbox"
+                        class="wrap-up-photo-check"
+                        [checked]="isWrapUpPhotoSelected(photo)" [disabled]="wrapUpSubmitted"
+                        (click)="toggleWrapUpPhotoSelection(photo, $event)" />
+                      <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="wrap-up-photo-thumb" [title]="photo.notes || 'After photo'" alt="After photo" (click)="openPhotoViewer(photo)" />
+                      <div *ngIf="!photo.dataUrl" class="wrap-up-photo-thumb wrap-up-photo-thumb--remote" (click)="openPhotoViewer(photo)">
+                        <ion-icon name="image-outline"></ion-icon>
+                      </div>
+                    </div>
+                  </ng-container>
+                </div>
               </div>
             </div>
-          </ng-container>
-        </div>
+          </section>
+          <hr class="wrap-up-task-separator" *ngIf="!last">
+        </ng-container>
       </section>
 
       <section class="wrap-up-section">
-        <div class="wrap-up-section-header">
-          <h4 class="wrap-up-section-title">After Photos</h4>
-          <div class="wrap-up-section-actions" *ngIf="getAllTaskAfterPhotos().length > 0">
-            <ion-button
-              size="small"
-              fill="clear"
-              class="wrap-up-select-btn"
-              (click)="selectAllWrapUpPhotos('after')">
-              Select All
-            </ion-button>
-            <ion-button
-              size="small"
-              fill="clear"
-              class="wrap-up-select-btn"
-              (click)="clearAllWrapUpPhotoSelections('after')">
-              Clear
-            </ion-button>
-            <span class="wrap-up-selected-count">{{ getSelectedWrapUpPhotoCount('after') }} selected</span>
-          </div>
-        </div>
-        <p class="wrap-up-helper" *ngIf="getAllTaskAfterPhotos().length === 0">No after photos captured.</p>
-        <div class="wrap-up-photo-grid" *ngIf="getAllTaskAfterPhotos().length > 0">
-          <ng-container *ngFor="let photo of getAllTaskAfterPhotos()">
-            <div class="wrap-up-photo-thumb-wrap" [class.wrap-up-photo-thumb-wrap--selected]="isWrapUpPhotoSelected(photo)">
-              <input
-                type="checkbox"
-                class="wrap-up-photo-check"
-                [checked]="isWrapUpPhotoSelected(photo)"
-                (click)="toggleWrapUpPhotoSelection(photo, $event)" />
-              <img *ngIf="photo.dataUrl" [src]="photo.dataUrl" class="wrap-up-photo-thumb" [title]="photo.notes || 'After photo'" alt="After photo" (click)="openPhotoViewer(photo)" />
-              <div *ngIf="!photo.dataUrl" class="wrap-up-photo-thumb wrap-up-photo-thumb--remote" (click)="openPhotoViewer(photo)">
-                <ion-icon name="image-outline"></ion-icon>
-              </div>
-            </div>
-          </ng-container>
+        <h4 class="wrap-up-section-title">Additional Service Completed Notes</h4>
+        <div class="wrap-up-textarea-wrap">
+          <textarea [(ngModel)]="wrapUpForm.servicesCompletedNotes" [readonly]="wrapUpSubmitted" rows="3" placeholder="Notes on completed services"></textarea>
         </div>
       </section>
 
@@ -977,7 +987,16 @@
           color="danger"
           [disabled]="!isSubmitWrapUpEnabled()"
           (click)="onSubmitWrapUpServiceOrder()">
-          Submit Service Order
+          <ng-container *ngIf="wrapUpSubmitting">
+            <ion-spinner name="crescent" slot="start"></ion-spinner>
+            <span>Submitting Wrap-Up…</span>
+          </ng-container>
+          <ng-container *ngIf="wrapUpSubmitted && wrapUpSubmittedAt">
+            WRAP-UP SUBMITTED — {{ wrapUpSubmittedAt | date:'M/d/yy, h:mm a' }}
+          </ng-container>
+          <ng-container *ngIf="!wrapUpSubmitting && !wrapUpSubmitted">
+            Submit Wrap-Up
+          </ng-container>
         </ion-button>
       </div>
 

@@ -16,10 +16,33 @@ function isPerSquareUnit(unit) {
     return /\bsq\b/.test(normalized) || normalized.includes('square');
 }
 
-async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
+async function resizePhotoForPdf(imageInput, maxWidth = 800) {
     try {
-        const base64Data = base64DataUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-        const buffer = Buffer.from(base64Data, 'base64');
+        let buffer;
+        let inputType = 'unknown';
+
+        if (typeof imageInput !== 'string' || imageInput.length === 0) {
+            throw new Error('Image input is empty or not a string');
+        }
+
+        if (imageInput.startsWith('data:image/')) {
+            inputType = 'data-url';
+            const base64Data = imageInput.replace(/^data:image\/[a-z]+;base64,/, '');
+            buffer = Buffer.from(base64Data, 'base64');
+        } else if (imageInput.match(/^https?:\/\//)) {
+            inputType = 'url';
+            const response = await fetch(imageInput);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch image from URL: ${response.status} ${response.statusText}`);
+            }
+            buffer = Buffer.from(await response.arrayBuffer());
+        } else {
+            throw new Error(`Unsupported image input format: ${imageInput.slice(0, 40)}...`);
+        }
+
+        if (!buffer || buffer.length === 0) {
+            throw new Error('Image buffer is empty after decoding/fetching');
+        }
 
         const originalSize = buffer.length;
         const metadata = await sharp(buffer).metadata();
@@ -53,6 +76,7 @@ async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
         const resizedDataUrl = `data:image/jpeg;base64,${resizedBuffer.toString('base64')}`;
 
         console.log('[PDFGenerator] Photo resize:', {
+            inputType,
             originalDimensions,
             resizedDimensions,
             originalSize: `${(originalSize / 1024).toFixed(2)} KB`,
@@ -63,7 +87,7 @@ async function resizePhotoForPdf(base64DataUrl, maxWidth = 1000) {
         return resizedDataUrl;
     } catch (error) {
         console.error('[PDFGenerator] Photo resize failed:', error.message);
-        return base64DataUrl;
+        return imageInput;
     }
 }
 
@@ -407,4 +431,4 @@ async function generatePDFHtml(job, lineItems = [], signatureData, roofStructure
     return html;
 }
 
-module.exports = { companyConfig, generatePDFHtml };
+module.exports = { companyConfig, generatePDFHtml, resizePhotoForPdf };
