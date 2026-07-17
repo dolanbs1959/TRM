@@ -1611,6 +1611,7 @@ export class EstimatePage implements OnInit, AfterViewInit, DoCheck, OnDestroy {
       locationRecordId: this.getLocationRecordId(),
       locationEmail,
       customerRecordId: this.customerRecordId,
+      employeeId: this.authService.getUser()?.[3]?.value,
       roofRecordIds: this.getSelectedRoofRecordIds(),
       submissionMode,
       customerReadyToBegin: submissionMode === 'sold',
