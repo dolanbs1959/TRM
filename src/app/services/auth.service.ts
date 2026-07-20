@@ -377,26 +377,33 @@ export class AuthService {
     this.persistScheduleCache();
   }
 
-async login(phone: string, pin: string) {
-const localProxyUrl = `${this.apiBaseUrl}/login`;
+async login(phone: string, pin: string): Promise<{ success: boolean; user: any; firstName: string }> {
+  const localProxyUrl = `${this.apiBaseUrl}/login`;
 
-try {
+  try {
     const response: any = await this.http.post(localProxyUrl, { phone, pin }).toPromise();
-
+    console.log('Login response:', response);
     if (response && response.success) {
-      this.loggedInUser = response.user;
-  this.setLoginTimestamp(Date.now());
+      this.loggedInUser = {
+        ...response.user,
+        hasHistoricalOpenTimecard: !!response.hasHistoricalOpenTimecard
+      };
+
+      this.setLoginTimestamp(Date.now());
       this.persistUser(this.loggedInUser);
       this.updateActivityTimestamp();
+
       console.log('Handshake successful through Firebase Emulator.');
       // console.log('Employee Data Received:', JSON.stringify(this.loggedInUser, null, 2));
-      return true;
+
+      const firstName = this.loggedInUser?.[6]?.value || '';
+      return { success: true, user: this.loggedInUser, firstName };
     } else {
-      return false;
+      return { success: false, user: null, firstName: '' };
     }
   } catch (error) {
     console.error('Emulator Connection Error:', error);
-    return false;
+    return { success: false, user: null, firstName: '' };
   }
 }
 

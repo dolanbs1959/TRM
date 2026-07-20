@@ -58,6 +58,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
    showCitySuggestions: boolean = false;
    isLoadingWeather: boolean = false;
   isClockedIn: boolean = false;
+  hasHistoricalOpenTimecard = false;
   isClockActionLoading: boolean = false;
   activeTimecardRecordId: string | null = null;
   clockInStartedAtMs: number | null = null;
@@ -211,6 +212,14 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     const dateStr = `${year}-${month}-${day}`;
 
     const res = await firstValueFrom(this.authService.getSchedule(Number(this.tech.id), dateStr));
+        console.table(
+      (Array.isArray(res) ? res : []).map(job => ({
+        serviceOrderId: job?.['3']?.value,
+        assignmentStatus: job?._techAssignmentStatus,
+        parentStatus: job?.['11']?.value,
+        jobStage: job?.['40']?.value
+      }))
+    );
     console.log('--- FRONTEND RAW SCHEDULE DATA PULL ---', res);
     console.log('--- FRONTEND SCHEDULE ASSIGNMENT RECON ---', {
       selectedDate: dateStr,
@@ -237,14 +246,16 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
     }
 
     this.serviceOrders = Array.isArray(res)
-      ? res.map((record) => {
-          // console.log('Evaluating Card Display:', {
-          //   id: record?.id ?? record?.['3']?.value ?? null,
-          //   stage: record?.stage ?? record?.['40']?.value ?? null,
-          //   status: record?.status ?? record?.['11']?.value ?? null
-          // });
-          return { ...record, _jobActionIndex: this.computeJobActionIndexFromStatus(record) };
-        })
+      ? res
+          .filter((record) => record?._techAssignmentStatus != null)
+          .map((record) => {
+            // console.log('Evaluating Card Display:', {
+            //   id: record?.id ?? record?.['3']?.value ?? null,
+            //   stage: record?.stage ?? record?.['40']?.value ?? null,
+            //   status: record?.status ?? record?.['11']?.value ?? null
+            // });
+            return { ...record, _jobActionIndex: this.computeJobActionIndexFromStatus(record) };
+          })
       : [];
     this.restoreJobActionIndexes();
     this.restoreUiState();
@@ -1478,11 +1489,11 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
         return;
       }
 
-      this.isClockedIn = !!state.isClockedIn;
-      this.activeTimecardRecordId = state.activeTimecardRecordId || null;
-      this.clockInStartedAtMs = Number.isFinite(state.clockInStartedAtMs)
-        ? state.clockInStartedAtMs
-        : null;
+      // this.isClockedIn = !!state.isClockedIn;
+      // this.activeTimecardRecordId = state.activeTimecardRecordId || null;
+      // this.clockInStartedAtMs = Number.isFinite(state.clockInStartedAtMs)
+        // ? state.clockInStartedAtMs
+        // : null;
       this.selectedJobRecordId = state.selectedJobRecordId || null;
       this.workflowLockedJobRecordId = state.workflowLockedJobRecordId || null;
 
@@ -1906,6 +1917,11 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 async ngOnInit() {
     console.log('Home Page Initializing...'); 
     const userData = this.authService.getUser();
+    this.hasHistoricalOpenTimecard = !!userData?.hasHistoricalOpenTimecard;
+
+    if (this.hasHistoricalOpenTimecard) {
+      console.warn('[Timecard] Technician has an open timecard from a previous day.');
+    }
     if (!userData) {
       this.router.navigate(['/login'], { replaceUrl: true });
       return;

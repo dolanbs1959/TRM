@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router'; 
 import { AuthService } from '../services/auth.service';
 import { APP_VERSION } from '../app.version';
@@ -21,7 +21,8 @@ export class LoginPage implements OnInit {
 
   constructor(
     private authService: AuthService, 
-    private router: Router
+    private router: Router,
+    private changeDetectorRef: ChangeDetectorRef
   ) { }
 
   ngOnInit() {
@@ -51,10 +52,11 @@ export class LoginPage implements OnInit {
     this.isLoggingIn = true;
     console.log('Attempting login for:', this.phoneNumber);
 
-    const success = await this.authService.login(this.phoneNumber, this.pin);
+    const result = await this.authService.login(this.phoneNumber, this.pin);
 
-    if (success) {
-      this.firstName = this.authService.getUser()?.[6]?.value || '';
+    if (result.success) {
+      this.firstName = result.firstName;
+      this.changeDetectorRef.detectChanges();
       console.log('Login success! Welcome,', this.firstName);
       this.router.navigate(['/home']);
     } else {
@@ -170,6 +172,6 @@ export class LoginPage implements OnInit {
       return;
     }
 
-    this.sessionStateWarning = `Action required: ${reasons.join(' and ')}. Please contact the Office before proceeding.`;
+    this.sessionStateWarning = `Action required: ${reasons.join(' and ')}. Log in to resume your previous session and clock out when finished.`;
   }
 }

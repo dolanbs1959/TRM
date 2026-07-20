@@ -90,12 +90,15 @@
       <div class="clocked-in-at">{{ clockedInAtText }}</div>
       <div class="time-on-clock">{{ timeOnClockText }}</div>
     </div>
+    <div class="historical-timecard-warning" *ngIf="hasHistoricalOpenTimecard">
+      Clock In is disabled. Contact the office to have the previous day's timecard closed before beginning today's work.
+    </div>
     <div class="btn-grid">
       <ion-button
         class="clock-in-btn"
         [style.--background]="isClockedIn ? '#d11a2a' : 'var(--trm-green)'"
         [style.--color]="'#ffffff'"
-        [disabled]="isClockActionLoading || isJobPaused()"
+        [disabled]="isClockActionLoading || isJobPaused() || hasHistoricalOpenTimecard"
         (click)="toggleClockState()">
         {{ getClockButtonLabel() }}
       </ion-button>
@@ -153,7 +156,13 @@
           <ion-badge [color]="getJobStatusColor(job)">{{ getJobStatusLabel(job) }}</ion-badge>
           <ion-badge color="medium" *ngIf="job['3']?.value">Job #{{ job['3']?.value }}</ion-badge>
           <ion-badge color="medium" *ngIf="job['108']?.value">{{ job['108']?.value }}</ion-badge>
-          <ion-badge color="medium" *ngIf="!isClockedIn">CLOCK IN REQUIRED</ion-badge>
+         <ion-badge color="danger" *ngIf="hasHistoricalOpenTimecard">
+            OPEN TIMECARD FOUND FROM A PREVIOUS DAY
+          </ion-badge>
+
+          <ion-badge color="medium" *ngIf="!isClockedIn && !hasHistoricalOpenTimecard">
+            CLOCK IN REQUIRED
+          </ion-badge>
           <ion-badge color="danger" *ngIf="workflowLockedJobRecordId && isSelectedJob(job)">ACTIVE</ion-badge>
           <ion-badge class="schedule-date-badge schedule-date-badge--inspection" *ngIf="job['40']?.value?.toLowerCase() === 'inspection' && job['41']?.value">
             Inspection Date: {{ job['41']?.value | date:'M/d/yy' }}

@@ -574,6 +574,66 @@ async function queryServiceOrderRoofsByServiceOrder(serviceOrderId) {
     }
 }
 
+async function completeEstimateTechnicianAssignment(serviceOrderId, employeeId) {
+    const normalizedServiceOrderId = Number.parseInt(serviceOrderId, 10);
+    const normalizedEmployeeId = Number.parseInt(employeeId, 10);
+
+    if (!Number.isFinite(normalizedServiceOrderId) || !Number.isFinite(normalizedEmployeeId)) {
+        console.warn('[Estimate][AssignmentCompletion][InvalidIdentifiers]', {
+            serviceOrderId,
+            employeeId
+        });
+        return;
+    }
+
+    const assignmentQuery = {
+        from: TABLES.ASSIGNED_TECHNICIANS,
+        select: [3, ASSIGNED_TECH_FIELDS.RELATED_SERVICE_ORDER, ASSIGNED_TECH_FIELDS.RELATED_EMPLOYEE, ASSIGNED_TECH_FIELDS.ASSIGNMENT_STATUS],
+        where: `{'${ASSIGNED_TECH_FIELDS.RELATED_SERVICE_ORDER}'.EX.'${normalizedServiceOrderId}'}AND{'${ASSIGNED_TECH_FIELDS.RELATED_EMPLOYEE}'.EX.'${normalizedEmployeeId}'}`
+    };
+
+    const assignmentResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, assignmentQuery, {
+        headers: buildQuickbaseHeaders()
+    });
+
+    const assignedRecords = Array.isArray(assignmentResponse?.data?.data) ? assignmentResponse.data.data : [];
+    if (assignedRecords.length === 0) {
+        console.warn('[Estimate][AssignmentCompletion][NoMatchingAssignment]', {
+            serviceOrderId: normalizedServiceOrderId,
+            employeeId: normalizedEmployeeId
+        });
+        return;
+    }
+
+    const updateRows = assignedRecords
+        .map((record) => {
+            const recordId = Number.parseInt(getFieldValue(record, 3), 10);
+            if (!Number.isFinite(recordId)) {
+                return null;
+            }
+            return {
+                3: { value: recordId },
+                [ASSIGNED_TECH_FIELDS.ASSIGNMENT_STATUS]: { value: ASSIGNMENT_STATUS_BY_ACTION.COMPLETE }
+            };
+        })
+        .filter(Boolean);
+
+    if (updateRows.length === 0) {
+        console.warn('[Estimate][AssignmentCompletion][NoUpdatableRecords]', {
+            serviceOrderId: normalizedServiceOrderId,
+            employeeId: normalizedEmployeeId
+        });
+        return;
+    }
+
+    await writeQuickbaseRecords(TABLES.ASSIGNED_TECHNICIANS, updateRows, [3, ASSIGNED_TECH_FIELDS.ASSIGNMENT_STATUS]);
+    console.log('[Estimate][AssignmentCompletion][MarkedComplete]', {
+        serviceOrderId: normalizedServiceOrderId,
+        employeeId: normalizedEmployeeId,
+        updatedAssignmentCount: updateRows.length
+    });
+}
+
 function normalizeEstimateSubmissionMode(value) {
     const normalized = String(value || '').trim().toLowerCase();
     if (normalized === 'sold' || normalized === 'ready' || normalized === 'customer_ready_to_begin') {
@@ -897,6 +957,7 @@ async function handleSubmitEstimateData(req, res) {
         locationRecordId,
         locationEmail,
         customerRecordId,
+        employeeId,
         roofRecordIds,
         submissionMode,
         customerReadyToBegin,
@@ -1148,6 +1209,16 @@ async function handleSubmitEstimateData(req, res) {
                 serviceOrderId: normalizedServiceOrderId,
                 totalCount: afterInsertionServiceOrderRoofIds.length,
                 recordIds: afterInsertionServiceOrderRoofIds
+            });
+        }
+
+        try {
+            await completeEstimateTechnicianAssignment(normalizedServiceOrderId, employeeId);
+        } catch (assignmentError) {
+            console.warn('[Estimate][AssignmentCompletion][Failure]', {
+                serviceOrderId: normalizedServiceOrderId,
+                employeeId,
+                message: assignmentError?.message || String(assignmentError)
             });
         }
 
@@ -1646,58 +1717,79 @@ app.post('/login', async (req, res) => {
             select: [3, 6, 7, 9, 17, 39, 42, 58, 66],
             where: `{'9'.EX.'${phone}'}AND{'58'.EX.'${pin}'}`
         }, {
-            headers: { 
-                'QB-Realm-Hostname': QB_REALM_HOST, 
-                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` 
+            headers: {
+                'QB-Realm-Hostname': QB_REALM_HOST,
+                'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
             }
         });
 
-    if (response.data.data.length > 0) {
+        if (response.data.data.length > 0) {
             const userData = response.data.data[0];
-            const employeeRecordId = userData['3'].value; 
+            const employeeRecordId = userData['3'].value;
             const todayStr = new Date().toISOString().split('T')[0];
-            
+
             console.log(`> [Timecard][Login] Checking active status for Employee RecID: ${employeeRecordId} on Date: ${todayStr}`);
+
             let activeShift = null;
+            let hasHistoricalOpenTimecard = false;
 
             try {
                 const timecardCheck = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
                     from: TABLES.EMPLOYEE_TIMECARDS,
-                    select: [3, TIMECARD_FIELDS.CLOCK_IN_TIME],
-                    where: `{'${TIMECARD_FIELDS.RELATED_EMPLOYEE_NUMERIC}'.EX.${employeeRecordId}}AND{'${TIMECARD_FIELDS.DATE}'.EX.'${todayStr}'}AND{'${TIMECARD_FIELDS.CLOCK_OUT_TIME}'.EX.''}`
+                    select: [3, TIMECARD_FIELDS.DATE, TIMECARD_FIELDS.CLOCK_IN_TIME],
+                    where: `{'${TIMECARD_FIELDS.RELATED_EMPLOYEE_NUMERIC}'.EX.${employeeRecordId}}AND{'${TIMECARD_FIELDS.CLOCK_OUT_TIME}'.EX.''}`
                 }, {
-                    headers: { 
-                        'QB-Realm-Hostname': QB_REALM_HOST, 
-                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` 
+                    headers: {
+                        'QB-Realm-Hostname': QB_REALM_HOST,
+                        'Authorization': `QB-USER-TOKEN ${QB_TOKEN}`
                     }
                 });
 
                 console.log(`> [Timecard][Query] Quickbase rows found: ${timecardCheck.data.data.length}`);
 
-                if (timecardCheck.data.data.length > 0) {
+                const openTimecards = timecardCheck.data.data;
+
+                const todaysOpenTimecard = openTimecards.find(
+                    row => row[TIMECARD_FIELDS.DATE]?.value === todayStr
+                );
+
+                hasHistoricalOpenTimecard =
+                    openTimecards.length > 0 && !todaysOpenTimecard;
+
+                if (todaysOpenTimecard) {
                     activeShift = {
-                        recordId: String(timecardCheck.data.data[0]['3'].value),
+                        recordId: String(todaysOpenTimecard['3'].value),
                         isClockedIn: true
                     };
+
                     console.log(`> [Timecard][Status] Tech is currently clocked in! Shift RecID: ${activeShift.recordId}`);
+                } else if (hasHistoricalOpenTimecard) {
+                    console.log(`> [Timecard][Status] Historical open timecard found.`);
                 } else {
-                    console.log(`> [Timecard][Status] No open timecard record found for today.`);
+                    console.log(`> [Timecard][Status] No open timecard record found.`);
                 }
+
             } catch (tcErr) {
                 console.error("> [Timecard][Error] Failed checking active shift context row:", tcErr.message);
             }
 
-            res.json({ 
-                success: true, 
+            return res.json({
+                success: true,
                 user: userData,
-                shiftContext: activeShift 
+                shiftContext: activeShift,
+                hasHistoricalOpenTimecard
             });
+
         } else {
-            res.status(401).json({ success: false, message: "Invalid Phone or PIN" });
+            return res.status(401).json({
+                success: false,
+                message: "Invalid Phone or PIN"
+            });
         }
+
     } catch (error) {
         console.error("QB Error:", error.response ? error.response.data : error.message);
-        res.status(500).send("Internal Server Error");
+        return res.status(500).send("Internal Server Error");
     }
 });
 
@@ -1769,16 +1861,16 @@ app.post('/get-schedule', async (req, res) => {
         //     relatedServiceOrderIds
         // });
 
-        // if (relatedServiceOrderIds.length === 0) {
-        //     console.log('[Schedule][PipelineSummary]', {
-        //         techId: normalizedTechId,
-        //         selectedDate: date,
-        //         keptRecords: 0,
-        //         reason: 'no assigned service orders for technician'
-        //     });
+        if (relatedServiceOrderIds.length === 0) {
+            console.log('[Schedule][PipelineSummary]', {
+                techId: normalizedTechId,
+                selectedDate: date,
+                keptRecords: 0,
+                reason: 'no assigned service orders for technician'
+            });
 
-            // return res.json([]);
-        // }
+            return res.json([]);
+        }
 
         const serviceOrderWhere = relatedServiceOrderIds
             .map((recordId) => `{'3'.EX.'${recordId}'}`)
@@ -2247,7 +2339,7 @@ app.post('/timecard/active', async (req, res) => {
 
     try {
         console.log(`> [Timecard Proxy Route] Querying active shift for Tech ID: ${normalizedEmployeeId} on Date: ${date}`);
-        
+
         // Query Quickbase Timecards table for an open record
         const queryPayload = {
             from: TABLES.EMPLOYEE_TIMECARDS,
@@ -2266,6 +2358,14 @@ app.post('/timecard/active', async (req, res) => {
             const row = response.data.data[0];
             console.log(`> [Timecard Proxy Route] Found open record row ID: ${row['3'].value}`);
             
+            console.log('> [Timecard Proxy Route] Returning shiftContext:', {
+                employeeId: normalizedEmployeeId,
+                date,
+                isClockedIn: true,
+                recordId: String(row['3'].value),
+                clockInTime: row[TIMECARD_FIELDS.CLOCK_IN_TIME]?.value || ''
+            });
+
             // Build the nested shiftContext layout object the front-end page is looking for!
             return res.json({
                 success: true,
@@ -2278,6 +2378,14 @@ app.post('/timecard/active', async (req, res) => {
         }
 
         console.log(`> [Timecard Proxy Route] No open timecard records exist for today.`);
+
+        console.log('> [Timecard Proxy Route] Returning shiftContext:', {
+            employeeId: normalizedEmployeeId,
+            date,
+            isClockedIn: false,
+            recordId: null
+        });
+
         return res.json({ success: true, shiftContext: { isClockedIn: false, recordId: null } });
     } catch (error) {
         console.error('Active Timecard Route Error:', error.response ? error.response.data : error.message);
