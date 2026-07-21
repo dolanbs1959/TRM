@@ -1217,6 +1217,17 @@
 .wrap-up-selected-count { font-size: .72rem; color: #666; white-space: nowrap; }
 .wrap-up-action-bar { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; }
 .wrap-up-status-row { display: flex; align-items: center; gap: 8px; font-size: .8rem; color: #666; }
+.crew-status-loading { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: #666; }
+.crew-status-section { border: 4px double #e37777; }
+.crew-status-list { display: flex; flex-direction: column; gap: 6px; }
+.crew-status-row { display: grid; grid-template-columns: 1.2fr .9fr 1fr; align-items: center; gap: 8px; padding: 8px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; font-size: .84rem; color: #333; }
+.crew-status-header { background: transparent; border: none; padding: 0 8px; font-weight: 700; color: #555; font-size: .72rem; text-transform: uppercase; letter-spacing: .4px; }
+.crew-status-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew-status-stage { text-align: center; }
+.crew-status-progress { text-align: right; white-space: nowrap; }
+.crew-status-current { font-weight: 600; color: #1b8a2f; }
+.crew-status-empty { font-size: .85rem; color: #888; font-style: italic; }
+.crew-status-blocking-message { margin-top: 12px; padding: 10px; background: #fff9e6; border: 1px solid #ffe58f; border-radius: 6px; color: #8a6d0b; font-size: .84rem; line-height: 1.4; white-space: pre-line; }
 .photo-viewer-badges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .photo-viewer-slot-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; background: #e0e7ff; color: #2b4bc1; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
 .photo-viewer-file-name { font-size: .8rem; color: #666; word-break: break-all; }
@@ -1245,5 +1256,11 @@
   .wrap-up-status-row { color: #b0b0b0; }
   .photo-viewer-slot-badge { background: #2b4bc1; color: #e0e7ff; }
   .photo-viewer-file-name { color: #b0b0b0; }
+  .crew-status-section { border-color: #555; }
+  .crew-status-row { background: #1e1e1e; border-color: #444; color: #fff; }
+  .crew-status-header { background: transparent; border: none; color: #aaa; }
+  .crew-status-empty { color: #999; }
+  .crew-status-blocking-message { background: #2a2618; border-color: #5c4d1f; color: #e6c86e; }
+  .crew-status-current { color: #5cdb70; }
 }
 

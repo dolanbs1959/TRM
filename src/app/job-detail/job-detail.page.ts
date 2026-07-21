@@ -86,6 +86,13 @@ interface TechSheetCrewMember {
   arrivedAt: string | null;
 }
 
+interface CrewStatusRow {
+  technicianName: string;
+  isLead: boolean;
+  displayStatus: string;
+  relativeStatus: string;
+}
+
 interface TechSheetData {
   serviceOrderId: string;
   jobNumber: string;
@@ -413,6 +420,7 @@ export class JobDetailPage implements OnInit, DoCheck {
 
     if (this.isServiceOrder()) {
       await this.loadServiceOrderTasks();
+      await this.loadServiceOrderAssignments();
 
       if (this.serviceOrderView === 'wrapup') {
         if (!this.canAccessWrapUp()) {
@@ -427,7 +435,6 @@ export class JobDetailPage implements OnInit, DoCheck {
         await this.hydrateWrapUpDraftIfPresent();
         this.isWrapUpDraftHydrated = true;
         this.persistWrapUpDraftIfChanged();
-        void this.loadServiceOrderAssignments();
       }
     }
   }
@@ -573,8 +580,8 @@ export class JobDetailPage implements OnInit, DoCheck {
     this.isRefreshingCollaboration = true;
     try {
       await this.loadServiceOrderCollaborationData();
+      await this.loadServiceOrderAssignments();
       if (this.serviceOrderView === 'wrapup') {
-        await this.loadServiceOrderAssignments();
         console.log('[WrapUp][Refresh] Submit eligibility re-evaluated.', {
           serviceOrderId: this.serviceOrderId,
           assignments: this.serviceOrderAssignments.map(a => ({
@@ -816,7 +823,52 @@ export class JobDetailPage implements OnInit, DoCheck {
   }
 
   isHubInputLocked() {
-    return this.isReadOnlyMode() || this.isPausedWorkflow;
+    if (this.isReadOnlyMode() || this.isPausedWorkflow) {
+      return true;
+    }
+    // Service Order Hub inputs are locked until the current technician has arrived.
+    // This prevents assigned (not-yet-dispatched) or dispatched-but-not-arrived
+    // technicians from recording task notes, photos, or completions.
+    if (this.isServiceOrderHub() && !this.isCurrentTechnicianArrived()) {
+      return true;
+    }
+    return false;
+  }
+
+  private isCurrentTechnicianArrived(): boolean {
+    const currentTechId = this.getCurrentTechnicianId();
+    if (!currentTechId) {
+      return false;
+    }
+
+    // Firestore collaboration arrival timestamp is authoritative when present.
+    const arrivalEntry = Object.entries(this.arrivalTimestamps).find(([key, entry]) => {
+      const keyMatches = this.normalizeTechnicianId(key) === this.normalizeTechnicianId(currentTechId);
+      const currentTechName = this.getCurrentTechnicianDisplayName().toLowerCase();
+      const nameMatches = currentTechName && (entry?.technicianName || '').trim().toLowerCase() === currentTechName;
+      return keyMatches || nameMatches;
+    });
+    if (arrivalEntry?.[1]?.arrivedAt) {
+      return true;
+    }
+
+    // Otherwise, fall back to the QuickBase assignment status for this technician.
+    const assignment = this.serviceOrderAssignments.find(
+      (a) => this.normalizeTechnicianId(String(a.technicianId || '')) === this.normalizeTechnicianId(currentTechId)
+    );
+    const status = (assignment?.assignmentStatus || '').toString().trim().toLowerCase();
+    return status === 'arrived' || status === 'completed' || status === 'complete' || status === 'return required';
+  }
+
+  private normalizeTechnicianId(value: string | number): string {
+    return String(value || '').trim().toLowerCase();
+  }
+
+  private getCurrentTechnicianDisplayName(): string {
+    const user = this.authService.getUser();
+    const firstName = String(user?.[6]?.value || '').trim();
+    const lastName = String(user?.[7]?.value || '').trim();
+    return `${firstName} ${lastName}`.trim();
   }
 
   getModeLabel() {
@@ -1166,6 +1218,105 @@ export class JobDetailPage implements OnInit, DoCheck {
       .map(a => a.technicianName)
       .filter(n => !!n)
       .join(', ');
+  }
+
+  // --- Crew Status panel helpers ---
+
+  private readonly crewWorkflowStages = ['Assigned', 'Dispatched', 'Arrived', 'Wrap-Up'];
+
+  getCrewStatusRows(): CrewStatusRow[] {
+    const currentTechId = this.getCurrentTechnicianId();
+    const wrapUpStageIndex = this.getCrewWorkflowStageIndex('Wrap-Up');
+
+    return this.serviceOrderAssignments.map((assignment) => {
+      const { stageIndex, displayStatus } = this.getCrewWorkflowStageForAssignment(assignment);
+      const assignmentTechId = String(assignment.technicianId || '').trim();
+      const isLead = assignmentTechId === currentTechId;
+      const stepsBehind = Math.max(0, wrapUpStageIndex - stageIndex);
+
+      let relativeStatus: string;
+      if (stepsBehind === 0) {
+        relativeStatus = 'Current';
+      } else if (stepsBehind === 1) {
+        relativeStatus = '1 step behind';
+      } else {
+        relativeStatus = `${stepsBehind} steps behind`;
+      }
+
+      return {
+        technicianName: `${assignment.technicianName}${isLead ? ' (Lead)' : ''}`,
+        isLead,
+        displayStatus,
+        relativeStatus,
+      };
+    });
+  }
+
+  getCrewBlockingMessage(): string {
+    const blockingRows = this.getCrewStatusRows().filter(
+      (row) => row.relativeStatus !== 'Current' && row.displayStatus !== 'Completed'
+    );
+    if (blockingRows.length === 0) {
+      return '';
+    }
+
+    const messages = blockingRows.map((row) => {
+      const cleanName = row.technicianName.replace(' (Lead)', '');
+      return `Waiting for ${cleanName} to complete assigned work before submission can continue.`;
+    });
+
+    return messages.join('\n');
+  }
+
+  private getCrewWorkflowStageForAssignment(
+    assignment: ServiceOrderAssignment
+  ): { stageIndex: number; displayStatus: string } {
+    const currentTechId = this.getCurrentTechnicianId();
+    const assignmentTechId = String(assignment.technicianId || '').trim();
+    const status = (assignment.assignmentStatus || '').toString().trim().toLowerCase();
+
+    // The technician currently viewing the Wrap-Up page is, by definition, in Wrap-Up.
+    if (assignmentTechId && this.normalizeTechnicianId(assignmentTechId) === this.normalizeTechnicianId(currentTechId)) {
+      return { stageIndex: this.getCrewWorkflowStageIndex('Wrap-Up'), displayStatus: 'Wrap-Up' };
+    }
+
+    // Assignment status is the source of truth for workflow stage. Terminal statuses
+    // take precedence over any stale arrival timestamp still stored in Firestore.
+    if (status === 'completed' || status === 'complete' || status === 'return required') {
+      return { stageIndex: this.getCrewWorkflowStageIndex('Wrap-Up'), displayStatus: 'Completed' };
+    }
+
+    if (status === 'arrived') {
+      return { stageIndex: this.getCrewWorkflowStageIndex('Arrived'), displayStatus: 'Arrived' };
+    }
+
+    if (status === 'dispatched') {
+      return { stageIndex: this.getCrewWorkflowStageIndex('Dispatched'), displayStatus: 'Dispatched' };
+    }
+
+    // Fall back to Firestore arrival timestamps when the assignment status has not
+    // yet been refreshed or is blank for legacy records.
+    const arrivalEntry = Object.entries(this.arrivalTimestamps).find(([key, entry]) => {
+      const keyMatches = this.normalizeTechnicianId(key) === this.normalizeTechnicianId(assignmentTechId);
+      const nameMatches = (assignment.technicianName || '').trim().toLowerCase() === (entry?.technicianName || '').trim().toLowerCase();
+      return keyMatches || nameMatches;
+    });
+    if (arrivalEntry?.[1]?.arrivedAt) {
+      return { stageIndex: this.getCrewWorkflowStageIndex('Arrived'), displayStatus: 'Arrived' };
+    }
+
+    // Blank / default assignment status means the tech has been assigned but not dispatched.
+    return { stageIndex: this.getCrewWorkflowStageIndex('Assigned'), displayStatus: 'Assigned' };
+  }
+
+  private getCrewWorkflowStageIndex(stageName: string): number {
+    const index = this.crewWorkflowStages.indexOf(stageName);
+    return index >= 0 ? index : 0;
+  }
+
+  private getCurrentTechnicianId(): string {
+    const user = this.authService.getUser();
+    return String(user?.[3]?.value || user?.id || user?.employeeId || '').trim();
   }
 
   getEarliestArrivalDisplay(): string {

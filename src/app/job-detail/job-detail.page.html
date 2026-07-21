@@ -553,6 +553,39 @@
         </ion-button>
       </div>
 
+      <section class="wrap-up-section crew-status-section">
+        <h4 class="wrap-up-section-title">Crew Status</h4>
+        <div *ngIf="serviceOrderAssignmentsLoading" class="crew-status-loading">
+          <ion-spinner name="crescent"></ion-spinner>
+          <span>Loading crew status...</span>
+        </div>
+
+        <div *ngIf="!serviceOrderAssignmentsLoading && getCrewStatusRows().length > 0" class="crew-status-list">
+          <div class="crew-status-row crew-status-header">
+            <span class="crew-status-name">Technician</span>
+            <span class="crew-status-stage">Status</span>
+            <span class="crew-status-progress">Progress</span>
+          </div>
+          <div *ngFor="let row of getCrewStatusRows()" class="crew-status-row">
+            <span class="crew-status-name">{{ row.technicianName }}</span>
+            <span class="crew-status-stage">{{ row.displayStatus }}</span>
+            <span class="crew-status-progress" [class.crew-status-current]="row.relativeStatus === 'Current'">
+              <ng-container *ngIf="row.relativeStatus === 'Current'">🟢 {{ row.relativeStatus }}</ng-container>
+              <ng-container *ngIf="row.relativeStatus === '1 step behind'">🟡 {{ row.relativeStatus }}</ng-container>
+              <ng-container *ngIf="row.relativeStatus !== 'Current' && row.relativeStatus !== '1 step behind'">🔴 {{ row.relativeStatus }}</ng-container>
+            </span>
+          </div>
+        </div>
+
+        <div *ngIf="!serviceOrderAssignmentsLoading && getCrewStatusRows().length === 0" class="crew-status-empty">
+          No crew assignments found.
+        </div>
+
+        <div *ngIf="getCrewBlockingMessage()" class="crew-status-blocking-message">
+          {{ getCrewBlockingMessage() }}
+        </div>
+      </section>
+
       <section class="wrap-up-section">
         <h4 class="wrap-up-section-title">Crew Summary</h4>
         <div class="detail-grid">

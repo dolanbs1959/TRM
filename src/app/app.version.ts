@@ -1,3 +1,3 @@
 // This file is auto-generated from package.json version during build
 // Do not edit manually
-export const APP_VERSION = '2.0.1';
+export const APP_VERSION = '2.1.0';

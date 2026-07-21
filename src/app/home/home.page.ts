@@ -245,9 +245,24 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       });
     }
 
+    const activeParentStatuses = ['scheduled', 'en route', 'in progress', 'inspected'];
     this.serviceOrders = Array.isArray(res)
       ? res
           .filter((record) => record?._techAssignmentStatus != null)
+          .filter((record) => {
+            // Leads must keep seeing a job after their assignment is Completed so they can
+            // resume the Wrap-Up workflow. Their dashboard visibility is governed solely
+            // by the Parent Status filter below.
+            if (this.isLeadTechnician()) {
+              return true;
+            }
+            const assignmentStatus = (record?._techAssignmentStatus || '').toString().trim().toLowerCase();
+            return assignmentStatus !== 'completed';
+          })
+          .filter((record) => {
+            const parentStatus = (record?.['11']?.value || '').toString().trim().toLowerCase();
+            return activeParentStatuses.includes(parentStatus);
+          })
           .map((record) => {
             // console.log('Evaluating Card Display:', {
             //   id: record?.id ?? record?.['3']?.value ?? null,
@@ -367,6 +382,10 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
 
   private isInspectionJob(job: any): boolean {
     return (job?.['40']?.value || '').toString().trim().toLowerCase() === 'inspection';
+  }
+
+  private isServiceOrderJob(job: any): boolean {
+    return (job?.['40']?.value || '').toString().trim().toLowerCase() === 'service order';
   }
 
   private isJobForToday(job: any): boolean {
@@ -768,24 +787,28 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       'Completing...',
       async () => {
         const serviceOrderId = selectedRecordId;
+        const isLead = this.isLeadTechnician();
 
-        // Verify all assigned tasks are marked finished before completing the technician assignment.
-        const tasks = await this.authService.getServiceOrderTasks(serviceOrderId);
-        const finishedTaskIds = await this.collaborationService.getSessionFinishedTaskIds(serviceOrderId);
-        const unfinishedTasks = tasks.filter((task: ServiceOrderTask) => !finishedTaskIds.includes(task.id));
+        // Non-leads must finish all assigned tasks before their assignment can be Completed.
+        // Leads bypass task validation and enter the Lead Wrap-Up workflow.
+        if (!isLead) {
+          const tasks = await this.authService.getServiceOrderTasks(serviceOrderId);
+          const finishedTaskIds = await this.collaborationService.getSessionFinishedTaskIds(serviceOrderId);
+          const unfinishedTasks = tasks.filter((task: ServiceOrderTask) => !finishedTaskIds.includes(task.id));
 
-        if (unfinishedTasks.length > 0) {
-          await this.presentUnfinishedTasksAlert(unfinishedTasks);
-          return;
+          if (unfinishedTasks.length > 0) {
+            await this.presentUnfinishedTasksAlert(unfinishedTasks);
+            return;
+          }
         }
 
-        // All tasks finished: mark this technician's assignment as Completed and log the event.
+        // Mark this technician's assignment as Completed and log the event.
         // Reuse the existing /service-order/update-workflow endpoint (Dispatch/Arrive use it).
         // Pass parent status 'In Progress' so the parent Service Order remains unchanged;
         // the backend uses workflowEventType 'Complete' to set the technician assignment to Completed.
         const workflowLog = await this.buildWorkflowLogPayload(
           'Complete',
-          'Technician completed all assigned tasks.'
+          isLead ? 'Lead technician completed assignment and entered Wrap-Up.' : 'Technician completed all assigned tasks.'
         );
         const technicianContext = {
           technicianName: `${this.tech?.firstName || ''} ${this.tech?.lastName || ''}`.trim(),
@@ -819,10 +842,18 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
         selectedJob._jobActionIndex = 0;
         selectedJob._isPaused = false;
         this.workflowLockedJobRecordId = null;
-        this.selectedJobRecordId = null;
         this.saveJobActionIndexes();
         this.saveUiState();
-        await this.fetchScheduleForDate(this.today);
+
+        if (isLead) {
+          // Lead completion path: open the Lead Wrap-Up view directly.
+          this.openJobDetail(serviceOrderId, 'work', false, 'wrapup');
+        } else {
+          // Technician completion path: return to the schedule.
+          this.selectedJobRecordId = null;
+          this.saveUiState();
+          await this.fetchScheduleForDate(this.today);
+        }
       }
     );
   }
@@ -884,6 +915,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
           sp.workflowGpsCoordinates = workflowLog.gpsCoordinates;
           sp.workflowNotes = workflowLog.notes || '';
           sp.relatedEmployeeId = workflowLog.relatedEmployeeId;
+          sp.employeeAssignedRole = workflowLog.employeeAssignedRole || '';
         }
       } catch (e) {
         // Non-fatal: continue without workflow metadata if building it fails.
@@ -1391,6 +1423,7 @@ export type EstimateWorkflow = typeof EstimateWorkflow[keyof typeof EstimateWork
       gpsCoordinates,
       notes,
       relatedEmployeeId,
+      employeeAssignedRole: String(this.tech?.role || '').trim(),
     };
   }
 
@@ -2143,6 +2176,15 @@ async ngOnInit() {
   }
 
   isInProgressJob(job: any): boolean {
+    // For service orders, "In Progress" must reflect the current technician's own
+    // assignment status, not the parent Service Order status. Another technician
+    // arriving can move the parent SO to "In Progress", but an assigned tech who
+    // has not yet dispatched should still see VIEW JOB.
+    if (this.isServiceOrderJob(job)) {
+      const assignmentStatus = (job?._techAssignmentStatus || '').toString().trim().toLowerCase();
+      return assignmentStatus === 'dispatched' || assignmentStatus === 'arrived';
+    }
+
     const status = (job?.['11']?.value || '').toString().trim().toLowerCase();
     if (status === 'in progress') {
       return true;

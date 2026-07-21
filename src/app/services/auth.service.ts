@@ -19,6 +19,7 @@ export interface WorkflowLogPayload {
   gpsCoordinates: string;
   notes?: string;
   relatedEmployeeId: number;
+  employeeAssignedRole?: string;
 }
 
 export interface OfferedServiceItem {
@@ -574,6 +575,7 @@ async getJobDetail(recordId: string) {
       workflowGpsCoordinates: workflowLog?.gpsCoordinates,
       workflowNotes: workflowLog?.notes || '',
       relatedEmployeeId: workflowLog?.relatedEmployeeId,
+      employeeAssignedRole: workflowLog?.employeeAssignedRole || '',
       technicianName: technicianContext?.technicianName || '',
       technicianPhotoUrl: technicianContext?.technicianPhotoUrl || '',
       customerFirstName: workflowContext?.customerFirstName || '',
@@ -598,6 +600,7 @@ async getJobDetail(recordId: string) {
       workflowGpsCoordinates: workflowLog?.gpsCoordinates,
       workflowNotes: workflowLog?.notes || '',
       relatedEmployeeId: workflowLog?.relatedEmployeeId,
+      employeeAssignedRole: workflowLog?.employeeAssignedRole || '',
     }).toPromise();
 
     return !!response?.success;

@@ -88,7 +88,8 @@ const WORKFLOW_LOG_FIELDS = {
     NOTES: 9,
     RELATED_SERVICE_ORDER: 10,
     RELATED_EMPLOYEE: 11,
-    SMS_STATUS: 15
+    SMS_STATUS: 15,
+    EMPLOYEE_ASSIGNED_ROLE: 19
 };
 
 const ASSIGNED_TECH_FIELDS = {
@@ -1372,7 +1373,8 @@ async function createWorkflowLogRecord({
     gpsCoordinates,
     notes,
     relatedServiceOrder,
-    relatedEmployee
+    relatedEmployee,
+    employeeAssignedRole
 }) {
     const normalizedEventType = normalizeWorkflowEventType(eventType);
     if (!normalizedEventType) {
@@ -1402,6 +1404,9 @@ async function createWorkflowLogRecord({
     row[WORKFLOW_LOG_FIELDS.RELATED_SERVICE_ORDER] = { value: normalizedServiceOrder };
     if (Number.isFinite(normalizedEmployee) && normalizedEmployee > 0) {
         row[WORKFLOW_LOG_FIELDS.RELATED_EMPLOYEE] = { value: normalizedEmployee };
+    }
+    if (employeeAssignedRole) {
+        row[WORKFLOW_LOG_FIELDS.EMPLOYEE_ASSIGNED_ROLE] = { value: String(employeeAssignedRole).trim() };
     }
 
     try {
@@ -2405,6 +2410,7 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
         workflowGpsCoordinates,
         workflowNotes,
         relatedEmployeeId,
+        employeeAssignedRole,
         techId,
         technicianName,
         technicianPhotoUrl,
@@ -2629,7 +2635,8 @@ const handleServiceOrderWorkflowUpdate = async (req, res) => {
                 gpsCoordinates: workflowGpsCoordinates,
                 notes: workflowNotes,
                 relatedServiceOrder: normalizedServiceOrderId,
-                relatedEmployee: normalizedTechId
+                relatedEmployee: normalizedTechId,
+                employeeAssignedRole
             });
 
             // --- DISPATCH SMS (fire-and-forget) ---
@@ -3310,6 +3317,7 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
                     const wfGps = req.body?.workflowGpsCoordinates || req.body?.gpsCoordinates || '';
                     const wfNotes = String(req.body?.workflowNotes || req.body?.notes || '');
                     const wfEmployee = req.body?.relatedEmployeeId || req.body?.techId || null;
+                    const wfEmployeeAssignedRole = req.body?.employeeAssignedRole || '';
 
                     if (wfType) {
                         try {
@@ -3319,7 +3327,8 @@ app.post('/api/update-status', handleServiceOrderWorkflowUpdate);
                                 gpsCoordinates: wfGps,
                                 notes: wfNotes,
                                 relatedServiceOrder: normalizedServiceOrderId,
-                                relatedEmployee: wfEmployee
+                                relatedEmployee: wfEmployee,
+                                employeeAssignedRole: wfEmployeeAssignedRole
                             });
 
                             console.log('[Inspection][WorkflowLog][Created]', {
