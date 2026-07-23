@@ -27,6 +27,17 @@ function formatDate(value) {
     }
 }
 
+function resolvePaymentTerms(invoiceMeta) {
+    const rawValue = invoiceMeta?.paymentTerms;
+    if (!rawValue) {
+        return { display: 'Net 15', days: 15 };
+    }
+    const display = String(rawValue).trim();
+    const match = display.match(/\d+/);
+    const days = match ? Number.parseInt(match[0], 10) : 15;
+    return { display, days };
+}
+
 function formatAddressBlock(address) {
     if (!address) return '';
     const lines = [];
@@ -55,7 +66,7 @@ function buildCustomerInfoHtml(invoiceData) {
     const invoiceMeta = invoiceData.invoiceMeta || {};
     const invoiceDate = invoiceMeta.invoiceDate ? formatDate(invoiceMeta.invoiceDate) : 'Pending';
     const dueDate = invoiceMeta.dueDate ? formatDate(invoiceMeta.dueDate) : 'Pending';
-    const paymentTerms = invoiceMeta.paymentTerms || 'Net 15';
+    const { display: paymentTerms } = resolvePaymentTerms(invoiceMeta);
     const serviceDate = invoiceData.serviceOrder?.serviceDate ? formatDate(invoiceData.serviceOrder.serviceDate) : '';
 
     return `
@@ -335,11 +346,12 @@ function buildPaymentInfoHtml() {
         </div>`;
 }
 
-function buildPaymentTermsHtml() {
+function buildPaymentTermsHtml(invoiceData) {
+    const { days } = resolvePaymentTerms(invoiceData?.invoiceMeta);
     return `
         <div class="closing-section payment-terms-section">
             <h3 class="section-title">Payment Terms</h3>
-            <p>Payment is due within 15 days of the Invoice Date unless otherwise noted.</p>
+            <p>Payment is due within ${days} days of the Invoice Date unless otherwise noted.</p>
             <p>Past due balances are subject to a 1.5% monthly late fee.</p>
         </div>`;
 }
@@ -673,7 +685,7 @@ ${buildFinancialSummaryHtml(invoiceData)}
 
 <div class="closing-page">
     ${buildPaymentInfoHtml()}
-    ${buildPaymentTermsHtml()}
+    ${buildPaymentTermsHtml(invoiceData)}
     ${buildThankYouHtml()}
 </div>
 

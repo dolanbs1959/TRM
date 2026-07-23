@@ -1886,7 +1886,7 @@ app.post('/get-schedule', async (req, res) => {
 
         const debugBody = {
             from: TABLES.SERVICE_ORDERS,
-            select: [3, 6, 7, 9, 10, 11, 12, 15, 16, 26, 40, 41, 44, 46, 70, 71, 90, 92, 93, 94, 95, 96, 105, 106, 107, 108, 110, 142, 157, 158],
+            select: [3, 6, 7, 9, 10, 11, 12, 15, 16, 26, 40, 41, 44, 46, 70, 71, 90, 92, 93, 94, 95, 96, 105, 106, 107, 108, 110, 142, 157, 158, 169],
             where: serviceOrderWhere
         };
         // console.log('Literal Quickbase API Request Payload Body Object:', JSON.stringify(debugBody, null, 2));
@@ -1991,7 +1991,7 @@ app.post('/job-detail', async (req, res) => {
     try {
         const response = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
             from: TABLES.SERVICE_ORDERS,
-            select: [3, 6, 7, 9, 10, 11, 15, 16, 26, 40, 41, 44, 46, 153, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 70, 71, 73, 90, 92, 93, 94, 105, 106, 107, 108, 110, 142],
+            select: [3, 6, 7, 9, 10, 11, 15, 16, 26, 40, 41, 44, 46, 153, 48, 49, 50, 51, 52, 53, 55, 56, 57, 58, 59, 70, 71, 73, 90, 92, 93, 94, 105, 106, 107, 108, 110, 142, 169],
             where: `{'3'.EX.'${normalizedRecordId}'}`
         }, {
             headers: {
@@ -4837,6 +4837,68 @@ function resolveAddressField(raw) {
     return { street1: str, street2: null, city: null, state: null, postalCode: null, country: null };
 }
 
+function parseQuickbaseDate(value) {
+    if (!value) return null;
+    const text = String(value).trim();
+    if (!text) return null;
+
+    // QuickBase date fields commonly return YYYY-MM-DD or an ISO-8601 timestamp.
+    const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+    const d = new Date(text);
+    if (Number.isNaN(d.getTime())) return null;
+
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function addDaysToDate(yyyyMmDd, days) {
+    const base = new Date(`${yyyyMmDd}T00:00:00Z`);
+    if (Number.isNaN(base.getTime())) return null;
+
+    base.setUTCDate(base.getUTCDate() + days);
+    const yyyy = base.getUTCFullYear();
+    const mm = String(base.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(base.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
+
+function resolvePaymentTermsDays(paymentTermsValue) {
+    if (!paymentTermsValue) return 15;
+    const display = String(paymentTermsValue).trim();
+    const match = display.match(/\d+/);
+    return match ? Number.parseInt(match[0], 10) : 15;
+}
+
+function resolveInvoiceDates(soRecord) {
+    const existingInvoiceDate = parseQuickbaseDate(soRecord['168']?.value);
+    const serviceDate = parseQuickbaseDate(soRecord['9']?.value);
+    const existingDueDate = parseQuickbaseDate(soRecord['167']?.value);
+    const paymentTermsDays = resolvePaymentTermsDays(soRecord['169']?.value);
+
+    const invoiceDate = existingInvoiceDate || serviceDate || null;
+    const invoiceDateSource = existingInvoiceDate ? 'existing' : (serviceDate ? 'serviceDate' : null);
+
+    let dueDate = existingDueDate || null;
+    let dueDateSource = existingDueDate ? 'existing' : null;
+    if (!dueDate && invoiceDate) {
+        dueDate = addDaysToDate(invoiceDate, paymentTermsDays);
+        dueDateSource = 'calculated';
+    }
+
+    return {
+        invoiceDate,
+        invoiceDateSource,
+        dueDate,
+        dueDateSource,
+        paymentTermsDays,
+        needsWrite: invoiceDateSource === 'serviceDate' || dueDateSource === 'calculated',
+    };
+}
+
 // --- INTERNAL HELPER: Build InvoiceData contract from persisted QuickBase data ---
 async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
     const qbHeaders = { 'QB-Realm-Hostname': QB_REALM_HOST, 'Authorization': `QB-USER-TOKEN ${QB_TOKEN}` };
@@ -4851,10 +4913,10 @@ async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
     //   93=customerFirstName, 94=customerLastName, 95=customerPhone,
     //   105=locationZip, 106=locationStreet, 107=locationState, 137=subtotal,
     //   142=locationEmail, 154=cleanMaintenanceScheduledFor, 155=repairServicesScheduledFor,
-    //   163=billingAddressSameAsPrimary
+    //   163=billingAddressSameAsPrimary, 167=dueDate, 168=invoiceDate, 169=paymentTerms
     const soResponse = await axios.post(`${QB_API_ENDPOINT}/records/query`, {
         from: TABLES.SERVICE_ORDERS,
-        select: [3, 6, 7, 9, 10, 11, 15, 16, 40, 57, 66, 67, 73, 83, 90, 92, 93, 94, 95, 105, 106, 107, 137, 138, 140, 142, 154, 155, 163],
+        select: [3, 6, 7, 9, 10, 11, 15, 16, 40, 57, 66, 67, 73, 83, 90, 92, 93, 94, 95, 105, 106, 107, 137, 138, 140, 142, 154, 155, 163, 167, 168, 169],
         where: `{'3'.EX.'${escapedId}'}`
     }, { headers: qbHeaders });
 
@@ -4945,6 +5007,38 @@ async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
     const discountPercentage = storedDiscountPercentage || (isMilitarySeniorDiscount ? 5 : null);
     const taxRate = getTaxRate(String(soRecord['105']?.value ?? ''));
 
+    // 5. Resolve Invoice Date and Due Date
+    const dates = resolveInvoiceDates(soRecord);
+
+    if (dates.needsWrite) {
+        const serviceOrderUpdate = {
+            3: { value: Number.parseInt(serviceOrderId, 10) },
+        };
+        if (dates.invoiceDateSource === 'serviceDate') {
+            serviceOrderUpdate[168] = { value: dates.invoiceDate };
+        }
+        if (dates.dueDateSource === 'calculated') {
+            serviceOrderUpdate[167] = { value: dates.dueDate };
+        }
+        await writeQuickbaseRecords(TABLES.SERVICE_ORDERS, [serviceOrderUpdate], [3, 167, 168]);
+        console.log('[buildInvoiceData] Persisted calculated Invoice Date / Due Date.', {
+            serviceOrderId,
+            invoiceDate: dates.invoiceDate,
+            invoiceDateSource: dates.invoiceDateSource,
+            dueDate: dates.dueDate,
+            dueDateSource: dates.dueDateSource,
+            paymentTermsDays: dates.paymentTermsDays,
+        });
+    } else {
+        console.log('[buildInvoiceData] Using existing Invoice Date / Due Date.', {
+            serviceOrderId,
+            invoiceDate: dates.invoiceDate,
+            invoiceDateSource: dates.invoiceDateSource,
+            dueDate: dates.dueDate,
+            dueDateSource: dates.dueDateSource,
+        });
+    }
+
     console.log('[buildInvoiceData] Resolved from Service Order.', {
         serviceOrderId,
         customerRecordId: customerRecordId ?? null,
@@ -4979,9 +5073,9 @@ async function buildInvoiceData(serviceOrderId, selectedPhotos = []) {
         billingSameAsPrimary,
         jobAddress,
         invoiceMeta: {
-            invoiceDate:    null, // TODO: populate when Invoice header date field is identified
-            paymentTerms:   null, // TODO: populate from SO or Invoice header field
-            dueDate:        null, // TODO: populate from SO or Invoice header field
+            invoiceDate:    dates.invoiceDate,
+            paymentTerms:   soRecord['169']?.value ?? null, // Location - Customer - Payment Terms
+            dueDate:        dates.dueDate,
         },
         financialSummary: {
             subtotal,
